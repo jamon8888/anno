@@ -15,6 +15,6 @@ Refresh docs from commands and source evidence.
    `cargo metadata --format-version 1 --no-deps`
 4. Run the dry-run doc generator when present:
    `powershell -NoProfile -ExecutionPolicy Bypass -File scripts/agent-harness/docs-generate.ps1 -DryRun`
-5. Update existing docs locations first: `README.md`, `docs/reference/commands.md`, `docs/developers/mcp-tools.md`, `docs/release/README-release.md`, and relevant runbooks.
+5. Update existing docs locations first: `README.md`, `docs/developers/cli.md`, `docs/developers/mcp-tools.md`, `docs/release/README-release.md`, and relevant runbooks.
 6. Keep generated agent context concise; move long evidence to existing docs or reports.
 7. Re-run doc searches after edits to catch stale command names or old release tags.

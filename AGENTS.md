@@ -1,7 +1,8 @@
+<!-- repo: https://github.com/jamon8888/anno (origin fork) | upstream: https://github.com/arclabs561/anno -->
 <!-- gitnexus:start -->
 # GitNexus — Code Intelligence
 
-This project is indexed by GitNexus as **anno** (18702 symbols, 43717 relationships, 300 execution flows). Use the GitNexus MCP tools to understand code, assess impact, and navigate safely.
+This project is indexed by GitNexus as **anno** (18740 symbols, 43807 relationships, 300 execution flows). Use the GitNexus MCP tools to understand code, assess impact, and navigate safely.
 
 > If any GitNexus tool warns the index is stale, run `npx gitnexus analyze` in terminal first.
 
@@ -104,105 +105,24 @@ To check whether embeddings exist, inspect `.gitnexus/meta.json` — the `stats.
 
 Repo-local Claude Code and Codex harness files live under `.claude/`, `.codex/`, `.agents/skills/`, and `scripts/agent-harness/`. Run `powershell -NoProfile -ExecutionPolicy Bypass -File scripts\agent-harness\harness-status.ps1` to inspect setup state.
 
-# Build Isolation — Règles strictes
-
-## Worktree actif (2026-05-28)
-
-```
-C:/Users/NMarchitecte/.config/superpowers/worktrees/anno/anno-tabular-local-extraction
-```
-
-**Une seule worktree de dev active à la fois.** La worktree `main` (`C:/Users/NMarchitecte/anno`) sert uniquement à des tâches de maintenance rapide.
-
-## NEVER
-
-- **NEVER** lancer `cargo build`, `cargo check`, ou `scripts/loop.ps1` si un processus `cargo`/`rustc` tourne déjà. Vérifier d'abord :
-  ```powershell
-  Get-Process cargo,rustc -ErrorAction SilentlyContinue
-  ```
-- **NEVER** lancer un build dans plusieurs worktrees simultanément.
-- **NEVER** lancer `cargo build --release`, `cargo build --workspace` ou `cargo build --profile dist` en local sans `CARGO_TARGET_DIR` isolé (voir `scripts/release/build-windows-local.ps1`).
-- **NEVER** créer une nouvelle worktree sans supprimer d'abord la précédente (commit ou discard).
-- **NEVER** laisser des worktrees dormantes. Supprimer dès la tâche terminée :
-  ```powershell
-  git worktree remove <path> --force
-  ```
-
-## ALWAYS
-
-- Utiliser `scripts/loop.ps1` comme point d'entrée unique pour le dev loop — il contient la garde de concurrence et l'isolation `CARGO_TARGET_DIR`.
-- Travailler dans la worktree dédiée à la tâche en cours, jamais directement dans `main`.
-- Avant tout build manuel : `Get-Process cargo,rustc | Select Id,Name,StartTime`
-- En cas de build bloqué depuis >10 min : `Get-Process cargo,rustc | Stop-Process -Force`
-
-## Règle des worktrees
-
-| État | Action |
-|------|--------|
-| Tâche terminée, changements committés | `git worktree remove <path>` |
-| Tâche abandonnée | `git worktree remove <path> --force` |
-| Tâche en pause (>24h) | Commit WIP puis supprimer la worktree |
-| Nouvelle tâche | Créer une worktree fraîche via le workflow superpowers |
-
-Maximum **2 worktrees actives** à tout moment : `main` + une de dev.
-
 # Local Rust Debug Loop
 
-**Target dir:** `E:\cargo-target` (external SSD). Set as User env var and in `.cargo/config.toml`.
-
-## Fast loop — one crate (check + unit tests)
+For local development, prefer the fast targeted loop before any broad build:
 
 ```powershell
-powershell -NoProfile -ExecutionPolicy Bypass -File scripts\test-local.ps1 -Package <crate>
-```
-
-## Check only (no link, no tests)
-
-```powershell
-powershell -NoProfile -ExecutionPolicy Bypass -File scripts\dev-fast.ps1 -Package <crate> -Mode check -Profile dev-fast
-```
-
-## With extra features
-
-```powershell
-powershell -NoProfile -ExecutionPolicy Bypass -File scripts\test-local.ps1 -Package anno-rag-tabular -Features gliner2
-```
-
-For targeted check across affected crates (auto-detects from git diff):
-
-```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File scripts\dev-fast.ps1 -PrintOnly
 powershell -NoProfile -ExecutionPolicy Bypass -File scripts\dev-fast.ps1
 ```
 
-Add `-AllAffected` when changing a shared crate so dependents are checked too. Add `-Package <crate>` to target manually.
+Use `scripts/dev-fast.ps1` to detect changed crates and run `cargo check --profile dev` only for the affected packages. Add `-AllAffected` when changing a shared crate and dependent local crates should be checked too. Add `-Package <crate>` to target manually, for example:
 
-## NEVER (local dev)
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File scripts\dev-fast.ps1 -Package anno-rag -Mode check
+powershell -NoProfile -ExecutionPolicy Bypass -File scripts\dev-fast.ps1 -Package anno-rag-bin -Mode build
+```
 
-- **NEVER** run `cargo test --workspace` locally — links ALL test binaries (hours).
-- **NEVER** run `cargo nextest run --workspace` locally — same problem.
-- **NEVER** run `cargo build --release`, `cargo build --workspace` or `cargo build --profile dist` in local without `CARGO_TARGET_DIR` isolé (voir `scripts/release/build-windows-local.ps1`).
-- **NEVER** lancer `cargo build`, `cargo check`, ou `scripts/loop.ps1` si un processus `cargo`/`rustc` tourne déjà. Vérifier d'abord :
-  ```powershell
-  Get-Process cargo,rustc -ErrorAction SilentlyContinue
-  ```
-- **NEVER** lancer un build dans plusieurs worktrees simultanément.
-- **NEVER** créer une nouvelle worktree sans supprimer d'abord la précédente (commit ou discard).
-- **NEVER** laisser des worktrees dormantes. Supprimer dès la tâche terminée :
-  ```powershell
-  git worktree remove <path> --force
-  ```
+Avoid local `cargo build --release`, `cargo build --workspace`, or broad all-feature builds during debugging unless explicitly needed. They can take tens of minutes in this repo. Keep the same profile, target, features, and `RUSTFLAGS` whenever possible because changing them invalidates Cargo's incremental cache.
 
-## Expected times (warm sccache, E: SSD)
+If a `cargo build --profile dist --target x86_64-pc-windows-msvc` is already running, do not start another local Rust check/build unless necessary; it saturates CPU and disk and makes targeted checks look slow. Use `Get-Process cargo,rustc` first when local builds feel unexpectedly slow.
 
-| Command | Time |
-|---------|------|
-| `test-local.ps1 -Package anno-rag-tabular` | < 1 min |
-| `dev-fast.ps1 -Package anno-rag-tabular -Mode check` | < 30 s |
-| Full test binary link (lance+datafusion) | 2–4 min |
-| CI full build (warm sccache) | 8–12 min |
-
-**Outils installés et configurés** :
-- `sccache` — `RUSTC_WRAPPER=sccache` défini en User env. `CARGO_INCREMENTAL=0` imposé dans `.cargo/config.toml` (les deux sont mutuellement exclusifs).
-- `lld-link` (LLD 22.1.2) — linker configuré dans `.cargo/config.toml [target.x86_64-pc-windows-msvc]`.
-- `cargo-nextest` — profiles `dev-fast`, `ci`, `ml`, `quick`, `local` dans `.config/nextest.toml`.
-- `cargo-hakari` — workspace-hack pour pré-unifier les features des dépendances partagées (voir crate `workspace-hack/`).
+Optional: if `sccache` is installed, `scripts/dev-fast.ps1` automatically sets `RUSTC_WRAPPER` to it. This helps when switching branches or recompiling dependencies.

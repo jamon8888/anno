@@ -75,6 +75,7 @@ This directory is the product documentation source of truth for Hacienda.
 - [MCP tools](developers/mcp-tools.md)
 - [Gateway API](developers/gateway-api.md)
 - [Configuration](developers/configuration.md)
+- [Agent harness configuration](developers/configuration.md#agent-harness) - Claude Code and Codex setup for repo-local agent workflows.
 
 ## Admin
 

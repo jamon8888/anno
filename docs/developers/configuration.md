@@ -98,6 +98,31 @@ The gateway reads environment variables at startup. Common settings:
 Set `ANNO_GATEWAY_BEARER_TOKEN` whenever the gateway is reachable outside a
 strictly controlled loopback or private boundary.
 
+## Agent Harness
+
+The repo-local agent harness configures Claude Code and Codex for Anno
+development. It provides safety hooks, targeted Rust checks, GitNexus-first
+exploration, changelog generation, PR review, docs generation, crate dependency
+mapping, CLI feature parity checks, and compact agent context generation.
+
+Dry-run setup:
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File scripts\agent-harness\setup-agent-harness.ps1 -DryRun
+```
+
+Status:
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File scripts\agent-harness\harness-status.ps1
+```
+
+Run fixture tests:
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File scripts\agent-harness\tests\test-agent-harness.ps1
+```
+
 ## Related Docs
 
 - [Environment Variables](../reference/environment-variables.md)
