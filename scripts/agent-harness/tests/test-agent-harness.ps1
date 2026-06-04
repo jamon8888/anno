@@ -18,6 +18,17 @@ function Assert-Equal {
     }
 }
 
+function Assert-NotEqual {
+    param(
+        [object]$Actual,
+        [object]$Expected,
+        [string]$Name
+    )
+    if ($Actual -eq $Expected) {
+        throw "ASSERT FAIL: $Name expected values to differ, but both were '$Actual'"
+    }
+}
+
 function Assert-Contains {
     param(
         [string]$Actual,
@@ -32,14 +43,18 @@ function Assert-Contains {
 function Invoke-HarnessScript {
     param(
         [string]$ScriptName,
-        [string]$InputPath,
-        [string[]]$ExtraArgs = @()
+        [string]$InputPath = "",
+        [string[]]$ExtraArgs = @(),
+        [string]$WorkingDirectory = $RepoRoot
     )
     $scriptPath = Join-Path $HarnessRoot $ScriptName
     if (-not (Test-Path -LiteralPath $scriptPath)) {
         throw "Missing script under test: $scriptPath"
     }
-    $inputText = Get-Content -LiteralPath $InputPath -Raw
+    $inputText = ""
+    if (-not [string]::IsNullOrWhiteSpace($InputPath)) {
+        $inputText = Get-Content -LiteralPath $InputPath -Raw
+    }
     $psi = New-Object System.Diagnostics.ProcessStartInfo
     $psi.FileName = "powershell"
     $argParts = New-Object System.Collections.Generic.List[string]
@@ -60,7 +75,7 @@ function Invoke-HarnessScript {
     $psi.RedirectStandardOutput = $true
     $psi.RedirectStandardError = $true
     $psi.UseShellExecute = $false
-    $psi.WorkingDirectory = $RepoRoot
+    $psi.WorkingDirectory = $WorkingDirectory
     $p = [System.Diagnostics.Process]::Start($psi)
     $p.StandardInput.Write($inputText)
     $p.StandardInput.Close()
@@ -150,6 +165,93 @@ $tests.Add({
 
         $crates = Get-AgentHarnessCratesFromPaths -PathText $filesWithUntracked
         Assert-Equal ($crates -join ",") "anno-rag,anno-rag-bin" "changed crate extraction"
+    } finally {
+        if (Test-Path -LiteralPath $tempRepo) {
+            Remove-Item -LiteralPath $tempRepo -Recurse -Force
+        }
+    }
+})
+
+$tests.Add({
+    $tempRepo = Join-Path ([System.IO.Path]::GetTempPath()) ("agent-harness-stop-test-" + [Guid]::NewGuid().ToString("N"))
+    New-Item -ItemType Directory -Path $tempRepo | Out-Null
+    try {
+        git -C $tempRepo init | Out-Null
+        git -C $tempRepo config user.email "agent-harness@example.invalid" | Out-Null
+        git -C $tempRepo config user.name "Agent Harness Test" | Out-Null
+        New-Item -ItemType Directory -Path (Join-Path $tempRepo "crates/anno-one/src") -Force | Out-Null
+        New-Item -ItemType Directory -Path (Join-Path $tempRepo "crates/anno-two/src") -Force | Out-Null
+        Set-Content -LiteralPath (Join-Path $tempRepo "crates/anno-one/src/lib.rs") -Value "pub fn one() {}" -Encoding UTF8
+        Set-Content -LiteralPath (Join-Path $tempRepo "crates/anno-two/src/lib.rs") -Value "pub fn two() {}" -Encoding UTF8
+        git -C $tempRepo add . | Out-Null
+        git -C $tempRepo commit -m "initial" | Out-Null
+
+        Set-Content -LiteralPath (Join-Path $tempRepo "crates/anno-one/src/lib.rs") -Value "pub fn one() { println!(`"one`"); }" -Encoding UTF8
+        Set-Content -LiteralPath (Join-Path $tempRepo "crates/anno-two/src/lib.rs") -Value "pub fn two() { println!(`"two`"); }" -Encoding UTF8
+
+        $changedFiles = @(Get-AgentHarnessChangedRustFiles -Repo $tempRepo)
+        $changedCrates = @(Get-AgentHarnessCratesFromPaths -PathText $changedFiles)
+        $fingerprint = Get-AgentHarnessRustDiffFingerprint -Repo $tempRepo -Files $changedFiles
+        $stateDir = Join-Path $tempRepo ".agent-harness/state"
+        New-Item -ItemType Directory -Path $stateDir -Force | Out-Null
+
+        $oneCrateStamp = [ordered]@{
+            crate = "anno-one"
+            file = "crates/anno-one/src/lib.rs"
+            command = "scripts/dev-fast.ps1 -Package anno-one -Mode check"
+            checked_crates = @("anno-one")
+            changed_rust_files = $changedFiles
+            changed_rust_crates = $changedCrates
+            rust_diff_fingerprint = $fingerprint
+            checked_at_utc = (Get-Date).ToUniversalTime().ToString("o")
+        }
+        $stampPath = Join-Path $stateDir "last-check.json"
+        $oneCrateStamp | ConvertTo-Json -Depth 5 | Set-Content -LiteralPath $stampPath -Encoding UTF8
+
+        $blocked = Invoke-HarnessScript "stop-verify.ps1" -WorkingDirectory $tempRepo
+        Assert-Equal $blocked.ExitCode 2 "stop gate blocks when one changed crate is unchecked"
+
+        $bothCratesStamp = [ordered]@{
+            crate = "anno-one"
+            file = "crates/anno-one/src/lib.rs"
+            command = "scripts/dev-fast.ps1 -Package anno-one -Mode check"
+            checked_crates = $changedCrates
+            changed_rust_files = $changedFiles
+            changed_rust_crates = $changedCrates
+            rust_diff_fingerprint = $fingerprint
+            checked_at_utc = (Get-Date).ToUniversalTime().ToString("o")
+        }
+        $bothCratesStamp | ConvertTo-Json -Depth 5 | Set-Content -LiteralPath $stampPath -Encoding UTF8
+
+        $allowed = Invoke-HarnessScript "stop-verify.ps1" -WorkingDirectory $tempRepo
+        Assert-Equal $allowed.ExitCode 0 "stop gate allows when all changed crates are checked"
+    } finally {
+        if (Test-Path -LiteralPath $tempRepo) {
+            Remove-Item -LiteralPath $tempRepo -Recurse -Force
+        }
+    }
+})
+
+$tests.Add({
+    $tempRepo = Join-Path ([System.IO.Path]::GetTempPath()) ("agent-harness-untracked-test-" + [Guid]::NewGuid().ToString("N"))
+    New-Item -ItemType Directory -Path $tempRepo | Out-Null
+    try {
+        git -C $tempRepo init | Out-Null
+        git -C $tempRepo config user.email "agent-harness@example.invalid" | Out-Null
+        git -C $tempRepo config user.name "Agent Harness Test" | Out-Null
+        Set-Content -LiteralPath (Join-Path $tempRepo "README.md") -Value "baseline" -Encoding UTF8
+        git -C $tempRepo add . | Out-Null
+        git -C $tempRepo commit -m "initial" | Out-Null
+
+        New-Item -ItemType Directory -Path (Join-Path $tempRepo "crates/anno-new/src") -Force | Out-Null
+        $untrackedPath = Join-Path $tempRepo "crates/anno-new/src/lib.rs"
+        Set-Content -LiteralPath $untrackedPath -Value "pub fn new_value() -> u8 { 1 }" -Encoding UTF8
+        $files = @(Get-AgentHarnessChangedRustFiles -Repo $tempRepo)
+        $firstFingerprint = Get-AgentHarnessRustDiffFingerprint -Repo $tempRepo -Files $files
+
+        Set-Content -LiteralPath $untrackedPath -Value "pub fn new_value() -> u8 { 2 }" -Encoding UTF8
+        $secondFingerprint = Get-AgentHarnessRustDiffFingerprint -Repo $tempRepo -Files $files
+        Assert-NotEqual $secondFingerprint $firstFingerprint "untracked Rust file content affects fingerprint"
     } finally {
         if (Test-Path -LiteralPath $tempRepo) {
             Remove-Item -LiteralPath $tempRepo -Recurse -Force

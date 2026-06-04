@@ -180,8 +180,11 @@ function Get-AgentHarnessRustDiffFingerprint {
     $parts = New-Object System.Collections.Generic.List[string]
     foreach ($file in $normalizedFiles) {
         $parts.Add("FILE:$file")
-        git -C $Repo ls-files --error-unmatch -- $file 2>$null | Out-Null
-        $isTracked = $LASTEXITCODE -eq 0
+        $trackedOutput = @(git -C $Repo ls-files -- $file)
+        if ($LASTEXITCODE -ne 0) {
+            throw "git ls-files for $file failed with exit code $LASTEXITCODE"
+        }
+        $isTracked = $trackedOutput.Count -gt 0
         if ($isTracked) {
             $diff = git -C $Repo diff HEAD --binary -- $file
             if ($LASTEXITCODE -ne 0) {
