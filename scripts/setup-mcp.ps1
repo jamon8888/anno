@@ -37,15 +37,12 @@ function Get-ReleaseTag {
 
 function Resolve-LocalBuildBinary {
     $repoRoot = (& git rev-parse --show-toplevel).Trim()
-    $candidate = Join-Path -Path $repoRoot -ChildPath "target\debug\anno-rag.exe"
-    if (-not (Test-Path -LiteralPath $candidate -PathType Leaf)) {
-        powershell -NoProfile -ExecutionPolicy Bypass -File (Join-Path -Path $repoRoot -ChildPath "scripts\mcp-iterate.ps1") -Mode install -SkipCheck -InstallDir $InstallDir
-        if ($LASTEXITCODE -ne 0) {
-            throw "local build install failed with exit code $LASTEXITCODE"
-        }
-        $candidate = Join-Path -Path $InstallDir -ChildPath "anno-rag.exe"
+    $null = & powershell -NoProfile -ExecutionPolicy Bypass -File (Join-Path -Path $repoRoot -ChildPath "scripts\mcp-iterate.ps1") -Mode install -SkipCheck -InstallDir $InstallDir
+    if ($LASTEXITCODE -ne 0) {
+        throw "local build install failed with exit code $LASTEXITCODE"
     }
 
+    $candidate = Join-Path -Path $InstallDir -ChildPath "anno-rag.exe"
     return (Resolve-Path -LiteralPath $candidate).Path
 }
 
