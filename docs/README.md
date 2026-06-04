@@ -10,7 +10,7 @@ This directory is the product documentation source of truth for Hacienda.
 
 | Role | Start here |
 |---|---|
-| User | [Installation](getting-started/installation.md), then [Claude Desktop/Cowork setup](getting-started/claude-desktop-cowork.md). |
+| User | [Installation](getting-started/installation.md), then [Claude Desktop/Cowork/Claude Code setup](getting-started/claude-desktop-cowork.md). |
 | Developer | [Crates](developers/crates.md), [CLI](developers/cli.md), and [MCP tools](developers/mcp-tools.md). |
 | Integrator | [Gateway API](developers/gateway-api.md), [Configuration](developers/configuration.md), and [File layout](reference/file-layout.md). |
 | Admin | [Deployment](admins/deployment.md), [Operations](admins/operations.md), and [Release management](admins/release-management.md). |
@@ -21,7 +21,8 @@ This directory is the product documentation source of truth for Hacienda.
 - [QUICKSTART.md](QUICKSTART.md) — 5-minute CLI + library usage
 - [CONTRACT.md](CONTRACT.md) — scope + guarantees
 - [BACKENDS.md](BACKENDS.md) — backend selection and feature flags
-- [release/README-release.md](release/README-release.md) — GitHub Release archive install for Claude Desktop/Cowork and `anno-privacy-gateway`
+- [release/README-release.md](release/README-release.md) — GitHub Release archive install for Claude Desktop/Cowork, Claude Code, and `anno-privacy-gateway`
+- [superpowers/specs/2026-06-04-cross-platform-mcp-setup-design.md](superpowers/specs/2026-06-04-cross-platform-mcp-setup-design.md) — architecture for the cross-platform MCP setup flow
 - [user-guide/tabular-review.md](user-guide/tabular-review.md) — schema-driven tabular legal review workflow
 - [PUBLISH_STATUS.md](PUBLISH_STATUS.md) — publish + validation checks
 
@@ -41,7 +42,7 @@ This directory is the product documentation source of truth for Hacienda.
 ## Core Journeys
 
 1. [Install Hacienda](getting-started/installation.md)
-2. [Connect Claude Desktop or Cowork](getting-started/claude-desktop-cowork.md)
+2. [Connect Claude Desktop, Cowork, or Claude Code](getting-started/claude-desktop-cowork.md)
 3. [Run the first index and search](getting-started/first-index.md)
 4. [Troubleshoot first-install issues](getting-started/troubleshooting.md)
 5. [Use privacy-safe legal RAG](user-guide/legal-rag.md)
@@ -57,7 +58,7 @@ This directory is the product documentation source of truth for Hacienda.
 ## Getting Started
 
 - [Installation](getting-started/installation.md)
-- [Claude Desktop/Cowork setup](getting-started/claude-desktop-cowork.md)
+- [Claude Desktop/Cowork/Claude Code setup](getting-started/claude-desktop-cowork.md)
 - [First index and search](getting-started/first-index.md)
 - [Troubleshooting](getting-started/troubleshooting.md)
 

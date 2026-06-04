@@ -117,6 +117,6 @@ anno-rag search "confidentialite" --top-k 5
 ## Related Docs
 
 - [Installation](installation.md)
-- [Claude Desktop And Cowork Setup](claude-desktop-cowork.md)
+- [Claude Desktop, Cowork, And Claude Code Setup](claude-desktop-cowork.md)
 - [Operations](../admins/operations.md)
 - [File Layout](../reference/file-layout.md)

@@ -15,8 +15,8 @@ storing sensitive memory content.
 
 ## MCP Server
 
-Claude Desktop, Cowork, and other MCP clients should launch the installed
-`anno-rag` binary directly:
+Claude Desktop, Cowork-in-Desktop, Claude Code, and other MCP clients should
+launch the installed `anno-rag` binary directly:
 
 ```json
 {
@@ -34,6 +34,20 @@ Claude Desktop, Cowork, and other MCP clients should launch the installed
 
 Use an absolute `command` path. Keep `args` as `["mcp"]`. Add only the
 environment variables required by the deployment.
+
+Claude Code should normally be configured through its CLI:
+
+```bash
+claude mcp add --transport stdio --scope user \
+  --env ANNO_MODELS_DIR="$HOME/.anno-rag/models" \
+  anno-rag -- "$HOME/Tools/hacienda/anno-rag" mcp
+```
+
+For local client setup, prefer the wrappers or binary subcommand:
+
+```bash
+anno-rag setup-mcp --target all
+```
 
 ## RAG Storage
 

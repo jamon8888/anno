@@ -21,8 +21,29 @@ Download the archive for your platform and `SHA256SUMS.txt`:
 | Platform | Asset |
 |---|---|
 | Windows x64 | `hacienda-v0.11.0-rc.11-x86_64-pc-windows-msvc.zip` |
+| macOS Intel | `hacienda-v0.11.0-rc.11-x86_64-apple-darwin.tar.gz` |
 | macOS Apple Silicon | `hacienda-v0.11.0-rc.11-aarch64-apple-darwin.tar.gz` |
 | Checksums | `SHA256SUMS.txt` |
+
+The setup helper can install the release binary, download models, and configure
+Claude Desktop/Cowork plus Claude Code:
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File scripts\setup-mcp.ps1 -Target all -Tag latest
+```
+
+```bash
+./scripts/setup-mcp.sh --target all --tag latest
+```
+
+The installed binary subcommand is:
+
+```bash
+anno-rag setup-mcp --target all
+```
+
+Use the manual release and MCP steps on this page when you need to inspect each
+download, checksum, or config edit.
 
 ### Windows Checksum
 
@@ -79,5 +100,5 @@ cargo build --release -p anno-rag-bin
 
 ## Next Step
 
-Configure Claude Desktop or Cowork through the local MCP server:
-[Claude Desktop And Cowork Setup](claude-desktop-cowork.md).
+Configure Claude Desktop, Cowork, or Claude Code through the local MCP server:
+[Claude Desktop, Cowork, And Claude Code Setup](claude-desktop-cowork.md).
