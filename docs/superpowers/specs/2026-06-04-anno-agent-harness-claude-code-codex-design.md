@@ -23,6 +23,9 @@ The harness should:
 5. Preserve GitNexus-first code navigation and impact analysis.
 6. Avoid leaking secrets, prompts, transcripts, vault data, or legal matter data.
 7. Be installable and auditable from the repo with a dry-run mode.
+8. Generate changelog and PR review material from evidence, not memory.
+9. Keep crate dependency maps, feature surfaces, CLI commands, and docs in sync.
+10. Generate high-signal Claude Code and Codex context for this repo.
 
 ## 2. Current Facts
 
@@ -36,6 +39,11 @@ The harness should:
 - `scripts/hooks/pre-commit`, `scripts/hooks/pre-push`, and
   `scripts/hooks/commit-msg` already cover Git hooks.
 - `scripts/dev-fast.ps1` is the preferred local Rust check loop.
+- `CHANGELOG.md`, `docs/developers/*`, `docs/getting-started/*`, and
+  `docs/user-guide/*` already exist and should remain the canonical committed
+  documentation surface.
+- `justfile` already contains docs, feature-matrix, release validation, and
+  pre-commit/pre-push tasks that can be reused instead of reinvented.
 - GitNexus is indexed and current for commit `7e34027`.
 - The imported `harness.zip` is a generic Claude Code Rust harness with Bash
   hooks, agents, and skills. It is useful as inspiration, but it is not tailored
@@ -75,6 +83,10 @@ This design follows current official documentation checked on 2026-06-04:
 - Do not upload telemetry or transcripts.
 - Do not make broad `cargo build --workspace`, release, or all-feature builds
   the default stop condition.
+- Do not auto-publish releases, open PRs, or push branches without explicit user
+  approval.
+- Do not let generated changelog, PR summaries, or docs invent behavior that is
+  not supported by code, tests, docs, or commit evidence.
 - Do not package the harness as a marketplace plugin in the first phase.
 - Do not alter Hacienda's product MCP install flow; that belongs to the
   separate cross-platform MCP setup track.
@@ -95,6 +107,10 @@ CLAUDE.md                         # Claude Code short always-on entrypoint
     anno-build-resolver.md
     anno-doc-writer.md
     anno-gitnexus-explorer.md
+    anno-changelog-writer.md
+    anno-pr-reviewer.md
+    anno-crate-graph-auditor.md
+    anno-cli-parity-auditor.md
     anno-release-gate.md
   rules/
     rust.md
@@ -105,6 +121,12 @@ CLAUDE.md                         # Claude Code short always-on entrypoint
     anno-gitnexus-impact/SKILL.md
     anno-security-review/SKILL.md
     anno-mcp-smoke/SKILL.md
+    anno-changelog/SKILL.md
+    anno-pr-review/SKILL.md
+    anno-doc-generation/SKILL.md
+    anno-crate-dependency-map/SKILL.md
+    anno-cli-feature-parity/SKILL.md
+    anno-agent-context-generation/SKILL.md
     anno-release-check/SKILL.md
 .codex/
   config.toml
@@ -120,6 +142,12 @@ CLAUDE.md                         # Claude Code short always-on entrypoint
     anno-gitnexus-impact/SKILL.md
     anno-security-review/SKILL.md
     anno-mcp-smoke/SKILL.md
+    anno-changelog/SKILL.md
+    anno-pr-review/SKILL.md
+    anno-doc-generation/SKILL.md
+    anno-crate-dependency-map/SKILL.md
+    anno-cli-feature-parity/SKILL.md
+    anno-agent-context-generation/SKILL.md
     anno-release-check/SKILL.md
 scripts/
   agent-harness/
@@ -135,6 +163,12 @@ scripts/
     pre-compact-summary.sh
     prompt-secret-scan.ps1
     prompt-secret-scan.sh
+    changelog-generate.ps1
+    pr-review-generate.ps1
+    docs-generate.ps1
+    crate-map-generate.ps1
+    cli-feature-parity.ps1
+    agent-context-generate.ps1
     harness-status.ps1
 ```
 
@@ -352,6 +386,17 @@ Define repo-local agents in `.claude/agents/`:
   validation when practical.
 - `anno-gitnexus-explorer`: read-only. Uses GitNexus before file reads when
   exploring unfamiliar flows.
+- `anno-changelog-writer`: can edit `CHANGELOG.md` and release notes only.
+  Builds entries from commits, staged diff, PR metadata, and explicit user
+  notes.
+- `anno-pr-reviewer`: read-only. Produces prioritized PR findings, test gaps,
+  security notes, docs impact, and crate/CLI parity notes.
+- `anno-crate-graph-auditor`: read-only by default. Uses `cargo metadata` and
+  workspace manifests to report dependency edges, feature propagation, and
+  changed-crate blast radius.
+- `anno-cli-parity-auditor`: read-only by default. Checks whether changes in
+  `anno-rag`, `anno-rag-mcp`, or `anno-rag-tabular` require matching updates in
+  `anno-rag-bin` CLI commands, help text, docs, examples, or MCP smoke tests.
 - `anno-release-gate`: read-only unless explicitly asked. Checks release
   readiness, generated artifacts, docs, and local gate status.
 
@@ -366,6 +411,9 @@ Define equivalent project-scoped custom agents in `.codex/agents/`:
 - `reviewer.toml`: code quality and correctness review.
 - `security.toml`: security diff or scoped audit.
 - `build-fixer.toml`: build/test error investigation and minimal fixes.
+- `docs.toml`: documentation generation and stale-doc detection.
+- `release-notes.toml`: changelog and PR summary generation.
+- `crate-auditor.toml`: crate dependency and CLI feature parity checks.
 
 Codex subagents are enabled by default in current releases and only spawn when
 explicitly requested, so `AGENTS.md` should teach when to ask for them without
@@ -385,6 +433,23 @@ Shared skill set:
   gateway, MCP, and local legal-data workflows.
 - `anno-mcp-smoke`: how to smoke test `anno-rag mcp`, `tools/list`, and
   `anno_health`.
+- `anno-changelog`: how to generate and review `CHANGELOG.md` updates from
+  commits, diffs, conventional commit types, release notes, and user-provided
+  context.
+- `anno-pr-review`: how to review PRs automatically with GitHub metadata,
+  CodeRabbit when installed, local diff review, security checks, and test-plan
+  validation.
+- `anno-doc-generation`: how to regenerate committed docs, rustdoc, command
+  references, MCP tool docs, and Claude/Codex context files without inventing
+  behavior.
+- `anno-crate-dependency-map`: how to generate a workspace crate graph from
+  `cargo metadata`, identify affected local crates, and explain dependency
+  direction.
+- `anno-cli-feature-parity`: how to check that new `anno-rag`,
+  `anno-rag-mcp`, or `anno-rag-tabular` capabilities are reflected in
+  `anno-rag-bin`, docs, examples, and smoke tests when they are user-facing.
+- `anno-agent-context-generation`: how to produce compact, current context for
+  Claude Code and Codex from GitNexus, Cargo metadata, docs, and recent changes.
 - `anno-release-check`: release/package verification and broad gate escalation.
 
 Store Codex-readable skills under `.agents/skills/`. For Claude Code, mirror
@@ -392,7 +457,194 @@ the same core workflows under `.claude/skills/` or package them through a future
 plugin. Keep descriptions concise so they trigger accurately without crowding
 context.
 
-## 10. Setup Script
+## 10. Maintenance Automation Layer
+
+The harness should not only block unsafe actions. It should also keep the repo
+easy for agents to understand and maintain.
+
+### 10.1 Automatic Changelog Generation
+
+Add a changelog workflow that can be run manually or by a release gate:
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File scripts\agent-harness\changelog-generate.ps1 -Since main -DryRun
+```
+
+Inputs:
+
+- Conventional commit subjects and bodies.
+- `git diff --name-status` and `git diff --stat`.
+- Existing `CHANGELOG.md` sections and release style.
+- PR metadata when GitHub MCP or `gh` is available.
+- Explicit user notes for product wording.
+
+Rules:
+
+- Group by `feat`, `fix`, `perf`, `refactor`, `docs`, `test`, `ci`, and
+  `chore`.
+- Keep security and privacy changes explicit but avoid exposing sensitive data.
+- Include affected crates or docs areas when clear from paths.
+- Never claim a release version unless the user or tag provides it.
+- Produce a dry-run markdown patch before editing `CHANGELOG.md`.
+- Refuse to overwrite manual release notes without showing a diff.
+
+### 10.2 Automatic PR Review and PR Summary
+
+Add a PR workflow that produces both review findings and a merge-ready summary:
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File scripts\agent-harness\pr-review-generate.ps1 -Base main
+```
+
+Review evidence:
+
+- Local diff against base branch.
+- GitNexus impact and context for changed symbols when available.
+- `cargo metadata` crate impact.
+- Targeted `dev-fast` and relevant test results.
+- Security-sensitive path detection.
+- GitHub PR metadata and review comments when available.
+- Optional CodeRabbit review output when the CodeRabbit plugin is installed and
+  explicitly requested or configured.
+
+Output:
+
+- Findings first, ordered by severity.
+- Open questions and assumptions.
+- Test coverage and missing validation.
+- Docs/changelog impact.
+- Crate dependency impact.
+- CLI and MCP parity impact.
+- PR summary with changes, testing, risks, and follow-ups.
+
+The workflow must be read-only unless the user asks it to update a PR
+description, changelog, or docs.
+
+### 10.3 Documentation Generation and Stale-Doc Detection
+
+Add a docs workflow:
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File scripts\agent-harness\docs-generate.ps1 -DryRun
+```
+
+Generated or refreshed surfaces:
+
+- Rust public API docs through `cargo doc` where practical.
+- CLI command reference from `anno-rag --help`, `anno-rag review --help`, and
+  relevant subcommand help output.
+- MCP tool inventory from `anno-rag mcp` smoke or a schema capture fixture.
+- Crate map and package responsibilities from `cargo metadata`.
+- Agent context docs for Claude Code and Codex.
+
+Rules:
+
+- Prefer committed docs under `docs/` for stable user/developer information.
+- Use generated context files only when they are compact and useful to agents.
+- Mark generated sections with clear begin/end comments when scripts maintain
+  only part of a file.
+- Run `just docs-audit` or the equivalent `scripts/docs_audit.py` check after
+  committed doc changes.
+- Do not invent command flags, MCP tools, model names, or feature availability.
+
+### 10.4 Crate Dependency Graph
+
+Add a crate graph workflow:
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File scripts\agent-harness\crate-map-generate.ps1 -DryRun
+```
+
+Inputs:
+
+- `cargo metadata --format-version 1`.
+- Workspace `Cargo.toml`.
+- Feature declarations and local path dependencies.
+- GitNexus changed-symbol context when available.
+
+Outputs:
+
+- Local crate dependency graph.
+- Reverse dependency map for changed crates.
+- Feature propagation notes.
+- Suggested `dev-fast` package set.
+- Optional committed docs update, for example
+  `docs/developers/crate-dependency-map.md`, if the generated output is stable.
+
+Rules:
+
+- Treat dependency direction explicitly: "depends on" and "depended on by" must
+  never be mixed.
+- Flag cycles or surprising dependency edges.
+- Highlight whether a change to a shared crate requires `-AllAffected`.
+- Keep generated diagrams text-first and readable by agents.
+
+### 10.5 `anno-rag` Feature and CLI Parity
+
+Add a parity workflow:
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File scripts\agent-harness\cli-feature-parity.ps1 -DryRun
+```
+
+Purpose: when `anno-rag`, `anno-rag-mcp`, or `anno-rag-tabular` gains a
+user-facing capability, the harness should flag whether `anno-rag-bin` CLI,
+docs, examples, and smoke tests need matching updates.
+
+Checks:
+
+- Changes in public functions, command handlers, MCP tools, review tools,
+  config fields, and feature-gated modules.
+- `anno-rag-bin` Clap command coverage.
+- Help text and README/docs references.
+- MCP docs and smoke tests.
+- Release docs and install docs when behavior affects users.
+- Feature flags in `Cargo.toml`, `justfile`, CI, and local check loops.
+
+Rules:
+
+- The parity gate should warn by default and block only for high-confidence
+  user-facing drift.
+- Internal-only capabilities can be marked as intentionally not exposed, but
+  that decision should be documented in the PR summary or design notes.
+- New CLI commands should include tests for argument parsing and at least one
+  dry-run or fixture path when possible.
+
+### 10.6 Claude Code and Codex Context Generation
+
+Add a context generation workflow:
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File scripts\agent-harness\agent-context-generate.ps1 -DryRun
+```
+
+Generated context should help agents start with accurate local knowledge:
+
+- Current crate map.
+- Current high-level process map from GitNexus.
+- Fast check commands.
+- MCP and privacy model summary.
+- Active docs index.
+- Recent release/workflow changes.
+- Known heavy commands to avoid.
+
+Targets:
+
+- `CLAUDE.md`: concise top-level Claude Code memory only.
+- `AGENTS.md`: concise cross-agent rules only.
+- `.claude/rules/*`: scoped Claude Code rule files.
+- `.agents/skills/*`: Codex-readable workflow skills.
+- Optional `docs/developers/agent-context.md` for longer generated context.
+
+Rules:
+
+- Keep always-on files short.
+- Put workflow detail in skills.
+- Put stable architecture and user/developer docs under `docs/`.
+- Use source links or file references inside generated context.
+- Never include secrets, vault content, local transcripts, or legal matter text.
+
+## 11. Setup Script
 
 Add a repo-local installer:
 
@@ -418,6 +670,8 @@ Targets:
   `just setup-hooks`.
 - `mcp`: verifies GitNexus MCP availability for Claude Code and Codex, but does
   not write third-party credentials.
+- `automation`: installs or verifies changelog, PR review, docs generation,
+  crate map, CLI parity, and agent context workflows.
 - `all`: all of the above.
 
 Setup rules:
@@ -431,7 +685,7 @@ Setup rules:
 - Support `-DryRun`.
 - Fail with clear instructions if required tools are missing.
 
-## 11. MCP Baseline
+## 12. MCP Baseline
 
 The developer harness should make MCP availability explicit, not magic.
 
@@ -448,7 +702,7 @@ Recommended but optional:
 The setup should detect and report missing MCPs. It may print commands to add
 them, but should not install remote MCPs or write secrets automatically.
 
-## 12. Privacy and Security
+## 13. Privacy and Security
 
 This repository handles legal and PII-sensitive workflows. The harness must:
 
@@ -461,7 +715,7 @@ This repository handles legal and PII-sensitive workflows. The harness must:
 - Use path canonicalization before allowing destructive operations.
 - Deny writes to secret-bearing files unless explicitly requested and reviewed.
 
-## 13. Verification Plan
+## 14. Verification Plan
 
 Implementation should include fixture-based tests for hook scripts.
 
@@ -475,6 +729,15 @@ Minimum tests:
 - Rust edit checker maps `crates/anno-rag/src/foo.rs` to package `anno-rag`.
 - Stop gate allows docs-only changes.
 - Stop gate blocks Rust changes without a verification stamp.
+- Changelog generator groups a fixture commit list into the expected sections.
+- PR review generator reports docs, security, crate, and CLI parity impact for
+  a fixture diff.
+- Docs generator refuses to update command docs when help output is unavailable.
+- Crate map generator correctly reports direct and reverse local dependencies.
+- CLI parity checker warns when a new user-facing `anno-rag` command path lacks
+  matching `anno-rag-bin` or docs coverage.
+- Agent context generator keeps always-on files below configured size limits and
+  moves longer workflows into skills.
 - Setup dry-run reports intended changes without writing files.
 - Setup merge preserves existing `.claude/settings.json` permissions and hooks.
 - Codex hooks JSON validates as JSON.
@@ -485,6 +748,12 @@ Manual smoke:
 ```powershell
 powershell -NoProfile -ExecutionPolicy Bypass -File scripts\agent-harness\setup-agent-harness.ps1 -DryRun
 powershell -NoProfile -ExecutionPolicy Bypass -File scripts\agent-harness\harness-status.ps1
+powershell -NoProfile -ExecutionPolicy Bypass -File scripts\agent-harness\changelog-generate.ps1 -Since main -DryRun
+powershell -NoProfile -ExecutionPolicy Bypass -File scripts\agent-harness\pr-review-generate.ps1 -Base main
+powershell -NoProfile -ExecutionPolicy Bypass -File scripts\agent-harness\docs-generate.ps1 -DryRun
+powershell -NoProfile -ExecutionPolicy Bypass -File scripts\agent-harness\crate-map-generate.ps1 -DryRun
+powershell -NoProfile -ExecutionPolicy Bypass -File scripts\agent-harness\cli-feature-parity.ps1 -DryRun
+powershell -NoProfile -ExecutionPolicy Bypass -File scripts\agent-harness\agent-context-generate.ps1 -DryRun
 powershell -NoProfile -ExecutionPolicy Bypass -File scripts\dev-fast.ps1 -PrintOnly
 ```
 
@@ -498,7 +767,7 @@ Before committing implementation, run GitNexus change detection when available.
 If only the CLI is available and it lacks `detect_changes`, run `npx gitnexus
 status`, inspect `git diff --name-status`, and document the fallback.
 
-## 14. Rollout Phases
+## 15. Rollout Phases
 
 ### Phase 1: Spec and inventory
 
@@ -525,21 +794,32 @@ status`, inspect `git diff --name-status`, and document the fallback.
 - Mirror shared skills under `.agents/skills/`.
 - Validate Codex hook schemas and trust instructions.
 
-### Phase 5: Setup and status commands
+### Phase 5: Maintenance automation
+
+- Add changelog generation workflow.
+- Add PR review and PR summary workflow.
+- Add documentation generation and stale-doc detection workflow.
+- Add crate dependency map workflow.
+- Add `anno-rag` feature and CLI parity workflow.
+- Add Claude Code and Codex context generation workflow.
+- Add fixture tests for each workflow before enabling hook or gate usage.
+
+### Phase 6: Setup and status commands
 
 - Add setup and status scripts.
 - Document usage in `docs/developers/configuration.md` or
   `docs/README.md`.
 - Keep all global/user modifications opt-in.
+- Include `automation` in setup targets.
 
-### Phase 6: Future plugin packaging
+### Phase 7: Future plugin packaging
 
 - Convert the stable Claude Code portion into a plugin only after repo-local
   behavior has been validated.
 - Preserve the Codex layer as project config because Codex plugin packaging is
   separate from Claude Code plugin packaging.
 
-## 15. Risks and Mitigations
+## 16. Risks and Mitigations
 
 | Risk | Mitigation |
 |---|---|
@@ -550,8 +830,12 @@ status`, inspect `git diff --name-status`, and document the fallback.
 | Transcript backup leaks sensitive data | Default to summaries only; full transcript backup requires explicit opt-in env var. |
 | Codex and Claude hook schemas drift | Keep shared logic in scripts and tool-specific adapters minimal. |
 | GitNexus CLI lacks `detect_changes` | Use MCP tool when available; otherwise document `status` plus `git diff --name-status` fallback. |
+| Changelog or PR summaries hallucinate scope | Generate from commits, diffs, PR metadata, tests, and explicit user notes only; require dry-run diffs. |
+| Docs generation drifts from real CLI or MCP schemas | Capture help/schema output first and refuse generation when evidence is missing. |
+| CLI parity gate blocks internal implementation work | Warn by default and block only high-confidence user-facing drift. |
+| Crate dependency maps become stale | Generate from `cargo metadata` and rerun in docs/PR workflows. |
 
-## 16. Acceptance Criteria
+## 17. Acceptance Criteria
 
 - Claude Code can load project settings without JSON errors.
 - Codex can load project config and hooks in a trusted project.
@@ -560,7 +844,22 @@ status`, inspect `git diff --name-status`, and document the fallback.
 - Stop gate prevents unverified Rust completion claims while allowing docs-only
   work.
 - Review/security/build agents exist with clear tool permissions.
-- Skills exist for fast loop, GitNexus, security, MCP smoke, and release checks.
+- Changelog, PR review, docs, crate graph, CLI parity, and agent context agents
+  exist with clear permissions.
+- Skills exist for fast loop, GitNexus, security, MCP smoke, changelog, PR
+  review, doc generation, crate mapping, CLI parity, context generation, and
+  release checks.
+- Changelog generation can produce a dry-run patch from local commits.
+- PR review generation can produce findings and a PR summary from a base branch
+  without modifying files.
+- Documentation generation can refresh command/MCP/crate context only from
+  captured evidence.
+- Crate dependency generation can identify changed local crates and reverse
+  dependents.
+- CLI parity workflow can flag likely drift between `anno-rag` capabilities and
+  `anno-rag-bin`/docs/tests.
+- Agent context generation can update concise Claude Code/Codex context without
+  bloating always-on files.
 - Setup script supports dry-run and preserves existing config.
 - No secret, transcript, vault, or model-cache data is committed.
 - Implementation commits stage only expected harness files.
