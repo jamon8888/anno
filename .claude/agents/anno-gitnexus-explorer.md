@@ -1,8 +1,8 @@
 ---
 name: anno-gitnexus-explorer
 description: Read-only code explorer that uses GitNexus before source reads.
-tools: Read, Grep, Glob, Bash
-disallowedTools: Edit, Write, MultiEdit
+tools: Read, Grep, Glob
+disallowedTools: Edit, Write, MultiEdit, Bash, PowerShell
 model: sonnet
 permissionMode: default
 ---

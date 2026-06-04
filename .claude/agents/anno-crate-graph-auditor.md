@@ -1,8 +1,8 @@
 ---
 name: anno-crate-graph-auditor
 description: Read-only crate dependency and feature propagation auditor.
-tools: Read, Grep, Glob, Bash
-disallowedTools: Edit, Write, MultiEdit
+tools: Read, Grep, Glob
+disallowedTools: Edit, Write, MultiEdit, Bash, PowerShell
 model: sonnet
 permissionMode: default
 ---

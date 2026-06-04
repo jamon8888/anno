@@ -1,8 +1,8 @@
 ---
 name: anno-rust-reviewer
 description: Read-only Rust correctness and maintainability reviewer.
-tools: Read, Grep, Glob, Bash
-disallowedTools: Edit, Write, MultiEdit
+tools: Read, Grep, Glob
+disallowedTools: Edit, Write, MultiEdit, Bash, PowerShell
 model: sonnet
 permissionMode: default
 ---

@@ -1,8 +1,8 @@
 ---
 name: anno-security-reviewer
 description: Read-only security reviewer for secrets, auth, paths, crypto, vault, network IO, and unsafe Rust.
-tools: Read, Grep, Glob, Bash
-disallowedTools: Edit, Write, MultiEdit
+tools: Read, Grep, Glob
+disallowedTools: Edit, Write, MultiEdit, Bash, PowerShell
 model: sonnet
 permissionMode: default
 ---

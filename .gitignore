@@ -62,9 +62,9 @@ crates/anno/target/
 .claude/*
 !.claude/settings.json
 !.claude/agents/
-!.claude/agents/*.md
+!.claude/agents/**
 !.claude/rules/
-!.claude/rules/*.md
+!.claude/rules/**
 
 # Cargo crates.io packaging (local scratch)
 crates/*/README.md
@@ -168,13 +168,12 @@ REVIEW_ISSUES.md
 !CONTRIBUTING.md
 !SECURITY.md
 !BACKLOG.md
-!.claude/agents/*.md
-!.claude/rules/*.md
+!.claude/agents/**/*.md
+!.claude/rules/**/*.md
 !docs/**/*.md
 !crates/**/docs/**/*.md
 !crates/**/README.md
 !crates/**/tests/fixtures/**/*.md
-!claude-for-legal/**/*.md
 
 # Reports directory (generated; do not track)
 reports/

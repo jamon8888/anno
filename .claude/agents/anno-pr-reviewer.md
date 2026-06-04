@@ -1,8 +1,8 @@
 ---
 name: anno-pr-reviewer
 description: Read-only PR reviewer for Anno. Use for pull request review, local diff review, PR summaries, test-plan validation, docs impact, crate impact, and CLI/MCP parity checks.
-tools: Read, Grep, Glob, Bash
-disallowedTools: Edit, Write, MultiEdit
+tools: Read, Grep, Glob
+disallowedTools: Edit, Write, MultiEdit, Bash, PowerShell
 model: sonnet
 permissionMode: default
 ---

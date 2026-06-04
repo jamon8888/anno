@@ -1,8 +1,8 @@
 ---
 name: anno-cli-parity-auditor
 description: Read-only auditor for anno-rag to anno-rag-bin/docs/tests parity.
-tools: Read, Grep, Glob, Bash
-disallowedTools: Edit, Write, MultiEdit
+tools: Read, Grep, Glob
+disallowedTools: Edit, Write, MultiEdit, Bash, PowerShell
 model: sonnet
 permissionMode: default
 ---

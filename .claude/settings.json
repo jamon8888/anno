@@ -5,7 +5,8 @@
         "hooks": [
           {
             "type": "command",
-            "command": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/agent-harness/prompt-secret-scan.ps1",
+            "command": "powershell -NoProfile -ExecutionPolicy Bypass -File \"${CLAUDE_PROJECT_DIR}/scripts/agent-harness/prompt-secret-scan.ps1\"",
+            "shell": "powershell",
             "timeout": 20,
             "statusMessage": "secret scan ..."
           }
@@ -14,11 +15,12 @@
     ],
     "PreToolUse": [
       {
-        "matcher": "Bash",
+        "matcher": "Bash|PowerShell",
         "hooks": [
           {
             "type": "command",
-            "command": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/agent-harness/block-dangerous-tool.ps1",
+            "command": "powershell -NoProfile -ExecutionPolicy Bypass -File \"${CLAUDE_PROJECT_DIR}/scripts/agent-harness/block-dangerous-tool.ps1\"",
+            "shell": "powershell",
             "timeout": 20,
             "statusMessage": "safety gate ..."
           }
@@ -31,7 +33,8 @@
         "hooks": [
           {
             "type": "command",
-            "command": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/agent-harness/post-edit-rust-check.ps1",
+            "command": "powershell -NoProfile -ExecutionPolicy Bypass -File \"${CLAUDE_PROJECT_DIR}/scripts/agent-harness/post-edit-rust-check.ps1\"",
+            "shell": "powershell",
             "timeout": 90,
             "statusMessage": "targeted Rust check ...",
             "async": true
@@ -44,7 +47,8 @@
         "hooks": [
           {
             "type": "command",
-            "command": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/agent-harness/stop-verify.ps1",
+            "command": "powershell -NoProfile -ExecutionPolicy Bypass -File \"${CLAUDE_PROJECT_DIR}/scripts/agent-harness/stop-verify.ps1\"",
+            "shell": "powershell",
             "timeout": 30,
             "statusMessage": "completion gate ..."
           }
