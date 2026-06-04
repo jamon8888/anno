@@ -148,6 +148,20 @@ $tests.Add({
 })
 
 $tests.Add({
+    $r = Invoke-HarnessScript "changelog-generate.ps1" -ExtraArgs @("-CommitsPath", (Join-Path $fixtures "commits.fixture.txt"), "-DryRun")
+    Assert-Equal $r.ExitCode 0 "changelog fixture passes stdout='$($r.Stdout)' stderr='$($r.Stderr)'"
+    Assert-Contains $r.Stdout "Features" "changelog feature section"
+    Assert-Contains $r.Stdout "Bug Fixes" "changelog bug fix section"
+})
+
+$tests.Add({
+    $r = Invoke-HarnessScript "pr-review-generate.ps1" -ExtraArgs @("-DiffNameStatusPath", (Join-Path $fixtures "diff-name-status.fixture.txt"))
+    Assert-Equal $r.ExitCode 0 "pr review fixture passes stdout='$($r.Stdout)' stderr='$($r.Stderr)'"
+    Assert-Contains $r.Stdout "Findings" "pr review findings section"
+    Assert-Contains $r.Stdout "CLI and MCP Parity" "pr review parity section"
+})
+
+$tests.Add({
     $tempRepo = Join-Path ([System.IO.Path]::GetTempPath()) ("agent-harness-test-" + [Guid]::NewGuid().ToString("N"))
     New-Item -ItemType Directory -Path $tempRepo | Out-Null
     try {
