@@ -208,6 +208,81 @@ pub fn write_desktop_config(
     })
 }
 
+pub fn build_claude_code_args(
+    scope: ClaudeCodeScope,
+    models_dir: &Path,
+    binary: &Path,
+) -> anyhow::Result<Vec<String>> {
+    validate_absolute_path(models_dir).map_err(|e| anyhow!(e))?;
+    validate_absolute_path(binary).map_err(|e| anyhow!(e))?;
+
+    let models_dir = path_to_config_string(models_dir)?;
+    let binary = path_to_config_string(binary)?;
+
+    Ok(vec![
+        "mcp".to_string(),
+        "add".to_string(),
+        "--transport".to_string(),
+        "stdio".to_string(),
+        "--scope".to_string(),
+        scope.as_cli_value().to_string(),
+        "--env".to_string(),
+        format!("ANNO_MODELS_DIR={models_dir}"),
+        "anno-rag".to_string(),
+        "--".to_string(),
+        binary,
+        "mcp".to_string(),
+    ])
+}
+
+pub fn configure_claude_code(
+    scope: ClaudeCodeScope,
+    models_dir: &Path,
+    binary: &Path,
+    dry_run: bool,
+) -> anyhow::Result<String> {
+    let args = build_claude_code_args(scope, models_dir, binary)?;
+    let command = display_command("claude", &args);
+    if dry_run {
+        return Ok(format!("dry-run: {command}"));
+    }
+
+    let output = std::process::Command::new("claude").args(&args).output();
+
+    match output {
+        Ok(out) if out.status.success() => {
+            Ok("configured Claude Code MCP server anno-rag".to_string())
+        }
+        Ok(out) => {
+            let stderr = String::from_utf8_lossy(&out.stderr);
+            anyhow::bail!("claude mcp add failed: {}", stderr.trim());
+        }
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
+            Ok(format!("Claude Code CLI not found; run later: {command}"))
+        }
+        Err(error) => Err(error).context("run claude mcp add"),
+    }
+}
+
+fn display_command(program: &str, args: &[String]) -> String {
+    std::iter::once(program.to_string())
+        .chain(args.iter().map(|arg| display_command_arg(arg)))
+        .collect::<Vec<_>>()
+        .join(" ")
+}
+
+fn display_command_arg(arg: &str) -> String {
+    if !arg.is_empty()
+        && !arg
+            .chars()
+            .any(|ch| ch.is_whitespace() || matches!(ch, '"' | '\''))
+    {
+        return arg.to_string();
+    }
+
+    format!("\"{}\"", arg.replace('"', "\\\""))
+}
+
 fn create_parent_dir(path: &Path) -> anyhow::Result<()> {
     if let Some(parent) = path
         .parent()
@@ -505,6 +580,69 @@ mod tests {
 
         assert!(removable.should_remove_temp());
         assert!(!preserved.should_remove_temp());
+    }
+
+    #[test]
+    fn claude_code_args_include_scope_env_binary_and_mcp() {
+        let models_dir = absolute_test_path(&["anno-rag", "models"]);
+        let binary = absolute_test_path(&["hacienda", "anno-rag"]);
+        let expected_models_dir = path_to_config_string(&models_dir).expect("models path");
+        let expected_binary = path_to_config_string(&binary).expect("binary path");
+
+        let args =
+            build_claude_code_args(ClaudeCodeScope::User, &models_dir, &binary).expect("args");
+
+        assert_eq!(args[0], "mcp");
+        assert_eq!(args[1], "add");
+        assert_eq!(
+            args,
+            vec![
+                "mcp".to_string(),
+                "add".to_string(),
+                "--transport".to_string(),
+                "stdio".to_string(),
+                "--scope".to_string(),
+                "user".to_string(),
+                "--env".to_string(),
+                format!("ANNO_MODELS_DIR={expected_models_dir}"),
+                "anno-rag".to_string(),
+                "--".to_string(),
+                expected_binary,
+                "mcp".to_string(),
+            ]
+        );
+    }
+
+    #[test]
+    fn claude_code_args_reject_relative_paths() {
+        let models_dir = absolute_test_path(&["anno-rag", "models"]);
+        let err = build_claude_code_args(ClaudeCodeScope::User, &models_dir, Path::new("anno-rag"))
+            .expect_err("relative binary must fail");
+
+        assert!(err.to_string().contains("absolute"));
+    }
+
+    #[test]
+    fn claude_code_args_reject_relative_models_dir() {
+        let binary = absolute_test_path(&["hacienda", "anno-rag"]);
+        let err = build_claude_code_args(ClaudeCodeScope::User, Path::new("models"), &binary)
+            .expect_err("relative models dir must fail");
+
+        assert!(err.to_string().contains("absolute"));
+    }
+
+    #[test]
+    fn configure_claude_code_dry_run_returns_command_without_running_cli() {
+        let models_dir = absolute_test_path(&["anno rag", "models"]);
+        let binary = absolute_test_path(&["hacienda tools", "anno-rag"]);
+        let result = configure_claude_code(ClaudeCodeScope::Project, &models_dir, &binary, true)
+            .expect("dry run");
+
+        assert!(result.starts_with("dry-run: claude mcp add"));
+        assert!(result.contains("--scope project"));
+        assert!(result.contains("--env"));
+        assert!(result.contains("\"ANNO_MODELS_DIR="));
+        assert!(result.ends_with(" mcp"));
     }
 
     #[test]
