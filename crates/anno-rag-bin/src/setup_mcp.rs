@@ -129,6 +129,42 @@ pub fn read_json_file_or_empty(path: &Path) -> anyhow::Result<Value> {
 
 const CREATE_NEW_ATTEMPTS: u32 = 100;
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum TempCleanup {
+    Remove,
+    Preserve,
+}
+
+#[derive(Debug)]
+struct ReplaceFileError {
+    error: anyhow::Error,
+    temp_cleanup: TempCleanup,
+}
+
+impl ReplaceFileError {
+    fn remove_temp(error: anyhow::Error) -> Self {
+        Self {
+            error,
+            temp_cleanup: TempCleanup::Remove,
+        }
+    }
+
+    fn preserve_temp(error: anyhow::Error) -> Self {
+        Self {
+            error,
+            temp_cleanup: TempCleanup::Preserve,
+        }
+    }
+
+    fn should_remove_temp(&self) -> bool {
+        self.temp_cleanup == TempCleanup::Remove
+    }
+
+    fn into_error(self) -> anyhow::Error {
+        self.error
+    }
+}
+
 pub fn write_desktop_config(
     path: &Path,
     value: &Value,
@@ -160,8 +196,10 @@ pub fn write_desktop_config(
     }
 
     if let Err(error) = replace_file(&tmp, path) {
-        remove_temp_file(&tmp);
-        return Err(error);
+        if error.should_remove_temp() {
+            remove_temp_file(&tmp);
+        }
+        return Err(error.into_error());
     }
 
     Ok(WriteResult {
@@ -313,20 +351,29 @@ fn make_temp_writable_for_cleanup(path: &Path) {
 fn make_temp_writable_for_cleanup(_path: &Path) {}
 
 #[cfg(windows)]
-fn replace_file(tmp: &Path, path: &Path) -> anyhow::Result<()> {
+fn replace_file(tmp: &Path, path: &Path) -> Result<(), ReplaceFileError> {
     use std::os::windows::ffi::OsStrExt;
-
-    const MOVEFILE_REPLACE_EXISTING: u32 = 0x1;
-    const MOVEFILE_WRITE_THROUGH: u32 = 0x8;
 
     #[link(name = "kernel32")]
     unsafe extern "system" {
-        #[link_name = "MoveFileExW"]
-        fn move_file_ex_w(
-            existing_file_name: *const u16,
-            new_file_name: *const u16,
-            flags: u32,
+        #[link_name = "ReplaceFileW"]
+        fn replace_file_w(
+            replaced_file_name: *const u16,
+            replacement_file_name: *const u16,
+            backup_file_name: *const u16,
+            replace_flags: u32,
+            exclude: *mut core::ffi::c_void,
+            reserved: *mut core::ffi::c_void,
         ) -> i32;
+    }
+
+    if !path.exists() {
+        if let Err(error) = std::fs::rename(tmp, path)
+            .with_context(|| format!("rename {} to {}", tmp.display(), path.display()))
+        {
+            return Err(ReplaceFileError::remove_temp(error));
+        }
+        return Ok(());
     }
 
     let tmp_wide: Vec<u16> = tmp
@@ -342,24 +389,35 @@ fn replace_file(tmp: &Path, path: &Path) -> anyhow::Result<()> {
 
     // SAFETY: both buffers are null-terminated UTF-16 paths and live for the duration of the call.
     let replaced = unsafe {
-        move_file_ex_w(
-            tmp_wide.as_ptr(),
+        replace_file_w(
             path_wide.as_ptr(),
-            MOVEFILE_REPLACE_EXISTING | MOVEFILE_WRITE_THROUGH,
+            tmp_wide.as_ptr(),
+            std::ptr::null(),
+            0,
+            std::ptr::null_mut(),
+            std::ptr::null_mut(),
         )
     };
     if replaced == 0 {
-        return Err(std::io::Error::last_os_error())
-            .with_context(|| format!("rename {} to {}", tmp.display(), path.display()));
+        let error = anyhow!(std::io::Error::last_os_error()).context(format!(
+            "replace {} with {}; preserved replacement temp at {} for recovery",
+            path.display(),
+            tmp.display(),
+            tmp.display()
+        ));
+        return Err(ReplaceFileError::preserve_temp(error));
     }
 
     Ok(())
 }
 
 #[cfg(not(windows))]
-fn replace_file(tmp: &Path, path: &Path) -> anyhow::Result<()> {
-    std::fs::rename(tmp, path)
-        .with_context(|| format!("rename {} to {}", tmp.display(), path.display()))?;
+fn replace_file(tmp: &Path, path: &Path) -> Result<(), ReplaceFileError> {
+    if let Err(error) = std::fs::rename(tmp, path)
+        .with_context(|| format!("rename {} to {}", tmp.display(), path.display()))
+    {
+        return Err(ReplaceFileError::remove_temp(error));
+    }
     Ok(())
 }
 
@@ -438,6 +496,15 @@ mod tests {
     fn validates_absolute_binary_path() {
         let err = validate_absolute_path(Path::new("relative/anno-rag")).unwrap_err();
         assert!(err.contains("absolute"));
+    }
+
+    #[test]
+    fn replace_file_error_cleanup_policy_can_preserve_temp() {
+        let removable = ReplaceFileError::remove_temp(anyhow!("remove"));
+        let preserved = ReplaceFileError::preserve_temp(anyhow!("preserve"));
+
+        assert!(removable.should_remove_temp());
+        assert!(!preserved.should_remove_temp());
     }
 
     #[test]
@@ -593,6 +660,96 @@ mod tests {
         assert_eq!(first.parent(), config_path.parent());
         assert_eq!(second.parent(), config_path.parent());
         assert_ne!(first, second);
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn windows_replace_file_updates_target_and_removes_temp() {
+        let dir = tempfile::tempdir().expect("tempdir");
+        let config_path = dir.path().join("claude_desktop_config.json");
+        let tmp_path = desktop_config_temp_path(&config_path, "replace-test", 0);
+        std::fs::write(&config_path, "old").expect("seed");
+        std::fs::write(&tmp_path, "new").expect("tmp");
+
+        replace_file(&tmp_path, &config_path).expect("replace");
+
+        assert_eq!(
+            std::fs::read_to_string(&config_path).expect("read config"),
+            "new"
+        );
+        assert!(!tmp_path.exists());
+    }
+
+    #[cfg(windows)]
+    fn windows_path(path: &Path) -> Vec<u16> {
+        use std::os::windows::ffi::OsStrExt;
+
+        path.as_os_str()
+            .encode_wide()
+            .chain(std::iter::once(0))
+            .collect()
+    }
+
+    #[cfg(windows)]
+    fn get_windows_file_attributes(path: &Path) -> u32 {
+        const INVALID_FILE_ATTRIBUTES: u32 = u32::MAX;
+
+        #[link(name = "kernel32")]
+        unsafe extern "system" {
+            #[link_name = "GetFileAttributesW"]
+            fn get_file_attributes_w(file_name: *const u16) -> u32;
+        }
+
+        let path = windows_path(path);
+        // SAFETY: path is a null-terminated UTF-16 buffer that lives for this call.
+        let attributes = unsafe { get_file_attributes_w(path.as_ptr()) };
+        assert_ne!(
+            attributes, INVALID_FILE_ATTRIBUTES,
+            "GetFileAttributesW failed"
+        );
+        attributes
+    }
+
+    #[cfg(windows)]
+    fn set_windows_file_attributes(path: &Path, attributes: u32) {
+        #[link(name = "kernel32")]
+        unsafe extern "system" {
+            #[link_name = "SetFileAttributesW"]
+            fn set_file_attributes_w(file_name: *const u16, file_attributes: u32) -> i32;
+        }
+
+        let path = windows_path(path);
+        // SAFETY: path is a null-terminated UTF-16 buffer that lives for this call.
+        let updated = unsafe { set_file_attributes_w(path.as_ptr(), attributes) };
+        assert_ne!(updated, 0, "SetFileAttributesW failed");
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn windows_replace_file_preserves_existing_target_attributes() {
+        const FILE_ATTRIBUTE_HIDDEN: u32 = 0x2;
+
+        let dir = tempfile::tempdir().expect("tempdir");
+        let config_path = dir.path().join("claude_desktop_config.json");
+        let tmp_path = desktop_config_temp_path(&config_path, "attribute-test", 0);
+        std::fs::write(&config_path, "old").expect("seed");
+        std::fs::write(&tmp_path, "new").expect("tmp");
+
+        let original_attributes = get_windows_file_attributes(&config_path);
+        set_windows_file_attributes(&config_path, original_attributes | FILE_ATTRIBUTE_HIDDEN);
+
+        replace_file(&tmp_path, &config_path).expect("replace");
+
+        let replaced_attributes = get_windows_file_attributes(&config_path);
+        assert_ne!(
+            replaced_attributes & FILE_ATTRIBUTE_HIDDEN,
+            0,
+            "ReplaceFileW should preserve attributes from the existing target"
+        );
+        assert_eq!(
+            std::fs::read_to_string(&config_path).expect("read config"),
+            "new"
+        );
     }
 
     #[cfg(unix)]
