@@ -1,0 +1,34 @@
+{
+  "packages": [
+    {
+      "name": "anno-rag",
+      "id": "path+file:///repo/crates/anno-rag#0.10.0",
+      "manifest_path": "C:/repo/crates/anno-rag/Cargo.toml",
+      "dependencies": [
+        { "name": "anno-corpus-core", "path": "C:/repo/crates/anno-corpus-core" }
+      ],
+      "features": { "default": [], "rerank": [] }
+    },
+    {
+      "name": "anno-rag-bin",
+      "id": "path+file:///repo/crates/anno-rag-bin#0.10.0",
+      "manifest_path": "C:/repo/crates/anno-rag-bin/Cargo.toml",
+      "dependencies": [
+        { "name": "anno-rag", "path": "C:/repo/crates/anno-rag" }
+      ],
+      "features": { "default": [] }
+    },
+    {
+      "name": "anno-corpus-core",
+      "id": "path+file:///repo/crates/anno-corpus-core#0.10.0",
+      "manifest_path": "C:/repo/crates/anno-corpus-core/Cargo.toml",
+      "dependencies": [],
+      "features": { "default": [] }
+    }
+  ],
+  "workspace_members": [
+    "path+file:///repo/crates/anno-rag#0.10.0",
+    "path+file:///repo/crates/anno-rag-bin#0.10.0",
+    "path+file:///repo/crates/anno-corpus-core#0.10.0"
+  ]
+}

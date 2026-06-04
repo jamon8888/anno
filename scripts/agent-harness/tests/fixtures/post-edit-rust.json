@@ -1,0 +1,9 @@
+{
+  "tool_name": "Edit",
+  "tool_input": {
+    "file_path": "crates/anno-rag/src/pipeline.rs"
+  },
+  "tool_response": {
+    "filePath": "crates/anno-rag/src/pipeline.rs"
+  }
+}

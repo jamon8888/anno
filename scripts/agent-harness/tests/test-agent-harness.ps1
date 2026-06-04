@@ -1,0 +1,126 @@
+param(
+    [string]$Filter = ""
+)
+
+$ErrorActionPreference = "Stop"
+$ScriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path
+$HarnessRoot = Split-Path -Parent $ScriptDir
+$RepoRoot = Split-Path -Parent (Split-Path -Parent $HarnessRoot)
+
+function Assert-Equal {
+    param(
+        [object]$Actual,
+        [object]$Expected,
+        [string]$Name
+    )
+    if ($Actual -ne $Expected) {
+        throw "ASSERT FAIL: $Name expected '$Expected' but got '$Actual'"
+    }
+}
+
+function Assert-Contains {
+    param(
+        [string]$Actual,
+        [string]$Needle,
+        [string]$Name
+    )
+    if (-not $Actual.Contains($Needle)) {
+        throw "ASSERT FAIL: $Name expected output to contain '$Needle'. Output: $Actual"
+    }
+}
+
+function Invoke-HarnessScript {
+    param(
+        [string]$ScriptName,
+        [string]$InputPath,
+        [string[]]$Args = @()
+    )
+    $scriptPath = Join-Path $HarnessRoot $ScriptName
+    if (-not (Test-Path -LiteralPath $scriptPath)) {
+        throw "Missing script under test: $scriptPath"
+    }
+    $inputText = Get-Content -LiteralPath $InputPath -Raw
+    $psi = New-Object System.Diagnostics.ProcessStartInfo
+    $psi.FileName = "powershell"
+    $argParts = New-Object System.Collections.Generic.List[string]
+    $argParts.Add("-NoProfile")
+    $argParts.Add("-ExecutionPolicy")
+    $argParts.Add("Bypass")
+    $argParts.Add("-File")
+    $argParts.Add(('"{0}"' -f ($scriptPath -replace '"', '\"')))
+    foreach ($arg in $Args) {
+        $argParts.Add(('"{0}"' -f ($arg -replace '"', '\"')))
+    }
+    $psi.Arguments = $argParts -join " "
+    $psi.RedirectStandardInput = $true
+    $psi.RedirectStandardOutput = $true
+    $psi.RedirectStandardError = $true
+    $psi.UseShellExecute = $false
+    $psi.WorkingDirectory = $RepoRoot
+    $p = [System.Diagnostics.Process]::Start($psi)
+    $p.StandardInput.Write($inputText)
+    $p.StandardInput.Close()
+    $stdout = $p.StandardOutput.ReadToEnd()
+    $stderr = $p.StandardError.ReadToEnd()
+    $p.WaitForExit()
+    [pscustomobject]@{
+        ExitCode = $p.ExitCode
+        Stdout = $stdout
+        Stderr = $stderr
+    }
+}
+
+$fixtures = Join-Path $ScriptDir "fixtures"
+$tests = New-Object System.Collections.Generic.List[scriptblock]
+
+Import-Module (Join-Path $HarnessRoot "lib/AgentHarness.psm1") -Force
+
+$tests.Add({
+    $json = Get-Content -LiteralPath (Join-Path $fixtures "pretool-safe.json") -Raw | ConvertFrom-Json
+    $command = Get-AgentHarnessCommandText -InputObject $json
+    Assert-Equal $command "git status --short" "command extraction"
+})
+
+$tests.Add({
+    $crate = Get-AgentHarnessCrateFromPath -PathText "crates/anno-rag/src/pipeline.rs"
+    Assert-Equal $crate "anno-rag" "crate extraction"
+})
+
+$tests.Add({
+    $r = Invoke-HarnessScript "block-dangerous-tool.ps1" (Join-Path $fixtures "pretool-dangerous.json")
+    Assert-Equal $r.ExitCode 2 "dangerous command is blocked"
+    Assert-Contains ($r.Stdout + $r.Stderr) "destructive command" "dangerous command reason"
+})
+
+$tests.Add({
+    $r = Invoke-HarnessScript "block-dangerous-tool.ps1" (Join-Path $fixtures "pretool-safe.json")
+    Assert-Equal $r.ExitCode 0 "safe command is allowed"
+})
+
+$tests.Add({
+    $r = Invoke-HarnessScript "prompt-secret-scan.ps1" (Join-Path $fixtures "prompt-secret.json")
+    Assert-Equal $r.ExitCode 2 "secret prompt is blocked"
+    Assert-Contains ($r.Stdout + $r.Stderr) "secret-like" "secret prompt reason"
+})
+
+$tests.Add({
+    $r = Invoke-HarnessScript "prompt-secret-scan.ps1" (Join-Path $fixtures "prompt-safe-legal.json")
+    Assert-Equal $r.ExitCode 0 "ordinary legal prompt is allowed"
+})
+
+$tests.Add({
+    $r = Invoke-HarnessScript "post-edit-rust-check.ps1" (Join-Path $fixtures "post-edit-rust.json") @("-NoRun")
+    Assert-Equal $r.ExitCode 0 "post-edit dry mapping passes"
+    Assert-Contains $r.Stdout "anno-rag" "crate detection"
+})
+
+$ran = 0
+foreach ($test in $tests) {
+    if ($Filter -and ($test.ToString() -notlike "*$Filter*")) {
+        continue
+    }
+    & $test
+    $ran += 1
+}
+
+Write-Host "agent-harness tests passed: $ran"

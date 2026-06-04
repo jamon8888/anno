@@ -211,3 +211,6 @@ docs/generated/
 # (per ~/.claude/references/publish-and-push.md: "libraries gitignore it,
 # binaries track it"). The workspace shares one Cargo.lock at root.
 .gitnexus
+
+# Agent harness local state
+.agent-harness/

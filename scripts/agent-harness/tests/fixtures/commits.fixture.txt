@@ -1,0 +1,4 @@
+feat: add corpus setup command
+fix: create corpus store parent directory
+docs: update MCP setup guide
+test: cover setup merge behavior
