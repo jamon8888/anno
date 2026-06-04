@@ -356,6 +356,117 @@ pub async fn ensure_models(
     Ok(model_cache_verified(models_dir))
 }
 
+pub fn jsonrpc_line(id: u64, method: &str, params: Value) -> String {
+    serde_json::to_string(&json!({
+        "jsonrpc": "2.0",
+        "id": id,
+        "method": method,
+        "params": params
+    }))
+    .expect("jsonrpc payload serializes")
+        + "\n"
+}
+
+pub fn notification_line(method: &str) -> String {
+    serde_json::to_string(&json!({
+        "jsonrpc": "2.0",
+        "method": method
+    }))
+    .expect("jsonrpc notification serializes")
+        + "\n"
+}
+
+pub async fn run_fast_mcp_smoke(
+    binary: &Path,
+    models_dir: &Path,
+    dry_run: bool,
+) -> anyhow::Result<String> {
+    validate_absolute_path(binary).map_err(|e| anyhow!(e))?;
+    validate_absolute_path(models_dir).map_err(|e| anyhow!(e))?;
+    if dry_run {
+        return Ok(format!(
+            "dry-run: would smoke-test {} mcp",
+            binary.display()
+        ));
+    }
+
+    let mut child = tokio::process::Command::new(binary)
+        .arg("mcp")
+        .env("ANNO_MODELS_DIR", models_dir)
+        .env("ANNO_RAG_VAULT_PASSPHRASE", "anno-setup-smoke-passphrase")
+        .stdin(std::process::Stdio::piped())
+        .stdout(std::process::Stdio::piped())
+        .stderr(std::process::Stdio::piped())
+        .spawn()
+        .with_context(|| format!("spawn {} mcp", binary.display()))?;
+
+    match run_fast_mcp_smoke_child(&mut child).await {
+        Ok(()) => {
+            let _ = child.kill().await;
+            Ok("fast MCP smoke passed".to_string())
+        }
+        Err(error) => {
+            let _ = child.kill().await;
+            Err(error)
+        }
+    }
+}
+
+async fn run_fast_mcp_smoke_child(child: &mut tokio::process::Child) -> anyhow::Result<()> {
+    use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
+
+    let mut stdin = child.stdin.take().context("open mcp stdin")?;
+    let stdout = child.stdout.take().context("open mcp stdout")?;
+    let mut lines = BufReader::new(stdout).lines();
+
+    stdin
+        .write_all(
+            jsonrpc_line(
+                1,
+                "initialize",
+                json!({
+                    "protocolVersion": "2024-11-05",
+                    "capabilities": {},
+                    "clientInfo": {"name": "anno-setup", "version": "1.0"}
+                }),
+            )
+            .as_bytes(),
+        )
+        .await
+        .context("write MCP initialize")?;
+    let init = read_mcp_line(&mut lines, "initialize").await?;
+    let init_value: Value = serde_json::from_str(&init).context("parse MCP initialize response")?;
+    if init_value["id"] != json!(1) {
+        anyhow::bail!("MCP initialize failed: {init}");
+    }
+
+    stdin
+        .write_all(notification_line("notifications/initialized").as_bytes())
+        .await
+        .context("write MCP initialized notification")?;
+    stdin
+        .write_all(jsonrpc_line(2, "tools/list", json!({})).as_bytes())
+        .await
+        .context("write MCP tools/list")?;
+    let tools = read_mcp_line(&mut lines, "tools/list").await?;
+    if !tools.contains("anno_health") {
+        anyhow::bail!("MCP tools/list did not include anno_health: {tools}");
+    }
+
+    Ok(())
+}
+
+async fn read_mcp_line(
+    lines: &mut tokio::io::Lines<tokio::io::BufReader<tokio::process::ChildStdout>>,
+    label: &str,
+) -> anyhow::Result<String> {
+    tokio::time::timeout(std::time::Duration::from_secs(5), lines.next_line())
+        .await
+        .with_context(|| format!("timeout waiting for MCP {label} response"))?
+        .with_context(|| format!("read MCP {label} response"))?
+        .with_context(|| format!("MCP {label} response stream ended"))
+}
+
 fn create_parent_dir(path: &Path) -> anyhow::Result<()> {
     if let Some(parent) = path
         .parent()
@@ -715,6 +826,38 @@ mod tests {
         assert!(result.contains("--scope project"));
         assert!(result.contains("--env"));
         assert!(result.contains("\"ANNO_MODELS_DIR="));
+        assert!(result.ends_with(" mcp"));
+    }
+
+    #[test]
+    fn initialize_payload_is_jsonrpc_line() {
+        let line = jsonrpc_line(
+            1,
+            "initialize",
+            json!({
+                "protocolVersion": "2024-11-05",
+                "capabilities": {},
+                "clientInfo": {"name": "anno-setup", "version": "1.0"}
+            }),
+        );
+
+        assert!(line.ends_with('\n'));
+        let parsed: Value = serde_json::from_str(line.trim()).expect("json");
+        assert_eq!(parsed["jsonrpc"], "2.0");
+        assert_eq!(parsed["id"], 1);
+        assert_eq!(parsed["method"], "initialize");
+    }
+
+    #[tokio::test]
+    async fn fast_mcp_smoke_dry_run_does_not_spawn() {
+        let models_dir = absolute_test_path(&["anno-rag", "models"]);
+        let binary = absolute_test_path(&["hacienda", "anno-rag"]);
+
+        let result = run_fast_mcp_smoke(&binary, &models_dir, true)
+            .await
+            .expect("dry run");
+
+        assert!(result.starts_with("dry-run: would smoke-test"));
         assert!(result.ends_with(" mcp"));
     }
 
