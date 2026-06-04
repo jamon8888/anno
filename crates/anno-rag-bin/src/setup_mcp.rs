@@ -283,6 +283,79 @@ fn display_command_arg(arg: &str) -> String {
     format!("\"{}\"", arg.replace('"', "\\\""))
 }
 
+const GLINER_ONNX_BASES: &[&str] = &[
+    "classifier",
+    "count_lstm_fixed",
+    "count_pred_argmax",
+    "encoder",
+    "schema_gather",
+    "scorer",
+    "span_rep",
+    "token_gather",
+];
+
+pub fn model_cache_verified(models_dir: &Path) -> bool {
+    required_files_present(models_dir, anno_rag_mcp::model_inventory::E5_REQUIRED_FILES)
+        && gliner_onnx_cache_verified(models_dir)
+}
+
+fn required_files_present(root: &Path, required_files: &[&str]) -> bool {
+    required_files
+        .iter()
+        .all(|relative| root.join(relative).is_file())
+}
+
+fn gliner_onnx_cache_verified(models_dir: &Path) -> bool {
+    [("fp32_v2", "fp32"), ("fp16_v2", "fp16")]
+        .iter()
+        .any(|(variant_dir, suffix)| {
+            let graph_files_ready = GLINER_ONNX_BASES.iter().all(|base| {
+                models_dir
+                    .join("gliner2-multi-v1-onnx")
+                    .join(variant_dir)
+                    .join(format!("{base}_{suffix}.onnx"))
+                    .is_file()
+            });
+            let tokenizer_ready = models_dir
+                .join("gliner2-multi-v1-onnx")
+                .join(variant_dir)
+                .join("tokenizer.json")
+                .is_file()
+                || models_dir
+                    .join("gliner2-multi-v1-onnx")
+                    .join("tokenizer.json")
+                    .is_file();
+            graph_files_ready && tokenizer_ready
+        })
+}
+
+pub async fn ensure_models(
+    models_dir: &Path,
+    skip_models: bool,
+    dry_run: bool,
+) -> anyhow::Result<bool> {
+    validate_absolute_path(models_dir).map_err(|e| anyhow!(e))?;
+    if model_cache_verified(models_dir) {
+        return Ok(true);
+    }
+    if skip_models || dry_run {
+        return Ok(false);
+    }
+    if models_dir.file_name().and_then(|name| name.to_str()) != Some("models") {
+        anyhow::bail!(
+            "--models-dir must end with 'models' for anno-rag download-models compatibility"
+        );
+    }
+
+    let mut cfg = AnnoRagConfig::default();
+    cfg.data_dir = models_dir
+        .parent()
+        .map(Path::to_path_buf)
+        .context("--models-dir must have a parent directory")?;
+    anno_rag::download_models::download(&cfg).await?;
+    Ok(model_cache_verified(models_dir))
+}
+
 fn create_parent_dir(path: &Path) -> anyhow::Result<()> {
     if let Some(parent) = path
         .parent()
@@ -643,6 +716,124 @@ mod tests {
         assert!(result.contains("--env"));
         assert!(result.contains("\"ANNO_MODELS_DIR="));
         assert!(result.ends_with(" mcp"));
+    }
+
+    fn write_required_files(root: &Path, files: &[&str]) {
+        for relative in files {
+            let path = root.join(relative);
+            if let Some(parent) = path.parent() {
+                std::fs::create_dir_all(parent).expect("create parent");
+            }
+            std::fs::write(path, "x").expect("write model file");
+        }
+    }
+
+    fn write_fp16_gliner_files(root: &Path) {
+        let gliner = root.join("gliner2-multi-v1-onnx");
+        std::fs::create_dir_all(gliner.join("fp16_v2")).expect("create fp16");
+        for base in GLINER_ONNX_BASES {
+            std::fs::write(
+                gliner.join("fp16_v2").join(format!("{base}_fp16.onnx")),
+                "x",
+            )
+            .expect("write fp16 graph");
+        }
+        std::fs::write(gliner.join("tokenizer.json"), "{}").expect("write tokenizer");
+    }
+
+    #[test]
+    fn model_cache_verified_when_expected_families_exist() {
+        let dir = tempfile::tempdir().expect("tempdir");
+        let models = dir.path().join("models");
+        write_required_files(&models, anno_rag_mcp::model_inventory::E5_REQUIRED_FILES);
+        write_required_files(
+            &models,
+            anno_rag_mcp::model_inventory::GLINER_REQUIRED_FILES,
+        );
+
+        assert!(model_cache_verified(&models));
+    }
+
+    #[test]
+    fn model_cache_verified_with_fp16_gliner_variant() {
+        let dir = tempfile::tempdir().expect("tempdir");
+        let models = dir.path().join("models");
+        write_required_files(&models, anno_rag_mcp::model_inventory::E5_REQUIRED_FILES);
+        write_fp16_gliner_files(&models);
+
+        assert!(model_cache_verified(&models));
+    }
+
+    #[test]
+    fn model_cache_not_verified_when_gliner_missing() {
+        let dir = tempfile::tempdir().expect("tempdir");
+        let models = dir.path().join("models");
+        write_required_files(&models, anno_rag_mcp::model_inventory::E5_REQUIRED_FILES);
+
+        assert!(!model_cache_verified(&models));
+    }
+
+    #[test]
+    fn model_cache_not_verified_when_embedder_weights_missing() {
+        let dir = tempfile::tempdir().expect("tempdir");
+        let models = dir.path().join("models");
+        std::fs::create_dir_all(models.join("multilingual-e5-small")).expect("e5");
+        std::fs::write(
+            models.join("multilingual-e5-small").join("config.json"),
+            "{}",
+        )
+        .expect("e5 config");
+        std::fs::write(
+            models.join("multilingual-e5-small").join("tokenizer.json"),
+            "{}",
+        )
+        .expect("e5 tokenizer");
+        write_required_files(
+            &models,
+            anno_rag_mcp::model_inventory::GLINER_REQUIRED_FILES,
+        );
+
+        assert!(!model_cache_verified(&models));
+    }
+
+    #[tokio::test]
+    async fn ensure_models_returns_true_when_cache_verified() {
+        let dir = tempfile::tempdir().expect("tempdir");
+        let models = dir.path().join("models");
+        write_required_files(&models, anno_rag_mcp::model_inventory::E5_REQUIRED_FILES);
+        write_required_files(
+            &models,
+            anno_rag_mcp::model_inventory::GLINER_REQUIRED_FILES,
+        );
+
+        assert!(ensure_models(&models, false, false).await.expect("ensure"));
+    }
+
+    #[tokio::test]
+    async fn ensure_models_returns_false_on_dry_run_without_download() {
+        let dir = tempfile::tempdir().expect("tempdir");
+        let models = dir.path().join("models");
+
+        assert!(!ensure_models(&models, false, true).await.expect("ensure"));
+    }
+
+    #[tokio::test]
+    async fn ensure_models_returns_false_when_skipping_missing_models() {
+        let dir = tempfile::tempdir().expect("tempdir");
+        let models = dir.path().join("models");
+
+        assert!(!ensure_models(&models, true, false).await.expect("ensure"));
+    }
+
+    #[tokio::test]
+    async fn ensure_models_rejects_non_models_dir_when_download_required() {
+        let dir = tempfile::tempdir().expect("tempdir");
+        let models = dir.path().join("model-cache");
+        let err = ensure_models(&models, false, false)
+            .await
+            .expect_err("non-models dir must fail before download");
+
+        assert!(err.to_string().contains("models"));
     }
 
     #[test]
