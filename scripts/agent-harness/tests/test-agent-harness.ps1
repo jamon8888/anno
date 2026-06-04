@@ -134,6 +134,20 @@ $tests.Add({
 })
 
 $tests.Add({
+    $r = Invoke-HarnessScript "crate-map-generate.ps1" -ExtraArgs @("-MetadataPath", (Join-Path $fixtures "cargo-metadata.fixture.json"), "-DryRun")
+    Assert-Equal $r.ExitCode 0 "crate map fixture passes stdout='$($r.Stdout)' stderr='$($r.Stderr)'"
+    Assert-Contains $r.Stdout "anno-rag-bin depends on anno-rag" "direct workspace dependency"
+    Assert-Contains $r.Stdout "anno-rag is depended on by anno-rag-bin" "reverse workspace dependency"
+})
+
+$tests.Add({
+    $r = Invoke-HarnessScript "cli-feature-parity.ps1" -ExtraArgs @("-DiffNameStatusPath", (Join-Path $fixtures "diff-name-status.fixture.txt"), "-DryRun")
+    Assert-Equal $r.ExitCode 0 "cli parity fixture passes stdout='$($r.Stdout)' stderr='$($r.Stderr)'"
+    Assert-Contains $r.Stdout "anno-rag change detected" "anno-rag surface detection"
+    Assert-Contains $r.Stdout "anno-rag-bin touched" "CLI coverage detection"
+})
+
+$tests.Add({
     $tempRepo = Join-Path ([System.IO.Path]::GetTempPath()) ("agent-harness-test-" + [Guid]::NewGuid().ToString("N"))
     New-Item -ItemType Directory -Path $tempRepo | Out-Null
     try {
