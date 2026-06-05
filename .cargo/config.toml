@@ -5,19 +5,20 @@ rustdocflags = ["--cap-lints", "allow"]
 # Local dev: set CARGO_TARGET_DIR in your shell profile or .env.
 # E.g. on the dev machine: CARGO_TARGET_DIR=E:\cargo-target (external SSD).
 
-# Windows MSVC: suppress LNK2038 RuntimeLibrary mismatch between
-# ort-sys (/MD, dynamic CRT) and esaxx-rs (/MT, static CRT).
-# /NODEFAULTLIB:libcmt tells link.exe to drop the static CRT import lib
-# so the dynamic CRT from ort-sys wins without a conflict.
-# Also rebuild esaxx-rs with /MD via CFLAGS so future incremental builds
-# don't re-introduce the mismatch (takes effect after `cargo clean -p esaxx-rs`).
+# Windows MSVC: keep Rust and cc-rs/CMake dependencies on the dynamic CRT.
+# ORT/Kreuzberg/Tesseract resolve against /MD; forcing +crt-static (/MT)
+# causes LNK2038 RuntimeLibrary mismatches. Do not suppress libcmt with
+# /NODEFAULTLIB here: cargo-dist --print=linkage builds transient DLLs that
+# require the default CRT startup symbols.
 # NOTE: linker = "lld-link" and target-cpu=native are local-only overrides;
 # set them in $CARGO_HOME/config.toml on your dev machine, not here.
 [target.x86_64-pc-windows-msvc]
-rustflags = ["--cap-lints", "allow", "-C", "link-arg=/NODEFAULTLIB:libcmt"]
+rustflags = ["--cap-lints", "allow", "-C", "target-feature=-crt-static"]
 
 [env]
+CFLAGS_x86_64-pc-windows-msvc = "/MD"
 CFLAGS_x86_64_pc_windows_msvc = "/MD"
+CXXFLAGS_x86_64-pc-windows-msvc = "/MD"
 CXXFLAGS_x86_64_pc_windows_msvc = "/MD"
 # sccache and incremental compilation are mutually exclusive.
 # Disable incremental globally so sccache lookups are always valid.

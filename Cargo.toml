@@ -205,3 +205,4 @@ precise-builds      = true   # honours rust-toolchain.toml (pin: 1.95)
 pr-run-mode         = "plan" # dry-run on PRs; real build only on v* tags
 create-release      = true
 allow-dirty         = ["ci"]  # release.yml carries ANNO-PATCH sections; skip staleness check
+msvc-crt-static     = false  # ORT/Kreuzberg/Tesseract use /MD on Windows
