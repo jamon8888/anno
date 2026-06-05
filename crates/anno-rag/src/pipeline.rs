@@ -1620,7 +1620,7 @@ fn is_anno_generated_output(source_root: &Path, path: &Path, output_dir: &Path) 
 fn is_anno_generated_dir_name(name: &str) -> bool {
     matches!(
         name.to_ascii_lowercase().as_str(),
-        "anon" | "outputs" | ".anno" | ".anno-rag"
+        "anon" | "outputs" | ".anno" | ".anno-rag" | "vault"
     )
 }
 
@@ -2569,6 +2569,16 @@ mod tests {
             .collect();
 
         assert_eq!(names, vec!["contract.md", "source.md"]);
+    }
+
+    #[test]
+    fn generated_output_filter_skips_vault_workspace() {
+        let root = std::path::Path::new("C:/Clients/Matter X");
+        assert!(super::is_anno_generated_output(
+            root,
+            std::path::Path::new("C:/Clients/Matter X/vault/01-working-documents/a.docx"),
+            std::path::Path::new("C:/Clients/Matter X/anon"),
+        ));
     }
 
     #[test]
