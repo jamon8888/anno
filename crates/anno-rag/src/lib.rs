@@ -18,6 +18,7 @@ pub mod error;
 pub mod eval;
 pub mod ingest;
 pub mod knowledge_privacy;
+pub mod layers;
 pub mod legal;
 pub mod memory;
 #[cfg(test)]
