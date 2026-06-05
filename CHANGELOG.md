@@ -6,6 +6,11 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Semver: pre-1.
 
 ## [Unreleased] — v0.3 in progress
 
+### Added
+- Added privacy vault Word review design and local workflow tools for preparing
+  editable working documents, reading `à masquer` / `à garder` comments, and
+  regenerating anonymized outputs without returning PII through Cowork.
+
 In flight per `BACKLOG.md` items #001-#005:
 - Replace `StackedNER::default()` with `GLiNER2Fastino::from_pretrained("SemplificaAI/gliner2-multi-v1-onnx")` for reliable French name detection
 - `extract_structure` for Tabular Review v1.1 foundation

@@ -67,6 +67,28 @@ Ingest the legal documents in C:\Matters\Acme and index them for legal search.
 During ingest, Hacienda extracts text, detects PII, writes pseudonymized output,
 embeds tokenized chunks, and stores vectors plus metadata in LanceDB.
 
+## Privacy Vault Word Review
+
+For folder review workflows, ask Cowork to prepare the folder for
+anonymization. Hacienda creates a local `vault` folder beside the source
+documents:
+
+```text
+vault/
+  01-working-documents/
+  02-anonymized-documents/
+  03-reports/
+  04-cache/
+  manifest.json
+```
+
+Edit only files in `01-working-documents`. In Word, add a comment `à masquer`
+on text that should be hidden, or `à garder` on a false positive that should
+remain visible. When finished, ask Cowork to finalize the folder.
+
+Share only files from `02-anonymized-documents` or the shareable report. Do not
+share `01-working-documents` or local sensitive reports.
+
 ## Detect And Tokenize PII
 
 Cleartext is processed locally by extraction, OCR when enabled, and PII
