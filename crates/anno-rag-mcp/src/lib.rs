@@ -1845,6 +1845,24 @@ impl AnnoRagServer {
             .map_err(|e| e.to_string())
     }
 
+    async fn freshness_for_effective(
+        &self,
+        effective: &anno_corpus_core::EffectiveCorpus,
+    ) -> Result<(bool, String), String> {
+        let anno_corpus_core::EffectiveCorpus::Single(corpus_id) = effective else {
+            return Ok((false, "cross_corpus".to_string()));
+        };
+        let service = self.corpus().await.map_err(|e| e.to_string())?;
+        let state = service
+            .store()
+            .sync_state(*corpus_id)
+            .map_err(|e| e.to_string())?;
+        let freshness = state
+            .map(|state| state.freshness)
+            .unwrap_or_else(|| "unknown".to_string());
+        Ok((freshness == "fresh", freshness))
+    }
+
     async fn knowledge_source_ids_for_effective(
         &self,
         effective: &anno_corpus_core::EffectiveCorpus,
@@ -1941,6 +1959,14 @@ impl AnnoRagServer {
             }
         };
 
+        let (index_fresh, freshness) = match self.freshness_for_effective(&effective).await {
+            Ok(value) => value,
+            Err(error) => {
+                warnings.push(format!("freshness failed: {error}"));
+                (false, "unknown".to_string())
+            }
+        };
+
         if scope == "all" || scope == "knowledge" {
             if plan.knowledge == SearchBackendMode::Fast {
                 match self
@@ -2011,6 +2037,12 @@ impl AnnoRagServer {
             "scope_modes": {
                 "knowledge": plan.knowledge.as_str(),
                 "legal": plan.legal.as_str(),
+            },
+            "index_fresh": index_fresh,
+            "freshness": freshness,
+            "sync": {
+                "attempted": false,
+                "reason": "not_requested"
             },
             "hits": hits,
             "warnings": warnings,
@@ -4880,6 +4912,31 @@ mod lazy_tests {
         assert_eq!(v["mode_used"], "auto");
         assert_eq!(v["scope_modes"]["knowledge"], "fast");
         assert_eq!(v["scope_modes"]["legal"], "semantic");
+    }
+
+    #[tokio::test]
+    async fn search_reports_unknown_freshness_for_unsynced_single_corpus() {
+        let server = AnnoRagServer::new_lazy(AnnoRagConfig::default(), [0u8; 32]);
+        let corpus = server.corpus().await.expect("corpus");
+        let registered = corpus
+            .register_index_root("c:/clients/a", "general")
+            .expect("register");
+
+        let out = server
+            .search_impl_routing(SearchUnifiedParams {
+                query: "contrat".to_string(),
+                top_k: 5,
+                mode: Some("fast".to_string()),
+                scope: Some("knowledge".to_string()),
+                filters: None,
+                corpus_id: Some(registered.corpus_id.as_string()),
+                allow_cross_corpus: false,
+            })
+            .await;
+        let parsed: serde_json::Value = serde_json::from_str(&out).expect("json");
+        assert_eq!(parsed["ok"], true);
+        assert_eq!(parsed["index_fresh"], false);
+        assert_eq!(parsed["freshness"], "unknown");
     }
 
     #[tokio::test]
