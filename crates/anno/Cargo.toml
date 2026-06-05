@@ -69,7 +69,8 @@ tempfile = "3"
 criterion = { workspace = true }
 
 [features]
-default = ["onnx"]
+default = ["onnx", "heuristic-fr"]
+heuristic-fr = []
 # Metrics-only analysis helpers (preferred for research / diagnostics).
 # Exposes `anno::metrics::*` (coref scoring metrics, cluster encoders).
 analysis = []
