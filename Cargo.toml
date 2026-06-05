@@ -134,6 +134,9 @@ missing_docs = "warn"
 [workspace.lints.clippy]
 unwrap_used = "warn"
 
+[profile.test]
+inherits = "dev-fast"
+
 [profile.dist]
 inherits = "release"
 split-debuginfo = "off"  # skip PDB on Windows — faster link step
