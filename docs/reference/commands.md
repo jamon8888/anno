@@ -16,6 +16,7 @@ writing scripts or support runbooks.
 | `anno-rag --version` | Print the installed binary version. | Useful when matching support reports to a release candidate. |
 | `anno-rag mcp` | Start the stdio MCP server. | Configure Claude Desktop, Cowork, or another MCP client with an absolute binary path and `args: ["mcp"]`. |
 | `anno-rag download-models` | Populate the local model cache. | Downloads the embedder and NER model files and prints the models directory. |
+| `anno-rag setup-mcp` | Configure local MCP clients for Claude Desktop/Cowork and Claude Code. | Use `--target all` for the normal local setup; use `--target manual --dry-run` to print config without writing files. |
 | `anno-rag review --help` | Show tabular review subcommands. | Review workflows store state in the local LanceDB directory. |
 | `anno-rag review list` | List local reviews. | Does not start the full RAG pipeline. |
 | `anno-rag review create` | Create a review, optionally from a built-in template. | Use installed `--help` for template and flag details. |

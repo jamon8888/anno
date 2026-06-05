@@ -47,6 +47,8 @@ required_files=(
   "env.example"
   "docs/release/examples/claude_desktop_config.windows.json"
   "docs/release/examples/claude_desktop_config.macos.json"
+  "scripts/setup-mcp.ps1"
+  "scripts/setup-mcp.sh"
 )
 
 missing=()
@@ -87,7 +89,7 @@ mkdir -p "${dist_dir}"
 rm -rf -- "${staging_dir}"
 rm -f -- "${tarball_path}"
 
-mkdir -p "${staging_dir}/examples"
+mkdir -p "${staging_dir}/examples" "${staging_dir}/scripts"
 
 cp -- "${repo_root}/target/${target}/release/anno-rag" "${staging_dir}/"
 cp -- "${repo_root}/target/${target}/release/anno-privacy-gateway" "${staging_dir}/"
@@ -97,6 +99,8 @@ cp -- "${repo_root}/LICENSE-APACHE" "${staging_dir}/"
 cp -- "${repo_root}/env.example" "${staging_dir}/"
 cp -- "${repo_root}/docs/release/examples/claude_desktop_config.windows.json" "${staging_dir}/examples/"
 cp -- "${repo_root}/docs/release/examples/claude_desktop_config.macos.json" "${staging_dir}/examples/"
+cp -- "${repo_root}/scripts/setup-mcp.ps1" "${staging_dir}/scripts/"
+cp -- "${repo_root}/scripts/setup-mcp.sh" "${staging_dir}/scripts/"
 
 tar -C "${dist_dir}" -czf "${tarball_path}" "${package_name}"
 

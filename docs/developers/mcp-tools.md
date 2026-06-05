@@ -70,6 +70,6 @@ Canonical MCP review workflow:
 
 ## Related Docs
 
-- [Claude Desktop And Cowork Setup](../getting-started/claude-desktop-cowork.md)
+- [Claude Desktop, Cowork, And Claude Code Setup](../getting-started/claude-desktop-cowork.md)
 - [Memory](../user-guide/memory.md)
 - [Tabular Review](../user-guide/tabular-review.md)

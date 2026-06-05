@@ -1,6 +1,7 @@
 # Hacienda Release Install
 
-This document explains how to install the GitHub Release binary archives for Claude Desktop/Cowork and local HTTP gateway use.
+This document explains how to install the GitHub Release binary archives for
+Claude Desktop/Cowork, Claude Code, and local HTTP gateway use.
 
 Current candidate promoted as GitHub "Latest": `v0.11.0-rc.11`.
 
@@ -28,6 +29,8 @@ Each archive contains:
 - `env.example`
 - `examples/claude_desktop_config.windows.json`
 - `examples/claude_desktop_config.macos.json`
+- `scripts/setup-mcp.ps1`
+- `scripts/setup-mcp.sh`
 
 ## Pre-Release Local Pipeline Gate
 
@@ -89,20 +92,45 @@ or creating sample data:
 powershell -NoProfile -ExecutionPolicy Bypass -File scripts\release\local-pipeline-gate.ps1 -DryRun -SkipHeavy -SkipOcr -SkipMcp
 ```
 
-## Claude Desktop / Cowork
+## Claude Desktop / Cowork / Claude Code
 
-### Claude Code install prompt
+Use the setup wrappers from the extracted release archive as the primary install
+path.
+
+Windows:
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File scripts\setup-mcp.ps1 -Target all -Tag latest
+```
+
+macOS:
+
+```bash
+./scripts/setup-mcp.sh --target all --tag latest
+```
+
+Both wrappers delegate to the installed binary subcommand:
+
+```bash
+anno-rag setup-mcp --target all
+```
+
+`all` means Desktop/Cowork plus Claude Code. Use the manual instructions below
+only when you need to inspect or edit the generated config yourself.
+
+### Manual Assistant Install Prompt
 
 Open Claude Code and paste:
 
 ```text
-Install Hacienda anno-rag v0.11.0-rc.11 into Claude Desktop/Cowork from https://github.com/jamon8888/anno/releases/tag/v0.11.0-rc.11.
-Download the asset for this machine (Windows x64: hacienda-v0.11.0-rc.11-x86_64-pc-windows-msvc.zip; macOS Apple Silicon: hacienda-v0.11.0-rc.11-aarch64-apple-darwin.tar.gz) plus SHA256SUMS.txt, verify the checksum, extract it to a stable local folder, and update Claude Desktop's claude_desktop_config.json so mcpServers.anno-rag runs the extracted anno-rag binary with args ["mcp"]. If models are not already installed, run anno-rag download-models once and set ANNO_MODELS_DIR to the path it prints. Do not add ANNO_RAG_VAULT_PASSPHRASE unless I provide one. After editing the config, tell me to fully restart Claude Desktop/Cowork and verify anno-rag appears under Connectors.
+Install Hacienda anno-rag v0.11.0-rc.11 into Claude Desktop/Cowork and Claude Code from https://github.com/jamon8888/anno/releases/tag/v0.11.0-rc.11.
+Download the asset for this machine (Windows x64: hacienda-v0.11.0-rc.11-x86_64-pc-windows-msvc.zip; macOS Intel: hacienda-v0.11.0-rc.11-x86_64-apple-darwin.tar.gz; macOS Apple Silicon: hacienda-v0.11.0-rc.11-aarch64-apple-darwin.tar.gz) plus SHA256SUMS.txt, verify the checksum, extract it to a stable local folder, and update Claude Desktop's claude_desktop_config.json so mcpServers.anno-rag runs the extracted anno-rag binary with args ["mcp"]. If Claude Code is installed, also run claude mcp add --transport stdio --scope user with the same binary and ANNO_MODELS_DIR. If models are not already installed, run anno-rag download-models once and set ANNO_MODELS_DIR to the path it prints. Do not add ANNO_RAG_VAULT_PASSPHRASE unless I provide one. After editing the config, tell me to fully restart Claude Desktop/Cowork and verify anno-rag appears under Connectors.
 ```
 
-### Manual config
+### Manual Desktop/Cowork config
 
-Claude Desktop uses the `anno-rag` binary through stdio MCP:
+Claude Desktop and Cowork-in-Desktop use the `anno-rag` binary through stdio
+MCP:
 
 ```json
 {
@@ -134,6 +162,27 @@ Rules:
 - Verify `anno-rag` appears under Claude Desktop Connectors.
 - By default, omit `ANNO_RAG_VAULT_PASSPHRASE` so `anno-rag` uses the OS keyring for vault encryption.
 - Advanced users may add `ANNO_RAG_VAULT_PASSPHRASE` locally with a strong, unique secret. JSON does not support comments, so keep this note outside the config file.
+
+### Manual Claude Code config
+
+Use the Claude Code CLI for Claude Code MCP configuration:
+
+```powershell
+claude mcp add --transport stdio --scope user `
+  --env ANNO_MODELS_DIR=C:\Users\you\.anno-rag\models `
+  anno-rag -- C:\Users\you\Tools\hacienda-v0.11.0-rc.11\anno-rag.exe mcp
+```
+
+macOS:
+
+```bash
+claude mcp add --transport stdio --scope user \
+  --env ANNO_MODELS_DIR="$HOME/.anno-rag/models" \
+  anno-rag -- "$HOME/Tools/hacienda-v0.11.0-rc.11/anno-rag" mcp
+```
+
+Use `claude mcp list` and `/mcp` in Claude Code to verify the server. Use
+`--scope project` only when you intentionally want a project-level `.mcp.json`.
 
 ## First Run and Offline Mode
 

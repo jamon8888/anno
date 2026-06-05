@@ -1,0 +1,9 @@
+[features]
+multi_agent = true
+
+[project]
+name = "anno"
+
+[harness]
+preferred_check = "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/dev-fast.ps1"
+agent_state_dir = ".agent-harness"

@@ -1,7 +1,7 @@
 <!-- gitnexus:start -->
 # GitNexus — Code Intelligence
 
-This project is indexed by GitNexus as **anno** (18504 symbols, 43475 relationships, 300 execution flows). Use the GitNexus MCP tools to understand code, assess impact, and navigate safely.
+This project is indexed by GitNexus as **anno** (18702 symbols, 43717 relationships, 300 execution flows). Use the GitNexus MCP tools to understand code, assess impact, and navigate safely.
 
 > If any GitNexus tool warns the index is stale, run `npx gitnexus analyze` in terminal first.
 
@@ -99,6 +99,10 @@ To check whether embeddings exist, inspect `.gitnexus/meta.json` — the `stats.
 | Index, status, clean, wiki CLI commands | `.claude/skills/gitnexus/gitnexus-cli/SKILL.md` |
 
 <!-- gitnexus:end -->
+
+## Agent Harness
+
+Repo-local Claude Code and Codex harness files live under `.claude/`, `.codex/`, `.agents/skills/`, and `scripts/agent-harness/`. Run `powershell -NoProfile -ExecutionPolicy Bypass -File scripts\agent-harness\harness-status.ps1` to inspect setup state.
 
 # Build Isolation — Règles strictes
 

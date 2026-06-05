@@ -91,6 +91,8 @@ enum Cmd {
         #[arg(long, value_name = "DIR")]
         dir: Option<PathBuf>,
     },
+    /// Configure local MCP clients for Claude Desktop/Cowork and Claude Code.
+    SetupMcp(setup_mcp::SetupMcpArgs),
     /// Vault admin: keyring status, rotation (spec §14.4).
     Vault {
         #[command(subcommand)]
@@ -200,6 +202,14 @@ async fn main() -> anyhow::Result<()> {
         return Ok(());
     }
 
+    if matches!(&cli.cmd, Cmd::SetupMcp(_)) {
+        let Cmd::SetupMcp(args) = cli.cmd else {
+            unreachable!()
+        };
+        setup_mcp::run(args).await?;
+        return Ok(());
+    }
+
     // DownloadModels needs no Pipeline — short-circuit before keyring lookup.
     if let Cmd::DownloadModels { dir } = &cli.cmd {
         let mut cfg = AnnoRagConfig::default();
@@ -265,6 +275,7 @@ async fn main() -> anyhow::Result<()> {
         Cmd::DiagnoseGpu => unreachable!("handled above before Pipeline::new"),
         Cmd::Bench { .. } => unreachable!("handled above before Pipeline::new"),
         Cmd::DownloadModels { .. } => unreachable!("handled above before Pipeline::new"),
+        Cmd::SetupMcp(_) => unreachable!("handled above before Pipeline::new"),
         Cmd::Vault { .. } => unreachable!("handled above before Pipeline::new"),
         Cmd::Review(_) => unreachable!("handled above before Pipeline::new"),
     }
@@ -307,5 +318,49 @@ mod gpu_cli_tests {
     fn parses_diagnose_gpu_command() {
         let cli = Cli::try_parse_from(["anno-rag", "diagnose-gpu"]).expect("parse");
         assert!(matches!(cli.cmd, Cmd::DiagnoseGpu));
+    }
+}
+
+#[cfg(test)]
+mod setup_mcp_cli_tests {
+    use super::*;
+
+    #[test]
+    fn parses_setup_mcp_command() {
+        let cli = Cli::try_parse_from([
+            "anno-rag",
+            "setup-mcp",
+            "--target",
+            "manual",
+            "--binary",
+            "C:/Tools/hacienda/anno-rag.exe",
+        ])
+        .expect("parse");
+
+        assert!(matches!(cli.cmd, Cmd::SetupMcp(_)));
+    }
+
+    #[test]
+    fn parses_setup_mcp_scope_and_desktop_mode() {
+        let cli = Cli::try_parse_from([
+            "anno-rag",
+            "setup-mcp",
+            "--target",
+            "claude-code",
+            "--desktop-mode",
+            "mcpb",
+            "--claude-code-scope",
+            "project",
+            "--dry-run",
+        ])
+        .expect("parse");
+
+        let Cmd::SetupMcp(args) = cli.cmd else {
+            panic!("expected setup-mcp");
+        };
+        assert_eq!(args.target, setup_mcp::SetupTarget::ClaudeCode);
+        assert_eq!(args.desktop_mode, setup_mcp::DesktopMode::Mcpb);
+        assert_eq!(args.claude_code_scope, setup_mcp::ClaudeCodeScope::Project);
+        assert!(args.dry_run);
     }
 }

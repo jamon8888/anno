@@ -15,8 +15,8 @@ storing sensitive memory content.
 
 ## MCP Server
 
-Claude Desktop, Cowork, and other MCP clients should launch the installed
-`anno-rag` binary directly:
+Claude Desktop, Cowork-in-Desktop, Claude Code, and other MCP clients should
+launch the installed `anno-rag` binary directly:
 
 ```json
 {
@@ -34,6 +34,20 @@ Claude Desktop, Cowork, and other MCP clients should launch the installed
 
 Use an absolute `command` path. Keep `args` as `["mcp"]`. Add only the
 environment variables required by the deployment.
+
+Claude Code should normally be configured through its CLI:
+
+```bash
+claude mcp add --transport stdio --scope user \
+  --env ANNO_MODELS_DIR="$HOME/.anno-rag/models" \
+  anno-rag -- "$HOME/Tools/hacienda/anno-rag" mcp
+```
+
+For local client setup, prefer the wrappers or binary subcommand:
+
+```bash
+anno-rag setup-mcp --target all
+```
 
 ## RAG Storage
 
@@ -97,6 +111,31 @@ The gateway reads environment variables at startup. Common settings:
 
 Set `ANNO_GATEWAY_BEARER_TOKEN` whenever the gateway is reachable outside a
 strictly controlled loopback or private boundary.
+
+## Agent Harness
+
+The repo-local agent harness configures Claude Code and Codex for Anno
+development. It provides safety hooks, targeted Rust checks, GitNexus-first
+exploration, changelog generation, PR review, docs generation, crate dependency
+mapping, CLI feature parity checks, and compact agent context generation.
+
+Dry-run setup:
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File scripts\agent-harness\setup-agent-harness.ps1 -DryRun
+```
+
+Status:
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File scripts\agent-harness\harness-status.ps1
+```
+
+Run fixture tests:
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File scripts\agent-harness\tests\test-agent-harness.ps1
+```
 
 ## Related Docs
 

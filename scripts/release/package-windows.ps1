@@ -46,6 +46,7 @@ $PackageName = "hacienda-$Tag-$Target"
 $DistDir = Join-Path -Path $RepoRoot -ChildPath "dist"
 $StagingDir = Join-Path -Path $DistDir -ChildPath $PackageName
 $ExamplesDir = Join-Path -Path $StagingDir -ChildPath "examples"
+$ScriptsOutDir = Join-Path -Path $StagingDir -ChildPath "scripts"
 $ZipPath = Join-Path -Path $DistDir -ChildPath "$PackageName.zip"
 
 $RequiredFiles = @(
@@ -56,7 +57,9 @@ $RequiredFiles = @(
     "LICENSE-APACHE",
     "env.example",
     "docs/release/examples/claude_desktop_config.windows.json",
-    "docs/release/examples/claude_desktop_config.macos.json"
+    "docs/release/examples/claude_desktop_config.macos.json",
+    "scripts/setup-mcp.ps1",
+    "scripts/setup-mcp.sh"
 )
 
 $MissingFiles = @(foreach ($RelativePath in $RequiredFiles) {
@@ -83,12 +86,16 @@ if (Test-Path -LiteralPath $ZipPath) {
 
 New-Item -ItemType Directory -Path $StagingDir -Force | Out-Null
 New-Item -ItemType Directory -Path $ExamplesDir -Force | Out-Null
+New-Item -ItemType Directory -Path $ScriptsOutDir -Force | Out-Null
 
 foreach ($RelativePath in $RequiredFiles) {
     $SourcePath = Join-Path -Path $RepoRoot -ChildPath $RelativePath
     $DestinationDir = $StagingDir
     if ($RelativePath -like "docs/release/examples/*.json") {
         $DestinationDir = $ExamplesDir
+    }
+    if ($RelativePath -like "scripts/setup-mcp.*") {
+        $DestinationDir = $ScriptsOutDir
     }
 
     Copy-Item -LiteralPath $SourcePath -Destination $DestinationDir

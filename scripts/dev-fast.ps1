@@ -21,7 +21,7 @@ param(
 
 $ErrorActionPreference = "Stop"
 
-# ── Concurrent-build guard ─────────────────────────────────────────────────────
+# Concurrent-build guard
 # Multiple simultaneous cargo/rustc processes competing for target/ destroy
 # incremental-cache and saturate CPU+disk. Block early unless -Force is set.
 if (-not $PrintOnly -and -not $Force) {
@@ -78,12 +78,12 @@ function Add-Unique {
 $repoRoot = (& git rev-parse --show-toplevel).Trim()
 Set-Location -LiteralPath $repoRoot
 
-# ── Target-dir — enforce SSD ──────────────────────────────────────────────────
+# Target-dir - enforce SSD
 # Canonical location: E:\cargo-target (SSD, set as User env var + .cargo/config.toml).
 # Fall back with a warning when running outside the normal setup.
 if (-not $env:CARGO_TARGET_DIR) {
     $env:CARGO_TARGET_DIR = "E:\cargo-target"
-    Write-Warning "CARGO_TARGET_DIR not set — defaulting to E:\cargo-target. Verify it is on your SSD."
+    Write-Warning "CARGO_TARGET_DIR not set - defaulting to E:\cargo-target. Verify it is on your SSD."
 }
 
 $selected = [System.Collections.Generic.List[string]]::new()
