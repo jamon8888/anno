@@ -183,7 +183,9 @@ Outils MCP exposés :
 
 | Outil | Description |
 |---|---|
-| `search(query, top_k)` | Recherche le corpus indexé. La requête est pseudonymisée → embeddée → top-K LanceDB. Renvoie des chunks **pseudonymisés** : c'est exactement ce que Claude verra. |
+| `index(path, profile?)` | Enregistre un dossier client comme corpus local et lance le profil demandé (`general`, `legal` ou `all`). |
+| `sync_corpus(corpus_id, outputs?, max_files?, max_millis?)` | Rafraîchit un corpus sélectionné. Par défaut, synchronise `knowledge_fast`; `legal_semantic` doit être demandé explicitement. |
+| `search(query, top_k, corpus_id?)` | Recherche le corpus indexé. La requête est pseudonymisée → embeddée → top-K. Renvoie des chunks **pseudonymisés** ainsi que `index_fresh`, `freshness` et `sync`. |
 | `rehydrate(text)` | Remplace les tokens `PERSON_*`, `EMAIL_*`, `NIR_*`… par les originaux depuis le vault local. Seule la machine de l'utilisateur a les deux faces du mapping. |
 | `detect(text)` | Scan PII à blanc : liste des entités avec catégorie, source, confiance, offsets. Aucune substitution. Pratique pour l'aperçu UI. |
 | `vault_stats()` | Statistiques du vault : nombre total de mappings et comptes par catégorie. |
@@ -198,6 +200,17 @@ Outils MCP exposés :
 | `download_models()` | Télécharge les modèles attendus dans `~/.anno-rag/models` pour l'usage offline. |
 | `legal_*` | Ingestion/recherche juridique, requêtes graphe, citations rehydratables, extraction de contrats/dossiers, timeline, revue de risque, audits de clauses, prescription et validation humaine. |
 | `review_*` | Création de revues tabulaires, ajout de lignes, extraction/refinement de cellules, lock/unlock, override humain, export CSV/Markdown/XLSX et lecture de grille. |
+
+Un dossier connecté doit être traité comme un corpus vivant : si des documents
+sont ajoutés après la première indexation, `sync_corpus` permet de rattraper le
+corpus sélectionné sans chercher dans d'autres dossiers. Les recherches indiquent
+si l'index utilisé est frais; quand les modèles ne sont pas déjà chargés, Anno
+évite un cold-start caché et signale `sync.reason="models_not_loaded"`.
+
+Pour une indexation corpus-scoped, les fichiers juridiques anonymisés générés
+sont stockés sous le répertoire de données Anno, pas dans le dossier client. Les
+anciens appels directs `legal_ingest` sans corpus restent compatibles avec le
+comportement historique.
 
 Le flux typique avec Claude Desktop/Cowork :
 
