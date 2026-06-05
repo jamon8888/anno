@@ -177,6 +177,31 @@ impl CorpusStore {
         Ok(())
     }
 
+    /// Return metadata for a corpus binding.
+    pub fn binding_metadata(
+        &self,
+        corpus_id: CorpusId,
+        binding_kind: CorpusBindingKind,
+        binding_id: &str,
+    ) -> Result<Option<serde_json::Value>> {
+        let conn = self.conn.lock().expect("corpus sqlite mutex poisoned");
+        ensure_corpus_exists(&conn, corpus_id)?;
+        let mut stmt = conn.prepare(
+            "SELECT metadata_json FROM corpus_bindings \
+             WHERE corpus_id = ?1 AND binding_kind = ?2 AND binding_id = ?3",
+        )?;
+        let mut rows = stmt.query(params![
+            corpus_id.as_string(),
+            binding_kind_text(binding_kind),
+            binding_id,
+        ])?;
+        let Some(row) = rows.next()? else {
+            return Ok(None);
+        };
+        let metadata_json: String = row.get(0)?;
+        Ok(Some(serde_json::from_str(&metadata_json)?))
+    }
+
     /// Add or update a document observed in a corpus.
     pub fn add_document(
         &self,
@@ -614,6 +639,34 @@ mod tests {
             .delete_corpus_registry_rows(registered.corpus_id)
             .expect("delete corpus registry");
         assert_eq!(store.corpus_count().expect("count corpora"), 0);
+    }
+
+    #[test]
+    fn binding_metadata_round_trips_source_path() {
+        let dir = tempfile::tempdir().expect("tempdir");
+        let store = CorpusStore::open(dir.path().join("corpora.sqlite3")).expect("open store");
+        let registered = store
+            .register_root("c:/clients/matter", &[CorpusProfile::Legal])
+            .expect("register");
+
+        store
+            .add_binding(
+                registered.corpus_id,
+                CorpusBindingKind::LegalFolder,
+                "folder-a",
+                &serde_json::json!({"source_path": "c:/clients/matter"}),
+            )
+            .expect("binding");
+
+        let metadata = store
+            .binding_metadata(
+                registered.corpus_id,
+                CorpusBindingKind::LegalFolder,
+                "folder-a",
+            )
+            .expect("metadata")
+            .expect("exists");
+        assert_eq!(metadata["source_path"], "c:/clients/matter");
     }
 
     #[test]

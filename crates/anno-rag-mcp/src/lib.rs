@@ -1592,7 +1592,10 @@ impl AnnoRagServer {
                             corpus_id,
                             anno_corpus_core::CorpusBindingKind::LegalFolder,
                             &label,
-                            &serde_json::json!({"label": label.clone()}),
+                            &serde_json::json!({
+                                "label": label.clone(),
+                                "source_path": p.folder.clone()
+                            }),
                         )
                         .map_err(|e| e.to_string())?;
                     for document in &summary.documents {
@@ -2176,7 +2179,54 @@ impl AnnoRagServer {
         }
 
         let legal = if requested.legal_semantic {
-            serde_json::json!({"ran": false, "reason": "legal_semantic not enabled in this phase"})
+            let legal_folders = corpus
+                .store()
+                .binding_ids_for_corpus_kind(
+                    corpus_id,
+                    anno_corpus_core::CorpusBindingKind::LegalFolder,
+                )
+                .map_err(|e| e.to_string())?;
+            let mut ingested = 0usize;
+            let mut legal_warnings = Vec::new();
+            for folder_id in legal_folders {
+                let Some(folder) =
+                    source_folder_for_legal_binding(corpus.store(), corpus_id, &folder_id)
+                        .map_err(|e| e.to_string())?
+                else {
+                    legal_warnings.push(format!(
+                        "legal folder binding {folder_id} has no source path"
+                    ));
+                    continue;
+                };
+                match self
+                    .legal_ingest_impl(
+                        LegalIngestParams {
+                            folder,
+                            recursive: true,
+                        },
+                        Some(corpus_id),
+                    )
+                    .await
+                {
+                    Ok(value) => {
+                        ingested += value
+                            .get("ingested")
+                            .and_then(serde_json::Value::as_u64)
+                            .unwrap_or(0) as usize;
+                    }
+                    Err(error) => legal_warnings.push(error),
+                }
+            }
+            warnings.extend(
+                legal_warnings
+                    .iter()
+                    .map(|warning| format!("legal: {warning}")),
+            );
+            serde_json::json!({
+                "ran": true,
+                "ingested": ingested,
+                "warnings": legal_warnings,
+            })
         } else {
             serde_json::json!({"ran": false, "reason": "output not requested"})
         };
@@ -2744,6 +2794,25 @@ fn corpus_legal_output_dir(
         .join(corpus_id.as_string())
         .join("outputs")
         .join("legal-anon")
+}
+
+fn source_folder_for_legal_binding(
+    store: &anno_corpus_store::CorpusStore,
+    corpus_id: anno_corpus_core::CorpusId,
+    folder_id: &str,
+) -> anno_corpus_store::Result<Option<String>> {
+    Ok(store
+        .binding_metadata(
+            corpus_id,
+            anno_corpus_core::CorpusBindingKind::LegalFolder,
+            folder_id,
+        )?
+        .and_then(|metadata| {
+            metadata
+                .get("source_path")
+                .and_then(serde_json::Value::as_str)
+                .map(str::to_string)
+        }))
 }
 
 // ---- Tool router ----
