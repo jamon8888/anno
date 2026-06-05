@@ -1,7 +1,7 @@
 <!-- gitnexus:start -->
 # GitNexus — Code Intelligence
 
-This project is indexed by GitNexus as **anno** (18702 symbols, 43717 relationships, 300 execution flows). Use the GitNexus MCP tools to understand code, assess impact, and navigate safely.
+This project is indexed by GitNexus as **anno** (18552 symbols, 43537 relationships, 300 execution flows). Use the GitNexus MCP tools to understand code, assess impact, and navigate safely.
 
 > If any GitNexus tool warns the index is stale, run `npx gitnexus analyze` in terminal first.
 
@@ -100,19 +100,15 @@ To check whether embeddings exist, inspect `.gitnexus/meta.json` — the `stats.
 
 <!-- gitnexus:end -->
 
-## Agent Harness
-
-Repo-local Claude Code and Codex harness files live under `.claude/`, `.codex/`, `.agents/skills/`, and `scripts/agent-harness/`. Run `powershell -NoProfile -ExecutionPolicy Bypass -File scripts\agent-harness\harness-status.ps1` to inspect setup state.
-
 # Build Isolation — Règles strictes
 
 ## Worktree actif (2026-05-28)
 
 ```
-C:/Users/NMarchitecte/.config/superpowers/worktrees/anno/anno-tabular-local-extraction
+C:/Users/you/.config/superpowers/worktrees/anno/anno-tabular-local-extraction
 ```
 
-**Une seule worktree de dev active à la fois.** La worktree `main` (`C:/Users/NMarchitecte/anno`) sert uniquement à des tâches de maintenance rapide.
+**Une seule worktree de dev active à la fois.** La worktree `main` (`C:/Users/you/anno`) sert uniquement à des tâches de maintenance rapide.
 
 ## NEVER
 

@@ -1529,14 +1529,14 @@ fn legal_ingest_candidate_paths(
     };
     let mut paths: Vec<std::path::PathBuf> = Vec::new();
     for entry in walker
-        .filter_entry(|entry| !is_anno_generated_output(entry.path(), output_dir))
+        .filter_entry(|entry| !is_anno_generated_output(folder, entry.path(), output_dir))
         .filter_map(std::result::Result::ok)
     {
         if !entry.file_type().is_file() {
             continue;
         }
         let path = entry.path();
-        if !is_supported_ingest_path(path) || is_anno_generated_output(path, output_dir) {
+        if !is_supported_ingest_path(path) || is_anno_generated_output(folder, path, output_dir) {
             continue;
         }
         paths.push(path.to_path_buf());
@@ -1568,14 +1568,37 @@ fn is_supported_ingest_path(path: &Path) -> bool {
     )
 }
 
-fn is_anno_generated_output(path: &Path, output_dir: &Path) -> bool {
+fn is_anno_generated_output(source_root: &Path, path: &Path, output_dir: &Path) -> bool {
     if path.starts_with(output_dir) {
+        return true;
+    }
+    if path != source_root
+        && path
+            .strip_prefix(source_root)
+            .ok()
+            .is_some_and(|relative| {
+                relative.components().any(|component| {
+                    component
+                        .as_os_str()
+                        .to_str()
+                        .map(is_anno_generated_dir_name)
+                        .unwrap_or(false)
+                })
+            })
+    {
         return true;
     }
     path.file_name()
         .and_then(|name| name.to_str())
         .map(|name| name.to_ascii_lowercase().contains(".anon."))
         .unwrap_or(false)
+}
+
+fn is_anno_generated_dir_name(name: &str) -> bool {
+    matches!(
+        name.to_ascii_lowercase().as_str(),
+        "anon" | "outputs" | ".anno" | ".anno-rag"
+    )
 }
 
 fn should_index_extracted_doc(extracted: &ingest::ExtractedDoc) -> bool {
@@ -2481,6 +2504,33 @@ mod tests {
             b"# generated nested",
         )
         .expect("generated nested");
+        std::fs::create_dir_all(dir.path().join("nested").join("anon")).expect("nested anon dir");
+        std::fs::write(
+            dir.path()
+                .join("nested")
+                .join("anon")
+                .join("ignored.md"),
+            b"# generated nested anon",
+        )
+        .expect("generated nested anon");
+        std::fs::create_dir_all(dir.path().join("outputs")).expect("outputs dir");
+        std::fs::write(
+            dir.path().join("outputs").join("ignored.md"),
+            b"# generated outputs",
+        )
+        .expect("generated outputs");
+        std::fs::create_dir_all(dir.path().join(".anno")).expect(".anno dir");
+        std::fs::write(
+            dir.path().join(".anno").join("ignored.md"),
+            b"# generated .anno",
+        )
+        .expect("generated .anno");
+        std::fs::create_dir_all(dir.path().join(".anno-rag")).expect(".anno-rag dir");
+        std::fs::write(
+            dir.path().join(".anno-rag").join("ignored.md"),
+            b"# generated .anno-rag",
+        )
+        .expect("generated .anno-rag");
         std::fs::write(dir.path().join("nested").join("contract.md"), b"# contract")
             .expect("nested source");
 

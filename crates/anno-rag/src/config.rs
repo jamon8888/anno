@@ -301,13 +301,18 @@ fn default_rerank_batch_size() -> usize {
 }
 
 fn default_data_dir() -> PathBuf {
-    default_data_dir_from_env(std::env::var_os("ANNO_RAG_DATA_DIR"))
+    default_data_dir_from_env(std::env::var_os("ANNO_RAG_DATA_DIR"), std::env::var_os("HOME"))
 }
 
-fn default_data_dir_from_env(override_dir: Option<OsString>) -> PathBuf {
+fn default_data_dir_from_env(override_dir: Option<OsString>, home_dir: Option<OsString>) -> PathBuf {
     override_dir
         .filter(|p| !p.is_empty())
         .map(PathBuf::from)
+        .or_else(|| {
+            home_dir
+                .filter(|p| !p.is_empty())
+                .map(|p| PathBuf::from(p).join(".anno-rag"))
+        })
         .or_else(|| dirs::home_dir().map(|p| p.join(".anno-rag")))
         .unwrap_or_else(|| PathBuf::from(".anno-rag"))
 }
@@ -424,7 +429,10 @@ mod tests {
 
     #[test]
     fn data_dir_env_override_wins_over_home_default() {
-        let data_dir = default_data_dir_from_env(Some(OsString::from("/tmp/anno-rag-env")));
+        let data_dir = default_data_dir_from_env(
+            Some(OsString::from("/tmp/anno-rag-env")),
+            Some(OsString::from("/tmp/anno-rag-home")),
+        );
 
         assert_eq!(data_dir, PathBuf::from("/tmp/anno-rag-env"));
     }

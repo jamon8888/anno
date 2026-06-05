@@ -7,7 +7,7 @@
 
 ## Corpus inventory
 
-Source: `C:\Users\NMarchitecte\Documents\piighost-test-multi-format` (14 files, ~88 KiB total).
+Source: `C:\Users\you\Documents\piighost-test-multi-format` (14 files, ~88 KiB total).
 
 Layout:
 
@@ -32,7 +32,7 @@ Command:
 
 ```bash
 HOME=/tmp/anno-rag-bench-home /tmp/anno-target/debug/anno-rag \
-  ingest /mnt/c/Users/NMarchitecte/Documents/piighost-test-multi-format --recursive
+  ingest /mnt/c/Users/you/Documents/piighost-test-multi-format --recursive
 ```
 
 Result:
@@ -45,7 +45,7 @@ Result:
 | Exit code | 0 |
 | Docs ingested | **6 / 14** (PDF×2, TXT×2, DOCX×2) |
 | Docs skipped | 8 (xlsx×2, csv×2, jsonl×2, tsv×2 — all reported as `Unsupported format` by `kreuzberg::extract_file`) |
-| Output dir | `/home/architecte/.anno-rag/outputs/` (the `HOME=` env var was NOT honored — `dirs::home_dir()` falls back to `/etc/passwd` on WSL; tracked as #027) |
+| Output dir | account home `.anno-rag/outputs/` (the `HOME=` env var was NOT honored — `dirs::home_dir()` falls back to `/etc/passwd` on WSL; tracked as #027) |
 
 ### Per-doc breakdown (observed at ~40s/doc average)
 
@@ -114,10 +114,10 @@ PII coverage is qualitatively in line with v0.2 e2e test results (≥50% name co
 
 ```bash
 # WSL Ubuntu, with rust toolchain in ~/.cargo/bin and HF cache populated
-cd /mnt/c/Users/NMarchitecte/anno
+cd /mnt/c/Users/you/anno
 cargo build -p anno-rag --bin anno-rag --target-dir /tmp/anno-target
 /usr/bin/time -v /tmp/anno-target/debug/anno-rag ingest \
-  /mnt/c/Users/NMarchitecte/Documents/piighost-test-multi-format --recursive
+  /mnt/c/Users/you/Documents/piighost-test-multi-format --recursive
 # observe Maximum RSS in time -v output
 ```
 
