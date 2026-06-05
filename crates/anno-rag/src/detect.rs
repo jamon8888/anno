@@ -20,14 +20,9 @@ use crate::error::{Error, Result};
 use crate::layers::GdprLayerSet;
 use crate::legal::{LegalEntity, LegalLabel};
 use crate::validators::{
-    apply_validators, EntityValidator, RejectionCounts,
-    dates::DateRangeValidator,
-    email::EmailRfcValidator,
-    iban::Iban97Validator,
-    luhn::LuhnValidator,
-    network::IpAddressValidator,
-    nir::NirControlKeyValidator,
-    postal::PostalCodeValidator,
+    apply_validators, dates::DateRangeValidator, email::EmailRfcValidator, iban::Iban97Validator,
+    luhn::LuhnValidator, network::IpAddressValidator, nir::NirControlKeyValidator,
+    postal::PostalCodeValidator, EntityValidator, RejectionCounts,
 };
 use anno::backends::gliner2_fastino::GLiNER2Fastino;
 use anno::backends::inference::ZeroShotNER;
@@ -544,8 +539,7 @@ impl Detector {
         if GdprLayerSet::from_env().includes_heuristics() {
             let labels = pii_label_set();
             let label_refs: Vec<&str> = labels.iter().copied().collect();
-            if let Ok(heur_entities) =
-                self.heuristic_fr.extract_with_types(text, &label_refs, 0.5)
+            if let Ok(heur_entities) = self.heuristic_fr.extract_with_types(text, &label_refs, 0.5)
             {
                 all.extend(anno_entities_to_detected(text, heur_entities)?);
             }

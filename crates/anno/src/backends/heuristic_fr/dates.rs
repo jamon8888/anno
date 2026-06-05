@@ -1,11 +1,16 @@
-use crate::core::entity::{Entity, EntityType, EntityCategory};
+use crate::core::entity::{Entity, EntityCategory, EntityType};
 use regex::Regex;
 use std::sync::OnceLock;
 
 const DOB_TRIGGERS: &[&str] = &[
-    "né le", "née le", "né(e) le",
-    "date de naissance", "naissance :", "naissance:",
-    "anniversaire", "âgé",
+    "né le",
+    "née le",
+    "né(e) le",
+    "date de naissance",
+    "naissance :",
+    "naissance:",
+    "anniversaire",
+    "âgé",
 ];
 const WINDOW: usize = 50;
 
@@ -19,20 +24,26 @@ fn date_re() -> &'static Regex {
 }
 
 pub fn extract_dates(text: &str) -> Vec<Entity> {
-    date_re().find_iter(text).map(|m| {
-        let is_dob = has_dob_trigger(text, m.start());
-        let label = if is_dob {
-            EntityType::Custom { name: "date_of_birth".into(), category: EntityCategory::Temporal }
-        } else {
-            EntityType::Date
-        };
-        let start = text[..m.start()].chars().count();
-        let end = text[..m.end()].chars().count();
-        Entity::builder(m.as_str(), label)
-            .span(start, end)
-            .confidence(0.90_f32)
-            .build()
-    }).collect()
+    date_re()
+        .find_iter(text)
+        .map(|m| {
+            let is_dob = has_dob_trigger(text, m.start());
+            let label = if is_dob {
+                EntityType::Custom {
+                    name: "date_of_birth".into(),
+                    category: EntityCategory::Temporal,
+                }
+            } else {
+                EntityType::Date
+            };
+            let start = text[..m.start()].chars().count();
+            let end = text[..m.end()].chars().count();
+            Entity::builder(m.as_str(), label)
+                .span(start, end)
+                .confidence(0.90_f32)
+                .build()
+        })
+        .collect()
 }
 
 fn has_dob_trigger(text: &str, byte_idx: usize) -> bool {
@@ -61,7 +72,9 @@ mod tests {
     fn relabels_dob_with_trigger() {
         let r = extract_dates("M. Dupont, né le 12 mai 1972.");
         assert_eq!(r.len(), 1);
-        assert!(matches!(&r[0].entity_type, EntityType::Custom { name, .. } if name == "date_of_birth"));
+        assert!(
+            matches!(&r[0].entity_type, EntityType::Custom { name, .. } if name == "date_of_birth")
+        );
     }
 
     #[test]

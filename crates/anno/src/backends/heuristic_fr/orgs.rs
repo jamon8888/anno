@@ -14,14 +14,17 @@ fn org_re() -> &'static Regex {
 }
 
 pub fn extract_orgs(text: &str) -> Vec<Entity> {
-    org_re().find_iter(text).map(|m| {
-        let start = text[..m.start()].chars().count();
-        let end = text[..m.end()].chars().count();
-        Entity::builder(m.as_str(), EntityType::Organization)
-            .span(start, end)
-            .confidence(CONFIDENCE)
-            .build()
-    }).collect()
+    org_re()
+        .find_iter(text)
+        .map(|m| {
+            let start = text[..m.start()].chars().count();
+            let end = text[..m.end()].chars().count();
+            Entity::builder(m.as_str(), EntityType::Organization)
+                .span(start, end)
+                .confidence(CONFIDENCE)
+                .build()
+        })
+        .collect()
 }
 
 #[cfg(test)]

@@ -37,11 +37,11 @@ impl FromStr for GdprLayerSet {
     type Err = ();
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         match s.trim().to_ascii_lowercase().as_str() {
-            "basic"   => Ok(Self::Basic),
+            "basic" => Ok(Self::Basic),
             "defense" => Ok(Self::Defense),
-            "shadow"  => Ok(Self::Shadow),
-            "full"    => Ok(Self::Full),
-            _         => Err(()),
+            "shadow" => Ok(Self::Shadow),
+            "full" => Ok(Self::Full),
+            _ => Err(()),
         }
     }
 }
@@ -52,7 +52,7 @@ mod tests {
 
     #[test]
     fn parses_known_strings() {
-        assert_eq!(GdprLayerSet::from_str("basic"),   Ok(GdprLayerSet::Basic));
+        assert_eq!(GdprLayerSet::from_str("basic"), Ok(GdprLayerSet::Basic));
         assert_eq!(GdprLayerSet::from_str("Defense"), Ok(GdprLayerSet::Defense));
         assert_eq!(GdprLayerSet::from_str("  full  "), Ok(GdprLayerSet::Full));
     }

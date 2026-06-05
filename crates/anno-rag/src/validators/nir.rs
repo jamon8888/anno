@@ -149,7 +149,10 @@ mod tests {
         let nir = format!("18412{}{}{:02}", "2A", "750123", key);
         assert_eq!(nir.len(), 15, "NIR must be 15 chars");
         let e = entity_with(&nir);
-        assert_eq!(NirControlKeyValidator.validate(&e, ""), ValidationResult::Accept);
+        assert_eq!(
+            NirControlKeyValidator.validate(&e, ""),
+            ValidationResult::Accept
+        );
     }
 
     #[test]
@@ -163,6 +166,9 @@ mod tests {
         let nir = format!("18412{}{}{:02}", "2B", "750123", key);
         assert_eq!(nir.len(), 15, "NIR must be 15 chars");
         let e = entity_with(&nir);
-        assert_eq!(NirControlKeyValidator.validate(&e, ""), ValidationResult::Accept);
+        assert_eq!(
+            NirControlKeyValidator.validate(&e, ""),
+            ValidationResult::Accept
+        );
     }
 }

@@ -301,10 +301,16 @@ fn default_rerank_batch_size() -> usize {
 }
 
 fn default_data_dir() -> PathBuf {
-    default_data_dir_from_env(std::env::var_os("ANNO_RAG_DATA_DIR"), std::env::var_os("HOME"))
+    default_data_dir_from_env(
+        std::env::var_os("ANNO_RAG_DATA_DIR"),
+        std::env::var_os("HOME"),
+    )
 }
 
-fn default_data_dir_from_env(override_dir: Option<OsString>, home_dir: Option<OsString>) -> PathBuf {
+fn default_data_dir_from_env(
+    override_dir: Option<OsString>,
+    home_dir: Option<OsString>,
+) -> PathBuf {
     override_dir
         .filter(|p| !p.is_empty())
         .map(PathBuf::from)

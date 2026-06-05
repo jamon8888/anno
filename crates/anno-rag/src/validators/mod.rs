@@ -76,13 +76,13 @@ pub fn apply_validators(
 fn entity_label_str(e: &DetectedEntity) -> &str {
     match &e.category {
         EntityCategory::Custom(name) => name.as_str(),
-        EntityCategory::Person       => "person",
+        EntityCategory::Person => "person",
         EntityCategory::Organization => "organization",
-        EntityCategory::Location     => "location",
-        EntityCategory::Email        => "email_address",
-        EntityCategory::PhoneNumber  => "phone_number",
-        EntityCategory::IpAddress    => "ip_address",
-        _                            => "",
+        EntityCategory::Location => "location",
+        EntityCategory::Email => "email_address",
+        EntityCategory::PhoneNumber => "phone_number",
+        EntityCategory::IpAddress => "ip_address",
+        _ => "",
     }
 }
 
@@ -94,7 +94,9 @@ mod tests {
     #[derive(Debug)]
     struct AlwaysAccept;
     impl EntityValidator for AlwaysAccept {
-        fn label(&self) -> &'static str { "test" }
+        fn label(&self) -> &'static str {
+            "test"
+        }
         fn validate(&self, _e: &DetectedEntity, _c: &str) -> ValidationResult {
             ValidationResult::Accept
         }
@@ -121,9 +123,8 @@ mod tests {
     #[test]
     fn orchestrator_rejects_failing_luhn_keeps_others() {
         use cloakpipe_core::{DetectionSource, EntityCategory};
-        let validators: Vec<Box<dyn EntityValidator>> = vec![
-            Box::new(luhn::LuhnValidator::new("SIRET")),
-        ];
+        let validators: Vec<Box<dyn EntityValidator>> =
+            vec![Box::new(luhn::LuhnValidator::new("SIRET"))];
         let make = |cat: EntityCategory, val: &str| DetectedEntity {
             original: val.to_string(),
             start: 0,
@@ -146,9 +147,12 @@ mod tests {
     fn orchestrator_empty_validators_keeps_all() {
         use cloakpipe_core::{DetectionSource, EntityCategory};
         let e = DetectedEntity {
-            original: "anything".into(), start: 0, end: 8,
+            original: "anything".into(),
+            start: 0,
+            end: 8,
             category: EntityCategory::Custom("x".into()),
-            confidence: 0.5, source: DetectionSource::Ner,
+            confidence: 0.5,
+            source: DetectionSource::Ner,
         };
         let (kept, counts) = apply_validators(vec![e], "", &[]);
         assert_eq!(kept.len(), 1);
