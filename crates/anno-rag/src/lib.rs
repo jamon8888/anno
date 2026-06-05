@@ -27,6 +27,7 @@ pub mod pipeline;
 #[cfg(feature = "rerank")]
 pub mod rerank;
 pub mod store;
+pub mod validators;
 pub mod vault;
 pub mod vault_admin;
 
