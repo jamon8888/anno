@@ -17,7 +17,18 @@
 //! plan a normalization pass via `anno::offset::bytes_to_chars` in v0.2.
 
 use crate::error::{Error, Result};
+use crate::layers::GdprLayerSet;
 use crate::legal::{LegalEntity, LegalLabel};
+use crate::validators::{
+    apply_validators, EntityValidator, RejectionCounts,
+    dates::DateRangeValidator,
+    email::EmailRfcValidator,
+    iban::Iban97Validator,
+    luhn::LuhnValidator,
+    network::IpAddressValidator,
+    nir::NirControlKeyValidator,
+    postal::PostalCodeValidator,
+};
 use anno::backends::gliner2_fastino::GLiNER2Fastino;
 use anno::backends::inference::ZeroShotNER;
 use anno::EntityType;
@@ -198,8 +209,58 @@ pub const NER_MODEL_ID: &str = "SemplificaAI/gliner2-multi-v1-onnx";
 pub const CANDLE_NER_MODEL_ID: &str = "fastino/gliner2-multi-v1";
 const CANDLE_NER_MODEL_DIR: &str = "gliner2-multi-v1-candle";
 
-/// PII labels recognized by the current [`Detector::detect`] NER layer.
-const PII_NER_LABELS: &[&str] = &["person", "organization", "location"];
+/// GDPR-coverage NER labels: (label, description sent to the model, per-label threshold).
+///
+/// Descriptions are in French to match the primary document language. The model
+/// receives them as `[E] <label> [DESCRIPTION] <description>` in its schema
+/// prompt, which improves span precision over bare labels.
+///
+/// Thresholds:
+/// - Art. 4(1) basic personal data: 0.38–0.50 (balanced precision/recall)
+/// - Art. 4(1) identifiers: 0.35–0.42 (slight recall bias)
+/// - Art. 9 special categories: 0.30 (recall priority — missed sensitive spans
+///   are more costly than false positives in a redaction workflow)
+/// - Art. 10 criminal convictions: 0.32
+///
+/// The regex layer (NIR, SIRET, IBAN-FR, phone FR, email, honorific names)
+/// is complementary and always runs first.
+static GDPR_NER_LABELS: &[(&str, &str, f32)] = &[
+    // ── Art. 4(1) — Basic personal data ──────────────────────────────────────
+    ("person",       "nom complet, prénom, nom de famille ou alias d'une personne physique identifiable", 0.40),
+    ("address",      "adresse postale complète incluant numéro de voie, rue, ville ou code postal", 0.40),
+    ("date_of_birth","date de naissance d'une personne physique", 0.38),
+    ("age",          "âge d'une personne physique exprimé en années", 0.45),
+    ("nationality",  "nationalité, pays d'origine ou citoyenneté d'une personne physique", 0.42),
+    ("profession",   "profession, emploi, titre ou fonction permettant d'identifier une personne", 0.45),
+    ("organization", "organisation ou entreprise directement associée à une personne physique identifiable (ex : auto-entrepreneur, médecin libéral)", 0.50),
+    ("location",     "lieu de résidence, domicile ou lieu de travail habituel d'une personne physique", 0.48),
+    // ── Art. 4(1) — Identifiers ───────────────────────────────────────────────
+    ("national_id",  "numéro de carte nationale d'identité, passeport, permis de conduire ou titre de séjour", 0.35),
+    ("tax_id",       "numéro fiscal personnel, référence fiscale ou numéro de TVA lié à une personne physique", 0.35),
+    ("bank_account", "numéro de carte bancaire, numéro de compte, date d'expiration ou cryptogramme visuel d'une carte", 0.35),
+    ("ip_address",   "adresse IP version 4 ou 6, identifiant de session ou cookie permettant d'identifier un utilisateur", 0.38),
+    ("username",     "nom d'utilisateur, identifiant de compte, pseudonyme en ligne ou handle sur réseau social", 0.42),
+    ("device_id",    "adresse MAC, numéro IMEI ou identifiant unique d'un appareil personnel", 0.40),
+    // ── Art. 9 — Special categories (lower threshold: recall priority) ────────
+    ("racial_ethnic_origin",  "origine raciale ou ethnique, appartenance déclarée à un groupe ethnique ou communautaire", 0.30),
+    ("political_opinion",     "opinion politique, affiliation partisane ou conviction politique d'une personne", 0.30),
+    ("religious_belief",      "croyance religieuse, conviction philosophique, appartenance à une religion, culte ou secte", 0.30),
+    ("trade_union_membership","adhésion syndicale, appartenance à un syndicat ou mandat de représentation syndicale", 0.30),
+    ("health_data",           "état de santé, maladie, diagnostic, traitement, ordonnance, handicap ou antécédent médical d'une personne", 0.30),
+    ("genetic_data",          "données génétiques, résultat de test ADN, séquence génomique ou information héréditaire", 0.30),
+    ("biometric_data",        "empreinte digitale, reconnaissance faciale, scan d'iris, empreinte vocale ou toute donnée biométrique unique", 0.30),
+    ("sexual_orientation",    "orientation sexuelle, vie sexuelle ou identité de genre d'une personne physique", 0.30),
+    // ── Art. 10 — Criminal convictions ───────────────────────────────────────
+    ("criminal_record", "condamnation pénale, infraction, casier judiciaire, mise en examen ou poursuite pénale", 0.32),
+];
+
+fn gdpr_described() -> Vec<(&'static str, &'static str)> {
+    GDPR_NER_LABELS.iter().map(|(l, d, _)| (*l, *d)).collect()
+}
+
+fn gdpr_label_thresholds() -> HashMap<&'static str, f32> {
+    GDPR_NER_LABELS.iter().map(|(l, _, t)| (*l, *t)).collect()
+}
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 struct DetectorOnnxProviderConfig {
@@ -262,19 +323,19 @@ fn detector_model_config_for(
 /// PII labels recognized by the current [`Detector::detect`] NER layer.
 #[must_use]
 pub fn pii_label_set() -> Vec<&'static str> {
-    PII_NER_LABELS.to_vec()
+    GDPR_NER_LABELS.iter().map(|(l, _, _)| *l).collect()
 }
 
-/// Returns true when `name` is one of the detector's PII NER labels.
+/// Returns true when `name` is one of the detector's GDPR NER labels.
 #[must_use]
 pub fn is_pii_label(name: &str) -> bool {
-    PII_NER_LABELS.contains(&name)
+    GDPR_NER_LABELS.iter().any(|(l, _, _)| *l == name)
 }
 
 /// Return the union of PII NER labels and `extra_labels`, de-duplicated.
 #[must_use]
 pub fn combined_label_set(extra_labels: &[&str]) -> Vec<&'static str> {
-    let mut out: Vec<&'static str> = PII_NER_LABELS.to_vec();
+    let mut out: Vec<&'static str> = GDPR_NER_LABELS.iter().map(|(l, _, _)| *l).collect();
     for label in extra_labels {
         if let Some(static_ref) = static_label_ref(label) {
             if !out.contains(&static_ref) {
@@ -324,10 +385,25 @@ impl NerBackend {
             Self::Candle(model) => model.extract_with_label_thresholds(text, label_thresholds),
         }
     }
+
+    fn extract_with_label_descriptions(
+        &self,
+        text: &str,
+        labeled: &[(&str, &str)],
+        threshold: f32,
+    ) -> anno::Result<Vec<anno::Entity>> {
+        match self {
+            Self::Onnx(model) => model.extract_with_label_descriptions(text, labeled, threshold),
+            #[cfg(feature = "gpu-metal")]
+            Self::Candle(model) => model.extract_with_label_descriptions(text, labeled, threshold),
+        }
+    }
 }
 
 pub struct Detector {
     ner: NerBackend,
+    #[cfg(feature = "heuristic-fr")]
+    heuristic_fr: anno::backends::heuristic_fr::HeuristicFrNer,
 }
 
 impl Detector {
@@ -359,6 +435,8 @@ impl Detector {
             .map_err(|e| Error::Detect(format!("gliner2_fastino load (local): {e}")))?;
             return Ok(Self {
                 ner: NerBackend::Onnx(ner),
+                #[cfg(feature = "heuristic-fr")]
+                heuristic_fr: anno::backends::heuristic_fr::HeuristicFrNer::new(),
             });
         }
         // ─────────────────────────────────────────────────────────────────────
@@ -366,6 +444,8 @@ impl Detector {
             .map_err(|e| Error::Detect(format!("gliner2_fastino load: {e}")))?;
         Ok(Self {
             ner: NerBackend::Onnx(ner),
+            #[cfg(feature = "heuristic-fr")]
+            heuristic_fr: anno::backends::heuristic_fr::HeuristicFrNer::new(),
         })
     }
 
@@ -391,6 +471,8 @@ impl Detector {
                 })?;
             return Ok(Self {
                 ner: NerBackend::Candle(ner),
+                #[cfg(feature = "heuristic-fr")]
+                heuristic_fr: anno::backends::heuristic_fr::HeuristicFrNer::new(),
             });
         }
         let ner =
@@ -401,6 +483,8 @@ impl Detector {
             .map_err(|e| Error::Detect(format!("gliner2_fastino_candle load: {e}")))?;
         Ok(Self {
             ner: NerBackend::Candle(ner),
+            #[cfg(feature = "heuristic-fr")]
+            heuristic_fr: anno::backends::heuristic_fr::HeuristicFrNer::new(),
         })
     }
 
@@ -452,7 +536,58 @@ impl Detector {
     }
 
     fn detect_inner(&self, text: &str) -> Result<Vec<DetectedEntity>> {
-        self.detect_inner_with(text, PII_NER_LABELS, 0.5)
+        // 1. FR regex layer (model-free).
+        let mut all = detect_patterns(text);
+
+        // 1b. FR heuristics (defense layer and above).
+        #[cfg(feature = "heuristic-fr")]
+        if GdprLayerSet::from_env().includes_heuristics() {
+            let labels = pii_label_set();
+            let label_refs: Vec<&str> = labels.iter().copied().collect();
+            if let Ok(heur_entities) =
+                self.heuristic_fr.extract_with_types(text, &label_refs, 0.5)
+            {
+                all.extend(anno_entities_to_detected(text, heur_entities)?);
+            }
+        }
+
+        // 2. NER with GDPR label descriptions.
+        //    Floor threshold 0.25 passes everything through; per-label thresholds
+        //    from GDPR_NER_LABELS are applied as a post-filter so Art. 9 labels
+        //    (0.30) and basic identifiers (0.35) use different bounds.
+        let described = gdpr_described();
+        let thresholds = gdpr_label_thresholds();
+        let mut anno_entities = self
+            .ner
+            .extract_with_label_descriptions(text, &described, 0.25)
+            .map_err(|e| Error::Detect(e.to_string()))?;
+        anno_entities.retain(|e| {
+            let label = e.entity_type.as_label();
+            f64::from(e.confidence) >= f64::from(thresholds.get(label).copied().unwrap_or(0.50))
+        });
+        all.extend(anno_entities_to_detected(text, anno_entities)?);
+
+        // 3. Sort + dedup overlaps.
+        all.sort_by(|a, b| {
+            a.start
+                .cmp(&b.start)
+                .then_with(|| (b.end - b.start).cmp(&(a.end - a.start)))
+                .then_with(|| pattern_priority(&a.source).cmp(&pattern_priority(&b.source)))
+        });
+        dedup_overlaps(&mut all);
+
+        // 4. Validators (defense layer and above).
+        let rejection_counts = if GdprLayerSet::from_env().includes_validators() {
+            let validators = default_validators();
+            let (kept, counts) = apply_validators(all, text, &validators);
+            all = kept;
+            counts
+        } else {
+            RejectionCounts::new()
+        };
+        let _ = rejection_counts; // emitted in audit via detect() wrapper in a future task
+
+        Ok(all)
     }
 
     fn detect_inner_with(
@@ -502,7 +637,7 @@ impl Detector {
 
         let mut pii = detect_patterns(text);
         let mut label_thresholds: Vec<(&str, f32)> =
-            PII_NER_LABELS.iter().map(|label| (*label, 0.5)).collect();
+            GDPR_NER_LABELS.iter().map(|(l, _, t)| (*l, *t)).collect();
         for label in legal_labels {
             let threshold = legal_thresholds.get(label.name).copied().unwrap_or(0.5);
             if !label_thresholds.iter().any(|(name, _)| *name == label.name) {
@@ -600,6 +735,21 @@ fn emit_detect_audit(input_chars: usize, elapsed_us: u64, out: &[DetectedEntity]
     );
 }
 
+fn default_validators() -> Vec<Box<dyn EntityValidator>> {
+    vec![
+        Box::new(LuhnValidator::new("SIRET")),
+        Box::new(LuhnValidator::new("card_number")),
+        Box::new(LuhnValidator::new("bank_account")),
+        Box::new(Iban97Validator::new("IBAN_FR")),
+        Box::new(Iban97Validator::new("iban")),
+        Box::new(NirControlKeyValidator),
+        Box::new(DateRangeValidator),
+        Box::new(IpAddressValidator),
+        Box::new(EmailRfcValidator),
+        Box::new(PostalCodeValidator),
+    ]
+}
+
 fn pattern_priority(s: &DetectionSource) -> u8 {
     match s {
         DetectionSource::Pattern => 0,
@@ -633,7 +783,8 @@ fn map_anno_category(t: &EntityType) -> EntityCategory {
 
 /// Returns true when a detected entity should be treated as PII for vault
 /// pseudonymization. Pattern-detected entities (IBAN, phone, email, …) are
-/// always PII. NER entities are PII only for person/organisation/location.
+/// always PII. NER entities are PII when their category is a known GDPR type
+/// (Art. 4 named entities, Art. 9 special categories, Art. 10 criminal data).
 #[must_use]
 pub fn is_pii_entity(e: &cloakpipe_core::DetectedEntity) -> bool {
     matches!(e.source, cloakpipe_core::DetectionSource::Pattern)
@@ -643,6 +794,7 @@ pub fn is_pii_entity(e: &cloakpipe_core::DetectedEntity) -> bool {
                 | cloakpipe_core::EntityCategory::Organization
                 | cloakpipe_core::EntityCategory::Location
         )
+        || matches!(&e.category, cloakpipe_core::EntityCategory::Custom(name) if is_pii_label(name))
 }
 
 /// Layer-aware detection result for document ingest.
@@ -1044,5 +1196,35 @@ mod tests {
                 .expect_err("cuda unavailable");
             assert!(err.to_string().contains("gpu-cuda"));
         }
+    }
+
+    // Phase A integration: validators + heuristics + layers
+    #[test]
+    fn layer_basic_disables_validators() {
+        std::env::set_var("ANNO_GDPR_LAYERS", "basic");
+        assert!(!crate::layers::GdprLayerSet::from_env().includes_validators());
+    }
+
+    #[test]
+    fn layer_defense_enables_validators() {
+        std::env::set_var("ANNO_GDPR_LAYERS", "defense");
+        assert!(crate::layers::GdprLayerSet::from_env().includes_validators());
+        assert!(crate::layers::GdprLayerSet::from_env().includes_heuristics());
+    }
+
+    #[test]
+    fn empty_validators_keeps_all() {
+        use cloakpipe_core::{DetectedEntity, DetectionSource, EntityCategory};
+        let entities = vec![DetectedEntity {
+            original: "test".into(),
+            start: 0,
+            end: 4,
+            category: EntityCategory::Custom("x".into()),
+            confidence: 0.9,
+            source: DetectionSource::Ner,
+        }];
+        let (kept, counts) = crate::validators::apply_validators(entities, "", &[]);
+        assert_eq!(kept.len(), 1);
+        assert!(counts.is_empty());
     }
 }
