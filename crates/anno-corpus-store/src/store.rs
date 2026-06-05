@@ -65,6 +65,25 @@ pub struct CorpusDocumentRow {
     pub content_id: String,
 }
 
+/// Persisted corpus source/output sync state.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct CorpusSyncStateRow {
+    /// Owning corpus id.
+    pub corpus_id: CorpusId,
+    /// Freshness value serialized by `anno-corpus-core`.
+    pub freshness: String,
+    /// Last sync start timestamp.
+    pub last_sync_started_at: Option<String>,
+    /// Last successful or attempted sync finish timestamp.
+    pub last_sync_finished_at: Option<String>,
+    /// Last observed source file count.
+    pub last_seen_file_count: Option<u64>,
+    /// Last observed source root mtime.
+    pub last_seen_root_mtime: Option<String>,
+    /// Opaque sync summary for MCP responses.
+    pub last_summary_json: serde_json::Value,
+}
+
 impl CorpusStore {
     /// Open or create the corpus registry database.
     pub fn open(path: impl AsRef<Path>) -> Result<Self> {
@@ -336,6 +355,73 @@ impl CorpusStore {
         let ids = rows.collect::<std::result::Result<Vec<_>, _>>()?;
         Ok(ids)
     }
+
+    /// Add or update sync state for one corpus.
+    pub fn upsert_sync_state(
+        &self,
+        corpus_id: CorpusId,
+        freshness: &str,
+        started_at: Option<&str>,
+        finished_at: Option<&str>,
+        file_count: Option<u64>,
+        root_mtime: Option<&str>,
+        summary: &serde_json::Value,
+    ) -> Result<()> {
+        let conn = self.conn.lock().expect("corpus sqlite mutex poisoned");
+        ensure_corpus_exists(&conn, corpus_id)?;
+        let now = Utc::now().to_rfc3339();
+        let summary_json = serde_json::to_string(summary)?;
+        conn.execute(
+            "INSERT INTO corpus_sync_state \
+             (corpus_id, freshness, last_sync_started_at, last_sync_finished_at, last_seen_file_count, last_seen_root_mtime, last_summary_json, updated_at) \
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8) \
+             ON CONFLICT(corpus_id) DO UPDATE SET \
+                freshness = excluded.freshness, \
+                last_sync_started_at = excluded.last_sync_started_at, \
+                last_sync_finished_at = excluded.last_sync_finished_at, \
+                last_seen_file_count = excluded.last_seen_file_count, \
+                last_seen_root_mtime = excluded.last_seen_root_mtime, \
+                last_summary_json = excluded.last_summary_json, \
+                updated_at = excluded.updated_at",
+            params![
+                corpus_id.as_string(),
+                freshness,
+                started_at,
+                finished_at,
+                file_count.map(|value| value as i64),
+                root_mtime,
+                &summary_json,
+                &now,
+            ],
+        )?;
+        Ok(())
+    }
+
+    /// Return the last recorded sync state for one corpus.
+    pub fn sync_state(&self, corpus_id: CorpusId) -> Result<Option<CorpusSyncStateRow>> {
+        let conn = self.conn.lock().expect("corpus sqlite mutex poisoned");
+        ensure_corpus_exists(&conn, corpus_id)?;
+        let mut stmt = conn.prepare(
+            "SELECT freshness, last_sync_started_at, last_sync_finished_at, last_seen_file_count, last_seen_root_mtime, last_summary_json \
+             FROM corpus_sync_state WHERE corpus_id = ?1",
+        )?;
+        let mut rows = stmt.query(params![corpus_id.as_string()])?;
+        let Some(row) = rows.next()? else {
+            return Ok(None);
+        };
+        let last_summary_json: String = row.get(5)?;
+        Ok(Some(CorpusSyncStateRow {
+            corpus_id,
+            freshness: row.get(0)?,
+            last_sync_started_at: row.get(1)?,
+            last_sync_finished_at: row.get(2)?,
+            last_seen_file_count: row
+                .get::<_, Option<i64>>(3)?
+                .map(|value| value.max(0) as u64),
+            last_seen_root_mtime: row.get(4)?,
+            last_summary_json: serde_json::from_str(&last_summary_json)?,
+        }))
+    }
 }
 
 fn ensure_corpus_exists(conn: &Connection, corpus_id: CorpusId) -> Result<()> {
@@ -528,5 +614,34 @@ mod tests {
             .delete_corpus_registry_rows(registered.corpus_id)
             .expect("delete corpus registry");
         assert_eq!(store.corpus_count().expect("count corpora"), 0);
+    }
+
+    #[test]
+    fn sync_state_round_trips_freshness_and_summary() {
+        let dir = tempfile::tempdir().expect("tempdir");
+        let store = CorpusStore::open(dir.path().join("corpora.sqlite3")).expect("open store");
+        let registered = store
+            .register_root("c:/clients/matter", &[CorpusProfile::Knowledge])
+            .expect("register");
+
+        store
+            .upsert_sync_state(
+                registered.corpus_id,
+                "fresh",
+                Some("2026-06-05T10:00:00Z"),
+                Some("2026-06-05T10:00:01Z"),
+                Some(3),
+                Some("2026-06-05T09:59:00Z"),
+                &serde_json::json!({"knowledge_fast": {"indexed": 1}}),
+            )
+            .expect("upsert sync state");
+
+        let row = store
+            .sync_state(registered.corpus_id)
+            .expect("load state")
+            .expect("state exists");
+        assert_eq!(row.freshness, "fresh");
+        assert_eq!(row.last_seen_file_count, Some(3));
+        assert_eq!(row.last_summary_json["knowledge_fast"]["indexed"], 1);
     }
 }

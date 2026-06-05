@@ -52,6 +52,17 @@ pub fn migrate(conn: &Connection) -> Result<()> {
             finished_at TEXT
         );
 
+        CREATE TABLE IF NOT EXISTS corpus_sync_state (
+            corpus_id TEXT PRIMARY KEY REFERENCES corpora(corpus_id) ON DELETE CASCADE,
+            freshness TEXT NOT NULL,
+            last_sync_started_at TEXT,
+            last_sync_finished_at TEXT,
+            last_seen_file_count INTEGER,
+            last_seen_root_mtime TEXT,
+            last_summary_json TEXT NOT NULL,
+            updated_at TEXT NOT NULL
+        );
+
         CREATE INDEX IF NOT EXISTS idx_corpus_bindings_lookup
             ON corpus_bindings(binding_kind, binding_id);
         CREATE INDEX IF NOT EXISTS idx_corpus_documents_doc
@@ -59,4 +70,33 @@ pub fn migrate(conn: &Connection) -> Result<()> {
         "#,
     )?;
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn migrations_create_expected_tables() {
+        let conn = Connection::open_in_memory().expect("open sqlite");
+
+        migrate(&conn).expect("migrate");
+
+        let mut stmt = conn
+            .prepare(
+                "SELECT name FROM sqlite_master \
+                 WHERE type = 'table' ORDER BY name",
+            )
+            .expect("prepare table query");
+        let names = stmt
+            .query_map([], |row| row.get::<_, String>(0))
+            .expect("query tables")
+            .collect::<std::result::Result<Vec<_>, _>>()
+            .expect("collect names");
+        assert!(names.contains(&"corpus_bindings".to_string()));
+        assert!(names.contains(&"corpus_documents".to_string()));
+        assert!(names.contains(&"corpus_index_runs".to_string()));
+        assert!(names.contains(&"corpus_sync_state".to_string()));
+        assert!(names.contains(&"corpora".to_string()));
+    }
 }
