@@ -298,12 +298,13 @@ mod tests {
     fn skips_vault_generated_folder() {
         let dir = tempfile::tempdir().expect("tempdir");
         std::fs::create_dir_all(dir.path().join("vault")).expect("mkdir");
-        std::fs::write(dir.path().join("vault").join("report.docx"), b"generated")
-            .expect("write");
+        std::fs::write(dir.path().join("vault").join("report.docx"), b"generated").expect("write");
         std::fs::write(dir.path().join("source.txt"), b"source").expect("write");
 
         let source = LocalFolderSource::new(dir.path());
-        let discovered = source.discover(&DiscoverBudget::default()).expect("discover");
+        let discovered = source
+            .discover(&DiscoverBudget::default())
+            .expect("discover");
 
         assert_eq!(discovered.len(), 1);
         assert!(discovered[0].external_id.ends_with("source.txt"));
