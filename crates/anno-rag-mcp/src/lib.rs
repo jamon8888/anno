@@ -1863,6 +1863,47 @@ impl AnnoRagServer {
         Ok((freshness == "fresh", freshness))
     }
 
+    async fn maybe_sync_knowledge_before_search(
+        &self,
+        effective: &anno_corpus_core::EffectiveCorpus,
+        scope: &str,
+        warnings: &mut Vec<String>,
+    ) -> serde_json::Value {
+        if !(scope == "all" || scope == "knowledge") {
+            return serde_json::json!({"attempted": false, "reason": "scope_not_knowledge"});
+        }
+        let anno_corpus_core::EffectiveCorpus::Single(corpus_id) = effective else {
+            return serde_json::json!({"attempted": false, "reason": "cross_corpus"});
+        };
+        if self.pipeline_arc().is_none() {
+            return serde_json::json!({
+                "attempted": false,
+                "reason": "models_not_loaded"
+            });
+        }
+        let p = crate::corpus_sync::SyncCorpusParams {
+            corpus_id: corpus_id.as_string(),
+            sources: None,
+            outputs: vec!["knowledge_fast".to_string()],
+            max_files: Some(25),
+            max_millis: Some(750),
+        };
+        match self.sync_corpus_impl(p).await {
+            Ok(result) => serde_json::json!({
+                "attempted": true,
+                "freshness": result.freshness,
+                "warnings": result.warnings,
+            }),
+            Err(error) => {
+                warnings.push(format!("opportunistic sync failed: {error}"));
+                serde_json::json!({
+                    "attempted": true,
+                    "error": error
+                })
+            }
+        }
+    }
+
     async fn knowledge_source_ids_for_effective(
         &self,
         effective: &anno_corpus_core::EffectiveCorpus,
@@ -1959,6 +2000,10 @@ impl AnnoRagServer {
             }
         };
 
+        let sync_status = self
+            .maybe_sync_knowledge_before_search(&effective, &scope, &mut warnings)
+            .await;
+
         let (index_fresh, freshness) = match self.freshness_for_effective(&effective).await {
             Ok(value) => value,
             Err(error) => {
@@ -2040,10 +2085,7 @@ impl AnnoRagServer {
             },
             "index_fresh": index_fresh,
             "freshness": freshness,
-            "sync": {
-                "attempted": false,
-                "reason": "not_requested"
-            },
+            "sync": sync_status,
             "hits": hits,
             "warnings": warnings,
         })
@@ -4937,6 +4979,32 @@ mod lazy_tests {
         assert_eq!(parsed["ok"], true);
         assert_eq!(parsed["index_fresh"], false);
         assert_eq!(parsed["freshness"], "unknown");
+    }
+
+    #[tokio::test]
+    async fn search_does_not_opportunistically_load_pipeline_when_models_are_cold() {
+        let server = AnnoRagServer::new_lazy(AnnoRagConfig::default(), [0u8; 32]);
+        let corpus = server.corpus().await.expect("corpus");
+        let registered = corpus
+            .register_index_root("c:/clients/a", "general")
+            .expect("register");
+
+        let out = server
+            .search_impl_routing(SearchUnifiedParams {
+                query: "contrat".to_string(),
+                top_k: 5,
+                mode: Some("fast".to_string()),
+                scope: Some("knowledge".to_string()),
+                filters: None,
+                corpus_id: Some(registered.corpus_id.as_string()),
+                allow_cross_corpus: false,
+            })
+            .await;
+        let parsed: serde_json::Value = serde_json::from_str(&out).expect("json");
+        assert_eq!(parsed["ok"], true);
+        assert_eq!(parsed["sync"]["attempted"], false);
+        assert_eq!(parsed["sync"]["reason"], "models_not_loaded");
+        assert!(server.pipeline_arc().is_none());
     }
 
     #[tokio::test]
