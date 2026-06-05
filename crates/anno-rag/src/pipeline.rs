@@ -586,6 +586,29 @@ impl Pipeline {
             .await
     }
 
+    /// Prepare a local privacy workspace under `<source_root>/vault`.
+    ///
+    /// # Errors
+    /// Returns privacy, extraction, detection, vault, or IO errors.
+    pub async fn privacy_prepare_folder(
+        &self,
+        source_root: &Path,
+        recursive: bool,
+    ) -> Result<crate::privacy_workspace::PrivacyPrepareSummary> {
+        crate::privacy_workspace::prepare_folder(self, source_root, recursive).await
+    }
+
+    /// Finalize a local privacy workspace after user Word edits.
+    ///
+    /// # Errors
+    /// Returns privacy, extraction, detection, vault, or IO errors.
+    pub async fn privacy_finalize_folder(
+        &self,
+        workspace: &Path,
+    ) -> Result<crate::privacy_workspace::PrivacyFinalizeSummary> {
+        crate::privacy_workspace::finalize_folder(self, workspace).await
+    }
+
     async fn ingest_folder_with_scope(
         &self,
         folder: &Path,
