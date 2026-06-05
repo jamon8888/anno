@@ -267,6 +267,27 @@ fn default_index_profile() -> String {
     "general".to_string()
 }
 
+fn default_true() -> bool {
+    true
+}
+
+/// Parameters for `privacy_prepare_folder`.
+#[derive(Debug, Clone, Deserialize, schemars::JsonSchema)]
+pub struct PrivacyPrepareFolderParams {
+    /// Local source root to prepare.
+    pub source_root: String,
+    /// Recurse into subfolders.
+    #[serde(default = "default_true")]
+    pub recursive: bool,
+}
+
+/// Parameters for `privacy_finalize_folder`.
+#[derive(Debug, Clone, Deserialize, schemars::JsonSchema)]
+pub struct PrivacyFinalizeFolderParams {
+    /// Local `vault` workspace path.
+    pub workspace: String,
+}
+
 fn validate_profile(profile: &str) -> Result<(), String> {
     match profile {
         "general" | "legal" | "all" => Ok(()),
@@ -1545,6 +1566,43 @@ impl AnnoRagServer {
         serde_json::to_value(wire).map_err(|e| e.to_string())
     }
 
+    async fn privacy_prepare_folder_impl(
+        &self,
+        p: PrivacyPrepareFolderParams,
+    ) -> Result<serde_json::Value, String> {
+        let pipeline = self.pipeline().await.map_err(|e| e.to_string())?;
+        let summary = pipeline
+            .privacy_prepare_folder(std::path::Path::new(&p.source_root), p.recursive)
+            .await
+            .map_err(|e| e.to_string())?;
+        serde_json::to_value(summary).map_err(|e| e.to_string())
+    }
+
+    async fn privacy_finalize_folder_impl(
+        &self,
+        p: PrivacyFinalizeFolderParams,
+    ) -> Result<serde_json::Value, String> {
+        let pipeline = self.pipeline().await.map_err(|e| e.to_string())?;
+        let summary = pipeline
+            .privacy_finalize_folder(std::path::Path::new(&p.workspace))
+            .await
+            .map_err(|e| e.to_string())?;
+        serde_json::to_value(summary).map_err(|e| e.to_string())
+    }
+
+    async fn privacy_status_impl(&self) -> serde_json::Value {
+        serde_json::json!({
+            "ok": true,
+            "tools": [
+                "privacy_prepare_folder",
+                "privacy_finalize_folder",
+                "privacy_status"
+            ],
+            "privacy_boundary": "local",
+            "returns_document_content": false
+        })
+    }
+
     async fn legal_ingest_impl(
         &self,
         p: LegalIngestParams,
@@ -2642,6 +2700,47 @@ impl AnnoRagServer {
     )]
     async fn status(&self) -> String {
         self.status_impl_routing().await
+    }
+
+    /// Prepare a local folder for privacy review in a generated `vault` workspace.
+    #[tool(
+        description = "Prepare a local folder for privacy review. Creates a local vault workspace with working Word docs, anonymized docs, reports, and a manifest. Returns paths and counts only."
+    )]
+    async fn privacy_prepare_folder(
+        &self,
+        Parameters(p): Parameters<PrivacyPrepareFolderParams>,
+    ) -> String {
+        match self.privacy_prepare_folder_impl(p).await {
+            Ok(value) => {
+                serde_json::to_string_pretty(&value).unwrap_or_else(|e| format!("Error: {e}"))
+            }
+            Err(e) => format!("Error: {e}"),
+        }
+    }
+
+    /// Finalize a local privacy workspace after user Word edits.
+    #[tool(
+        description = "Finalize a local vault workspace after Word edits. Reads 'à masquer' and 'à garder' comments locally, regenerates anonymized docs, and returns paths and counts only."
+    )]
+    async fn privacy_finalize_folder(
+        &self,
+        Parameters(p): Parameters<PrivacyFinalizeFolderParams>,
+    ) -> String {
+        match self.privacy_finalize_folder_impl(p).await {
+            Ok(value) => {
+                serde_json::to_string_pretty(&value).unwrap_or_else(|e| format!("Error: {e}"))
+            }
+            Err(e) => format!("Error: {e}"),
+        }
+    }
+
+    /// Report privacy workflow capabilities without loading models.
+    #[tool(
+        description = "Privacy workflow status and capabilities. Does not return document content."
+    )]
+    async fn privacy_status(&self) -> String {
+        serde_json::to_string_pretty(&self.privacy_status_impl().await)
+            .unwrap_or_else(|e| format!("Error: {e}"))
     }
 
     /// Replace pseudo-tokens in text back with original PII from the vault.

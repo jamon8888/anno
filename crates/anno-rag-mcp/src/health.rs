@@ -110,6 +110,9 @@ pub fn all_tool_names() -> Vec<String> {
         "corpus_health",
         "status",
         "forget",
+        "privacy_prepare_folder",
+        "privacy_finalize_folder",
+        "privacy_status",
         // Legacy retrieval
         "legacy_search",
         "rehydrate",
