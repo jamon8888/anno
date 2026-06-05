@@ -45,7 +45,7 @@ Modify:
 - `scripts/release/package-unix.sh` - include setup scripts in release archives.
 - `docs/getting-started/claude-desktop-cowork.md` - replace future-tense setup wording after implementation.
 - `docs/release/README-release.md` - make `setup-mcp` the primary release install path after implementation.
-- `docs/reference/commands.md` - document `anno-rag setup-mcp`.
+- `../../reference/commands.md` - document `anno-rag setup-mcp`.
 
 Do not modify:
 
@@ -1630,7 +1630,7 @@ git commit -m "chore: package mcp setup scripts"
 **Files:**
 - Modify: `docs/getting-started/claude-desktop-cowork.md`
 - Modify: `docs/release/README-release.md`
-- Modify: `docs/reference/commands.md`
+- Modify: `../../reference/commands.md`
 - Modify: `README.md`
 
 - [ ] **Step 1: Update the getting-started guide**
@@ -1676,7 +1676,7 @@ macOS:
 
 - [ ] **Step 3: Update commands reference**
 
-Add this row to the common commands table in `docs/reference/commands.md`:
+Add this row to the common commands table in `../../reference/commands.md`:
 
 ```markdown
 | `anno-rag setup-mcp` | Configure local MCP clients for Claude Desktop/Cowork and Claude Code. | Use `--target all` for the normal local setup; use `--target manual --dry-run` to print config without writing files. |
