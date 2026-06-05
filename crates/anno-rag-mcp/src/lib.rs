@@ -631,6 +631,8 @@ pub struct LegalIngestParams {
 struct LegalIngestResult {
     ingested: usize,
     folder: String,
+    output_root: String,
+    output_scope: String,
 }
 
 /// Parameters for the `legal_search` tool.
@@ -1552,7 +1554,9 @@ impl AnnoRagServer {
     ) -> Result<serde_json::Value, String> {
         let pipeline = self.pipeline().await.map_err(|e| e.to_string())?;
         let folder = std::path::Path::new(&p.folder);
-        let out = folder.join("anon");
+        let out = corpus_id
+            .map(|corpus_id| corpus_legal_output_dir(self.cfg.as_ref(), corpus_id))
+            .unwrap_or_else(|| folder.join("anon"));
         let start = std::time::Instant::now();
         let ingest_result = if let Some(corpus_id) = corpus_id {
             pipeline
@@ -1616,6 +1620,12 @@ impl AnnoRagServer {
                 serde_json::to_value(LegalIngestResult {
                     ingested: summary.ingested,
                     folder: p.folder,
+                    output_root: out.display().to_string(),
+                    output_scope: if corpus_id.is_some() {
+                        "corpus_internal".to_string()
+                    } else {
+                        "legacy_source_anon".to_string()
+                    },
                 })
                 .map_err(|e| e.to_string())
             }
@@ -2534,6 +2544,17 @@ fn legal_folder_id(path: &str) -> String {
         .simple()
         .to_string();
     format!("legal_folder_{}", &stable[..12])
+}
+
+fn corpus_legal_output_dir(
+    cfg: &AnnoRagConfig,
+    corpus_id: anno_corpus_core::CorpusId,
+) -> std::path::PathBuf {
+    cfg.data_dir
+        .join("corpora")
+        .join(corpus_id.as_string())
+        .join("outputs")
+        .join("legal-anon")
 }
 
 // ---- Tool router ----
@@ -4896,6 +4917,27 @@ mod lazy_tests {
         assert_eq!(id.len(), "legal_folder_".len() + 12);
         assert!(!id.contains("client-a"));
         assert!(!id.contains(path));
+    }
+
+    #[test]
+    fn corpus_legal_output_dir_is_internal_and_corpus_scoped() {
+        let cfg = AnnoRagConfig {
+            data_dir: std::path::PathBuf::from("C:/anno-data"),
+            ..AnnoRagConfig::default()
+        };
+        let corpus_id = anno_corpus_core::CorpusId::from_normalized_root("C:/clients/matter-a");
+
+        let out = corpus_legal_output_dir(&cfg, corpus_id);
+
+        assert_eq!(
+            out,
+            std::path::PathBuf::from("C:/anno-data")
+                .join("corpora")
+                .join(corpus_id.as_string())
+                .join("outputs")
+                .join("legal-anon")
+        );
+        assert!(!out.starts_with("C:/clients/matter-a"));
     }
 
     #[tokio::test]
