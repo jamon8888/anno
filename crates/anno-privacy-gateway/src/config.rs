@@ -151,9 +151,32 @@ impl GatewayConfig {
             cfg.audit_hmac_key_hex = Some(k);
         }
         if let Ok(t) = std::env::var("ANNO_GATEWAY_BEARER_TOKEN") {
-            cfg.bearer_token = Some(t);
+            let token = t.trim();
+            if !token.is_empty() {
+                cfg.bearer_token = Some(token.to_string());
+            }
         }
         cfg
+    }
+
+    /// Validate cross-field security constraints.
+    ///
+    /// Loopback deployments may rely on the local network boundary. Any
+    /// non-loopback listener must have an explicit bearer token.
+    pub fn validate_security(&self) -> crate::Result<()> {
+        if !self.listen.ip().is_loopback()
+            && self
+                .bearer_token
+                .as_deref()
+                .is_none_or(|token| token.trim().is_empty())
+        {
+            return Err(crate::Error::Config(format!(
+                "ANNO_GATEWAY_BEARER_TOKEN is required when ANNO_GATEWAY_LISTEN binds non-loopback address {}",
+                self.listen
+            )));
+        }
+
+        Ok(())
     }
 }
 

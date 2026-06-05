@@ -7,7 +7,8 @@ license      = "MIT OR Apache-2.0"
 description  = "Local GDPR-compliant document anonymizer + RAG service (French legal)"
 
 [features]
-default = []
+default = ["heuristic-fr"]
+heuristic-fr = ["anno/heuristic-fr"]
 # Legacy flag for the fork-to-system-tesseract runtime path.
 ocr = []
 # Apple Silicon Metal acceleration for Candle-backed embedder/detector paths.

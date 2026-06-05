@@ -16,8 +16,8 @@ use crate::server::AppState;
 ///
 /// # Errors
 /// Returns `401 Unauthorized` if the header is missing or the token mismatches.
-/// Returns `500 Internal Server Error` if the gateway is configured without a
-/// bearer token at all (an operator misconfiguration).
+/// When no bearer token is configured, this middleware is a no-op. Startup
+/// validation rejects that configuration for non-loopback listeners.
 pub async fn require_bearer(
     State(state): State<AppState>,
     req: Request<Body>,

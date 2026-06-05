@@ -53,6 +53,7 @@ impl AppState {
 
     /// Build app state and validate persistent vault configuration.
     pub fn try_new(config: GatewayConfig) -> Result<Self> {
+        config.validate_security()?;
         let privacy = PrivacyEngine::from_config(&config)?;
         let audit: Arc<dyn crate::audit::AuditSink> =
             match (&config.audit_dir, &config.audit_hmac_key_hex) {
@@ -110,9 +111,9 @@ impl AppState {
 /// Build the gateway router.
 ///
 /// `/health` is public; everything under `/v1/*` is gated by the bearer-token
-/// middleware ([`crate::auth::require_bearer`]). When `config.bearer_token`
-/// is `None`, every protected request returns 500 — the operator must
-/// either configure a token or front the gateway with their own auth layer.
+/// middleware ([`crate::auth::require_bearer`]). Loopback-only deployments may
+/// run without a token; non-loopback listeners are rejected during app-state
+/// initialization unless `config.bearer_token` is set.
 pub fn router(state: AppState) -> Router {
     let public = Router::new().route("/health", get(health));
 
@@ -490,6 +491,58 @@ mod tests {
     #[derive(Clone)]
     struct MockState {
         captured: Arc<Mutex<Option<Value>>>,
+    }
+
+    #[test]
+    fn app_state_rejects_non_loopback_listen_without_bearer_token() {
+        let config = GatewayConfig {
+            listen: "0.0.0.0:3000".parse().unwrap(),
+            bearer_token: None,
+            ..GatewayConfig::default()
+        };
+
+        let err = match AppState::try_new(config) {
+            Ok(_) => panic!("non-loopback gateway without bearer token must be rejected"),
+            Err(err) => err,
+        };
+
+        assert!(
+            err.to_string().contains("ANNO_GATEWAY_BEARER_TOKEN"),
+            "error should point operators to the missing token: {err}"
+        );
+    }
+
+    #[test]
+    fn app_state_allows_loopback_listen_without_bearer_token() {
+        let config = GatewayConfig {
+            listen: "127.0.0.1:3000".parse().unwrap(),
+            bearer_token: None,
+            ..GatewayConfig::default()
+        };
+
+        assert!(AppState::try_new(config).is_ok());
+    }
+
+    #[test]
+    fn app_state_allows_non_loopback_listen_with_bearer_token() {
+        let config = GatewayConfig {
+            listen: "0.0.0.0:3000".parse().unwrap(),
+            bearer_token: Some("secret".into()),
+            ..GatewayConfig::default()
+        };
+
+        assert!(AppState::try_new(config).is_ok());
+    }
+
+    #[test]
+    fn app_state_rejects_non_loopback_listen_with_empty_bearer_token() {
+        let config = GatewayConfig {
+            listen: "0.0.0.0:3000".parse().unwrap(),
+            bearer_token: Some("  ".into()),
+            ..GatewayConfig::default()
+        };
+
+        assert!(AppState::try_new(config).is_err());
     }
 
     async fn mock_messages(State(state): State<MockState>, Json(body): Json<Value>) -> Json<Value> {

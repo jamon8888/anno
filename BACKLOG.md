@@ -157,7 +157,7 @@ See `crates/anno-rag/docs/dev-notes/bench-v0.2-piighost-test.md` for the measure
 - **Estimate:** S (2-3h incl. recall verification)
 
 ### #027 — `dirs::home_dir()` ignores `HOME` env override on WSL
-- **Why:** During bench, `HOME=/tmp/anno-rag-bench-home anno-rag ingest …` still wrote to `/home/architecte/.anno-rag/`. The `dirs` crate reads `/etc/passwd` on Linux and ignores `$HOME` when the binary is invoked from a different shell context.
+- **Why:** During bench, `HOME=/tmp/anno-rag-bench-home anno-rag ingest …` still wrote to the account home directory instead of the requested temporary home. The `dirs` crate reads `/etc/passwd` on Linux and ignores `$HOME` when the binary is invoked from a different shell context.
 - **Fix:** In `AnnoRagConfig::data_dir()`, prefer `std::env::var("ANNO_RAG_DATA_DIR")` → `std::env::var("HOME")` → `dirs::home_dir()`. Tracked alongside #010 (TOML config loader).
 - **Estimate:** XS (15min)
 

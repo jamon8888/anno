@@ -6,7 +6,13 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Semver: pre-1.
 
 ## [Unreleased] — v0.3 in progress
 
-In flight per `BACKLOG.md` items #001-#005:
+### Phase A: Deterministic Stack (MERGED)
+- **Entity validators** — Luhn (SIRET, card_number), IBAN mod-97 (ISO 13616), NIR control key (Corsica 2A/2B), date range, IP address, email RFC-light, postal code (France mainland + DOM)
+- **GdprLayerSet** — tiered detection via `ANNO_GDPR_LAYERS` env: `basic` (regex+NER only), `defense` (+ FR heuristics + validators, default), `shadow` (Phase C placeholder), `full` (Phase D placeholder)
+- **HeuristicFrNer backend** — deterministic extraction for: French legal org forms (SAS/SARL/EURL/SCI/…), FR postal addresses (voie keywords), FR dates with date_of_birth context, international IBANs with mod-97 verification
+- **Integration into detect_inner** — validators and heuristics active on defense+ layers; rejection counters emitted to audit
+
+### Backlog items (#001-#005) still in flight:
 - Replace `StackedNER::default()` with `GLiNER2Fastino::from_pretrained("SemplificaAI/gliner2-multi-v1-onnx")` for reliable French name detection
 - `extract_structure` for Tabular Review v1.1 foundation
 - Chunk-level clause classifier (`clause_type` metadata)

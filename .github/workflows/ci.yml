@@ -867,12 +867,11 @@ jobs:
           name: eval-full-report
           path: eval-full-report.md
   # ==========================================================================
-  # Security audit (cargo-audit - legacy, kept for compatibility)
+  # Security audit (cargo-audit)
   # ==========================================================================
   audit:
     name: Security Audit (cargo-audit)
     runs-on: ubuntu-latest
-    continue-on-error: true
     env:
       RUSTC_WRAPPER: ""
     steps:
@@ -883,9 +882,8 @@ jobs:
       - uses: rustsec/audit-check@v2
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
-          # Note: Unmaintained crate warnings (number_prefix, paste) are expected
-          # This job will show warnings but won't fail the workflow
-          # Actual security vulnerabilities would still be reported
+          # Unmaintained crate policy lives in deny.toml. This job is the
+          # blocking RustSec vulnerability gate.
 
   semver-checks:
     name: Cargo Semver Checks
