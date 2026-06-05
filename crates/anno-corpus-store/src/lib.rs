@@ -6,5 +6,6 @@ pub mod store;
 
 pub use error::{Error, Result};
 pub use store::{
-    CorpusBindingRow, CorpusDocumentRow, CorpusRow, CorpusStore, RegisterCorpusResult,
+    CorpusBindingRow, CorpusDocumentRow, CorpusRow, CorpusStore, CorpusSyncStateRow,
+    RegisterCorpusResult,
 };

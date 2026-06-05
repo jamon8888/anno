@@ -151,12 +151,34 @@ fn is_supported(path: &Path) -> bool {
 }
 
 fn is_generated_anno_dir(root: &Path, path: &Path) -> bool {
+    if path == root {
+        return false;
+    }
+    if path
+        .file_name()
+        .and_then(|name| name.to_str())
+        .is_some_and(is_generated_anno_dir_name)
+    {
+        return true;
+    }
     path.strip_prefix(root)
         .ok()
-        .and_then(|relative| relative.components().next())
-        .and_then(|component| component.as_os_str().to_str())
-        .map(|name| name.eq_ignore_ascii_case("anon"))
+        .map(|relative| {
+            relative.components().any(|component| {
+                component
+                    .as_os_str()
+                    .to_str()
+                    .is_some_and(is_generated_anno_dir_name)
+            })
+        })
         .unwrap_or(false)
+}
+
+fn is_generated_anno_dir_name(name: &str) -> bool {
+    matches!(
+        name.to_ascii_lowercase().as_str(),
+        "anon" | ".anno" | ".anno-rag"
+    )
 }
 
 fn is_generated_anno_file(path: &Path) -> bool {
@@ -231,6 +253,30 @@ mod tests {
             b"# generated nested",
         )
         .expect("generated nested output");
+        fs::create_dir_all(dir.path().join("nested").join("anon")).expect("nested anon dir");
+        fs::write(
+            dir.path().join("nested").join("anon").join("source.md"),
+            b"# generated nested anon",
+        )
+        .expect("generated nested anon");
+        fs::create_dir_all(dir.path().join("outputs")).expect("outputs dir");
+        fs::write(
+            dir.path().join("outputs").join("client-output.md"),
+            b"# legitimate client output",
+        )
+        .expect("client output");
+        fs::create_dir_all(dir.path().join(".anno")).expect(".anno dir");
+        fs::write(
+            dir.path().join(".anno").join("state.md"),
+            b"# generated state",
+        )
+        .expect(".anno state");
+        fs::create_dir_all(dir.path().join(".anno-rag")).expect(".anno-rag dir");
+        fs::write(
+            dir.path().join(".anno-rag").join("state.md"),
+            b"# generated rag state",
+        )
+        .expect(".anno-rag state");
 
         let src = LocalFolderSource::new(dir.path());
         let objects = src.discover(&DiscoverBudget::default()).expect("discover");
@@ -245,7 +291,7 @@ mod tests {
                     .to_string()
             })
             .collect();
-        assert_eq!(names, vec!["source.md"]);
+        assert_eq!(names, vec!["client-output.md", "source.md"]);
     }
 
     #[test]

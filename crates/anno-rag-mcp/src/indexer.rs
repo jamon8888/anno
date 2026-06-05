@@ -31,6 +31,25 @@ pub struct SyncSummary {
     pub truncated: bool,
 }
 
+/// Budget knobs for a knowledge sync run.
+#[derive(Debug, Clone, Copy)]
+pub struct SyncOptions {
+    /// Maximum files to discover.
+    pub max_files: usize,
+    /// Optional wall-clock budget in milliseconds.
+    pub max_millis: Option<u64>,
+}
+
+impl Default for SyncOptions {
+    fn default() -> Self {
+        let budget = DiscoverBudget::default();
+        Self {
+            max_files: budget.max_files,
+            max_millis: None,
+        }
+    }
+}
+
 /// Sync one local-folder scope end to end.
 ///
 /// # Errors
@@ -42,9 +61,14 @@ pub async fn sync_local_scope(
     cfg: &AnnoRagConfig,
     source: &SourceRow,
     scope: &ScopeRow,
+    options: SyncOptions,
 ) -> Result<SyncSummary, String> {
     let mut summary = SyncSummary::default();
-    let budget = DiscoverBudget::default();
+    let budget = DiscoverBudget {
+        max_files: options.max_files,
+        ..DiscoverBudget::default()
+    };
+    let started = std::time::Instant::now();
     let src = LocalFolderSource::new(&scope.provider_key);
     let discovered = src
         .discover(&budget)
@@ -72,6 +96,14 @@ pub async fn sync_local_scope(
                 summary.failed += 1;
                 continue;
             }
+        }
+
+        if options
+            .max_millis
+            .is_some_and(|limit| started.elapsed().as_millis() as u64 >= limit)
+        {
+            summary.truncated = true;
+            break;
         }
 
         // Extract via Kreuzberg.
@@ -171,5 +203,13 @@ mod tests {
         assert_eq!(s.fts_ready, 0);
         assert_eq!(s.failed, 0);
         assert!(!s.truncated);
+    }
+
+    #[test]
+    fn sync_options_default_matches_discovery_budget() {
+        let options = SyncOptions::default();
+        let budget = DiscoverBudget::default();
+        assert_eq!(options.max_files, budget.max_files);
+        assert_eq!(options.max_millis, None);
     }
 }

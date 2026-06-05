@@ -24,6 +24,8 @@ pub struct CorpusHealthWire {
     pub corpus_id: String,
     /// Registry health field.
     pub health: String,
+    /// Freshness from the last sync state row.
+    pub freshness: String,
     /// Count of knowledge source bindings.
     pub knowledge_sources: usize,
     /// Count of legal document bindings.
@@ -114,9 +116,15 @@ impl CorpusService {
             .store
             .document_ids_for_corpus(corpus_id, "legal")?
             .len();
+        let freshness = self
+            .store
+            .sync_state(corpus_id)?
+            .map(|state| state.freshness)
+            .unwrap_or_else(|| "unknown".to_string());
         Ok(CorpusHealthWire {
             corpus_id: corpus.corpus_id,
             health: corpus.health,
+            freshness,
             knowledge_sources,
             legal_documents,
             tabular_reviews,
