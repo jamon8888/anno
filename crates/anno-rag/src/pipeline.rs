@@ -1573,18 +1573,15 @@ fn is_anno_generated_output(source_root: &Path, path: &Path, output_dir: &Path) 
         return true;
     }
     if path != source_root
-        && path
-            .strip_prefix(source_root)
-            .ok()
-            .is_some_and(|relative| {
-                relative.components().any(|component| {
-                    component
-                        .as_os_str()
-                        .to_str()
-                        .map(is_anno_generated_dir_name)
-                        .unwrap_or(false)
-                })
+        && path.strip_prefix(source_root).ok().is_some_and(|relative| {
+            relative.components().any(|component| {
+                component
+                    .as_os_str()
+                    .to_str()
+                    .map(is_anno_generated_dir_name)
+                    .unwrap_or(false)
             })
+        })
     {
         return true;
     }
@@ -2506,10 +2503,7 @@ mod tests {
         .expect("generated nested");
         std::fs::create_dir_all(dir.path().join("nested").join("anon")).expect("nested anon dir");
         std::fs::write(
-            dir.path()
-                .join("nested")
-                .join("anon")
-                .join("ignored.md"),
+            dir.path().join("nested").join("anon").join("ignored.md"),
             b"# generated nested anon",
         )
         .expect("generated nested anon");

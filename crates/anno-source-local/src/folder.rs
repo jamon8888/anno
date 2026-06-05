@@ -255,10 +255,7 @@ mod tests {
         .expect("generated nested output");
         fs::create_dir_all(dir.path().join("nested").join("anon")).expect("nested anon dir");
         fs::write(
-            dir.path()
-                .join("nested")
-                .join("anon")
-                .join("source.md"),
+            dir.path().join("nested").join("anon").join("source.md"),
             b"# generated nested anon",
         )
         .expect("generated nested anon");
