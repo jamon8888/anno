@@ -1,5 +1,7 @@
 use anno_rag::privacy_artifacts::PrivacyWorkspacePaths;
-use anno_rag::privacy_workspace::{build_relative_output_paths, PrivacyDocumentOutputPaths};
+use anno_rag::privacy_workspace::{
+    build_relative_output_paths, finalize_manifest_only_for_test, PrivacyDocumentOutputPaths,
+};
 use anno_rag::{config::AnnoRagConfig, Pipeline};
 use std::path::Path;
 
@@ -79,4 +81,28 @@ async fn prepare_folder_creates_working_anonymized_reports_and_manifest() {
         .join("contract.anon.docx")
         .exists());
     assert!(source_root.join("vault").join("manifest.json").exists());
+}
+
+#[test]
+fn finalize_manifest_skips_unchanged_working_hashes() {
+    let mut manifest = anno_rag::privacy_artifacts::WorkspaceManifest::new("C:/Matter");
+    manifest
+        .documents
+        .push(anno_rag::privacy_artifacts::ManifestDocument {
+            document_id: "doc-1".to_string(),
+            relative_path: "a.txt".to_string(),
+            source_path: "C:/Matter/a.txt".to_string(),
+            working_path: "unused".to_string(),
+            anonymized_path: "unused".to_string(),
+            source_hash: "source".to_string(),
+            working_hash: Some("same".to_string()),
+            last_indexed_hash: Some("same".to_string()),
+            status: "prepared".to_string(),
+            counts: Default::default(),
+        });
+
+    let summary = finalize_manifest_only_for_test(&manifest, &[("doc-1", "same")]);
+
+    assert_eq!(summary.documents_changed, 0);
+    assert_eq!(summary.documents_reindexed, 0);
 }

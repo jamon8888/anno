@@ -229,26 +229,159 @@ async fn prepare_one_document(
     })
 }
 
+/// Test helper for manifest hash comparison.
+#[doc(hidden)]
+#[must_use]
+pub fn finalize_manifest_only_for_test(
+    manifest: &WorkspaceManifest,
+    working_hashes: &[(&str, &str)],
+) -> PrivacyFinalizeSummary {
+    let changed = manifest
+        .documents
+        .iter()
+        .filter(|doc| {
+            let current = working_hashes
+                .iter()
+                .find(|(id, _)| *id == doc.document_id)
+                .map(|(_, hash)| (*hash).to_string());
+            current.is_some() && current != doc.working_hash
+        })
+        .count();
+
+    PrivacyFinalizeSummary {
+        workspace: "test".to_string(),
+        documents_changed: changed,
+        documents_reindexed: changed,
+        to_mask: 0,
+        to_keep: 0,
+        anonymized_folder: "test/02-anonymized-documents".to_string(),
+        shareable_report: "test/03-reports/shareable_report.docx".to_string(),
+    }
+}
+
 /// Finalize a folder privacy workspace.
 ///
 /// # Errors
-/// Reserved for future finalize implementation failures.
+/// Returns privacy, extraction, detection, vault, or IO errors.
 pub async fn finalize_folder(
-    _pipeline: &crate::pipeline::Pipeline,
+    pipeline: &crate::pipeline::Pipeline,
     workspace: &Path,
 ) -> Result<PrivacyFinalizeSummary> {
+    let manifest_path = workspace.join(crate::privacy_artifacts::MANIFEST_FILE);
+    let manifest_json = std::fs::read_to_string(&manifest_path)?;
+    let mut manifest: WorkspaceManifest = serde_json::from_str(&manifest_json)
+        .map_err(|e| crate::Error::Privacy(format!("parse manifest: {e}")))?;
+
+    let paths = PrivacyWorkspacePaths {
+        source_root: PathBuf::from(&manifest.source_root),
+        workspace: workspace.to_path_buf(),
+        working: workspace.join(crate::privacy_artifacts::WORKING_DIR),
+        anonymized: workspace.join(crate::privacy_artifacts::ANONYMIZED_DIR),
+        reports: workspace.join(crate::privacy_artifacts::REPORTS_DIR),
+        cache: workspace.join(crate::privacy_artifacts::CACHE_DIR),
+        manifest: manifest_path,
+    };
+
+    let mut changed = 0usize;
+    let mut reindexed = 0usize;
+    let mut to_mask = 0usize;
+    let mut to_keep = 0usize;
+
+    for doc in &mut manifest.documents {
+        let working_path = PathBuf::from(&doc.working_path);
+        let working_bytes = std::fs::read(&working_path)?;
+        let working_hash = crate::privacy_artifacts::sha256_hex(&working_bytes);
+        if doc.working_hash.as_deref() == Some(working_hash.as_str()) {
+            continue;
+        }
+        changed += 1;
+
+        let instructions = crate::docx_instructions::read_docx_instructions(&working_path)?;
+        let decisions: Vec<crate::privacy_decisions::UserDecision> = instructions
+            .iter()
+            .map(|instruction| crate::privacy_decisions::UserDecision {
+                action: instruction.action,
+                selected_text: instruction.selected_text.clone(),
+            })
+            .collect();
+        to_mask += decisions
+            .iter()
+            .filter(|d| d.action == crate::docx_instructions::InstructionAction::Mask)
+            .count();
+        to_keep += decisions
+            .iter()
+            .filter(|d| d.action == crate::docx_instructions::InstructionAction::Keep)
+            .count();
+
+        let extracted = crate::ingest::extract(&working_path, pipeline.config()).await?;
+        let detector = pipeline.detector_for_privacy()?;
+        let no_legal = Vec::new();
+        let no_thresholds = std::collections::HashMap::new();
+        let mut pseudo_sections = Vec::new();
+        let mut detected_count = 0usize;
+        for chunk in &extracted.chunks {
+            let bundle = detector.detect_for_ingest(&chunk.text, &no_legal, &no_thresholds)?;
+            detected_count += bundle.pii.len();
+            let pii =
+                crate::privacy_decisions::apply_user_decisions(&chunk.text, bundle.pii, &decisions);
+            let report = pipeline
+                .vault_for_privacy()
+                .pseudonymize_with_report_map(&chunk.text, &pii)
+                .await?;
+            pseudo_sections.push(crate::privacy_docx::NormalizedSection {
+                heading: format!("Chunk {}", chunk.idx + 1),
+                body: report.text,
+            });
+        }
+
+        let anonymized_path = PathBuf::from(&doc.anonymized_path);
+        let anonymized_doc = crate::privacy_docx::NormalizedDocx {
+            title: doc.relative_path.clone(),
+            metadata: vec![
+                ("Source".to_string(), doc.relative_path.clone()),
+                ("PII".to_string(), "Anonymized".to_string()),
+            ],
+            sections: pseudo_sections,
+        };
+        crate::privacy_docx::write_normalized_docx(&anonymized_path, &anonymized_doc)?;
+
+        doc.working_hash = Some(working_hash.clone());
+        doc.last_indexed_hash = Some(working_hash);
+        doc.status = "finalized".to_string();
+        doc.counts.detected = detected_count;
+        doc.counts.forced_mask = decisions
+            .iter()
+            .filter(|d| d.action == crate::docx_instructions::InstructionAction::Mask)
+            .count();
+        doc.counts.kept_visible = decisions
+            .iter()
+            .filter(|d| d.action == crate::docx_instructions::InstructionAction::Keep)
+            .count();
+        reindexed += 1;
+    }
+
+    manifest.updated_at = chrono::Utc::now();
+    write_manifest(&paths.manifest, &manifest)?;
+    crate::privacy_docx::write_shareable_report(
+        &paths.reports.join("shareable_report.docx"),
+        "Privacy Finalization Report",
+        &[
+            ("Documents changed".to_string(), changed.to_string()),
+            ("Documents reindexed".to_string(), reindexed.to_string()),
+            ("Manual mask decisions".to_string(), to_mask.to_string()),
+            ("Kept visible exceptions".to_string(), to_keep.to_string()),
+        ],
+    )?;
+
     Ok(PrivacyFinalizeSummary {
-        workspace: workspace.display().to_string(),
-        documents_changed: 0,
-        documents_reindexed: 0,
-        to_mask: 0,
-        to_keep: 0,
-        anonymized_folder: workspace
-            .join(crate::privacy_artifacts::ANONYMIZED_DIR)
-            .display()
-            .to_string(),
-        shareable_report: workspace
-            .join(crate::privacy_artifacts::REPORTS_DIR)
+        workspace: paths.workspace.display().to_string(),
+        documents_changed: changed,
+        documents_reindexed: reindexed,
+        to_mask,
+        to_keep,
+        anonymized_folder: paths.anonymized.display().to_string(),
+        shareable_report: paths
+            .reports
             .join("shareable_report.docx")
             .display()
             .to_string(),
