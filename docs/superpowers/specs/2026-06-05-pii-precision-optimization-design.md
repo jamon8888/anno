@@ -180,49 +180,100 @@ Validators run after the aggregator. Rejections are emitted as
 
 ### 2. ML stack
 
-#### Single-pass multi-task schema
+#### Single-pass multi-task schema (new API to build)
 
-Currently `detect_for_ingest` calls GLiNER2 once per task. The design moves
-to one composite schema with three tasks executed in a single forward pass.
+Currently every `extract_*` method calls `transformer.transform(text, &[task])`
+with a single-element slice (verified at [`mod.rs`](crates/anno/src/backends/gliner2_fastino/mod.rs)
+lines 331, 561, 619, 686, 744). The architecture supports multi-task
+because `transform` accepts `&[SchemaTask]` and produces one
+`ProcessedRecord` with combined tokens — the encoder runs once on the
+concatenated prompt-and-text input — but no public method exposes this.
+
+The design adds a new public method on `GLiNER2Fastino` that exercises
+this path :
 
 ```rust
-let schema = TaskSchema::new()
-    .with_entities_described(GDPR_NER_LABELS_DESCRIBED)
-    .with_classification(
-        "doc_type",
-        &["contract", "case_file", "lease", "employment",
-          "medical_record", "tax_document", "correspondence"],
-    )
-    .with_structure(
-        "identifiers",
-        &[("siret", FieldType::String),
-          ("national_id_type", FieldType::Choice(&["NIR", "passport", "CNI"])),
-          ("iban_country", FieldType::String)],
-    );
+// New method to add in crates/anno/src/backends/gliner2_fastino/mod.rs
+pub fn extract_composite(
+    &self,
+    text: &str,
+    tasks: &[SchemaTask],
+    label_thresholds: &HashMap<&str, f32>,
+) -> Result<CompositeResult> {
+    let record = self.transformer.transform(text, tasks)?;
+    // For each TaskMapping in record.tasks, dispatch to the appropriate
+    // pipeline (decode_entities, decode_classifications, decode_structure)
+    // reusing the shared encoder output.
+    // ...
+}
 
-let composite = ner.extract_composite(text, &schema)?;
+pub struct CompositeResult {
+    pub entities: Vec<Entity>,
+    pub classifications: HashMap<String, (String, f32)>,
+    pub structures: Vec<ExtractedStructure>,
+}
 ```
+
+Caller side in `detect_for_ingest` :
+
+```rust
+let tasks = vec![
+    SchemaTask::EntitiesDescribed(GDPR_NER_LABELS_DESCRIBED.into()),
+    SchemaTask::Classifications("doc_type".into(), vec![
+        "contract".into(), "case_file".into(), "lease".into(),
+        "employment".into(), "medical_record".into(),
+        "tax_document".into(), "correspondence".into(),
+    ]),
+    SchemaTask::Structures("identifiers".into(), vec![
+        ("siret".into(),          FieldType::String),
+        ("national_id".into(),    FieldType::String),  // Choice not supported Phase 2
+        ("iban_country".into(),   FieldType::String),
+    ]),
+];
+let composite = ner.extract_composite(text, &tasks, &thresholds)?;
+```
+
+Note: `FieldType::Choice` is documented as Phase 2 not-shipped at
+[`mod.rs:62`](crates/anno/src/backends/gliner2_fastino/mod.rs:62) — falls
+back to single-best-span decoding. Use `String` for now and parse the
+output text against an allowlist post-hoc.
 
 Expected gains :
 
-- Forward passes per chunk : 2-3 → **1**
-- Encoder reuse : ~70% saving on the encoder cost
+- Forward passes per chunk : 2-3 → **1** (one shared encoder run)
+- Encoder reuse confirmed by the `ProcessedRecord` structure :
+  combined `input_ids` / `attention_mask` for all task prompts
 - Doc-type aware threshold adjustment via
   `DOC_TYPE_THRESHOLD_ADJUSTMENTS: HashMap<DocType, HashMap<Label, f32>>`
-  (e.g. medical_record relaxes Art. 9 thresholds, contract tightens
-  `contract_party`)
+  applied as a post-decode filter
+
+Implementation cost : moderate. Requires adapting `run_pipeline_dispatch`
+to iterate over all `task_map` entries in `record.tasks`, dispatching
+to the right scorer (`scorer` for Entities, `classifier` for
+Classifications, `count_lstm_fixed`+`scorer` for Structures) on the same
+encoder output. The Candle backend
+([`gliner2_fastino_candle/`](crates/anno/src/backends/gliner2_fastino_candle/))
+must implement the same method for parity on Metal.
 
 #### Discourse centering for French pronouns
 
-The existing `crates/anno/src/discourse/centering.rs` module is
-language-agnostic at the algorithmic core. The design adds a French
-pronoun lexicon :
+The existing `crates/anno/src/discourse/centering.rs` provides
+**low-level primitives only** : `track_centers(utterances, config) ->
+Vec<CenteringState>` at [`centering.rs:615`](crates/anno/src/discourse/centering.rs:615)
+takes a list of utterances (each itself a list of `ForwardCenter`) and
+returns per-utterance backward-looking centers (`Cb`) and transition
+types. **There is no built-in pronoun-resolution API.**
+
+The design must build a pronoun-resolution layer on top of these
+primitives. New module
+`crates/anno-rag/src/discourse_pii.rs` :
 
 ```rust
-PRONOUNS_FR = [
+// Module-level pronoun lexicon (new)
+const PRONOUNS_FR: &[&str] = &[
     "il", "elle", "ils", "elles", "on",
     "lui", "leur", "le", "la", "les", "se",
-    "son", "sa", "ses", "leur", "leurs",
+    "son", "sa", "ses", "leurs",
     "celui-ci", "celle-ci", "ceux-ci", "celles-ci",
     "ce dernier", "cette dernière", "ces derniers",
     "ledit", "ladite", "lesdits", "lesdites",
@@ -230,7 +281,54 @@ PRONOUNS_FR = [
     "le demandeur", "la demanderesse", "le défendeur", "la défenderesse",
     "le bailleur", "le preneur", "le mandant", "le mandataire",
 ];
+
+pub fn resolve_pronouns(
+    text: &str,
+    entities: &[DetectedEntity],
+) -> Result<Vec<VirtualPronounSpan>> {
+    // 1. Segment text into utterances via DiscourseScope::analyze
+    let scope = anno::discourse::types::DiscourseScope::analyze(text);
+    // 2. For each utterance, build Vec<ForwardCenter> from entities that
+    //    overlap with the utterance span (using existing entity offsets
+    //    as the canonical mention anchors).
+    let utterances: Vec<Vec<ForwardCenter>> = build_utterances(&scope, entities);
+    // 3. Run track_centers to get the per-utterance Cb chain.
+    let states = anno::discourse::centering::track_centers(
+        &utterances,
+        &CenteringConfig::default(),
+    );
+    // 4. For each utterance, scan for FR pronouns and project the Cb of
+    //    the current state onto each pronoun match.
+    let mut virtual_spans = vec![];
+    for (i, sentence) in scope.sentences().iter().enumerate() {
+        let state = &states[i];
+        let Some(cb_entity_id) = state.cb else { continue };
+        let antecedent = entities.iter().find(|e| e.id == cb_entity_id);
+        let Some(ante) = antecedent else { continue };
+        if ante.category != EntityCategory::Person { continue }
+        for pronoun_hit in find_pronouns_in(sentence, PRONOUNS_FR) {
+            virtual_spans.push(VirtualPronounSpan {
+                start: pronoun_hit.start,
+                end: pronoun_hit.end,
+                canonical_id: ante.canonical_id.clone(),
+                confidence: 0.75,
+                source: DetectionSource::Centering,
+            });
+        }
+    }
+    Ok(virtual_spans)
+}
 ```
+
+Helpers that must be written :
+
+- `build_utterances(scope, entities)` — maps `Entity` byte spans to
+  `ForwardCenter { entity_id, surface, salience }` per utterance
+- `find_pronouns_in(sentence, lexicon)` — case-insensitive matcher with
+  word boundaries
+- `DiscourseScope::sentences()` — **verify this method exists** on
+  `DiscourseScope`. If only `.analyze()` is public, sentence
+  segmentation must be implemented locally (regex on `[.!?]\s+[A-ZÀÂ...]`).
 
 Resolved pronouns produce `VirtualPronounSpan` entries that inherit the
 antecedent's `canonical_id`. The vault uses the same token for the pronoun
@@ -401,6 +499,30 @@ Each phase is an independently mergeable PR with rollback via feature flag.
 | Review queue floods on Art. 9 | Configurable entropy threshold per label class, default `FlagForReview` only on Art. 9/10 |
 | Calibration runtime memory growth | Reservoir sampling (10k observations max per label) |
 | Snapshot tests block PRs on noise | Snapshots reviewed in PR diff, `cargo insta review` workflow documented |
+| `extract_composite` does not exist — must be written | Phase C deliverable. Includes Candle-backend parity at [`gliner2_fastino_candle/`](crates/anno/src/backends/gliner2_fastino_candle/) so Apple Metal builds match. |
+| `DiscourseScope::sentences()` may not exist | Verify in Phase C kick-off. Fallback : local sentence splitter using `regex` crate. |
+| `FieldType::Choice` not shipped in Phase 2 | Use `FieldType::String` and parse the output against an allowlist post-hoc. Document the gap so a future Phase upgrade can drop the parser. |
+
+## Code-reality audit (2026-06-05)
+
+The following claims were verified against the actual codebase before
+finalising this spec :
+
+- `pii_annotations.toml` contains 35 entries (verified)
+- `centering::track_centers` exists at line 615 (verified)
+- `DiscourseScope::analyze` exists at types.rs:791 (verified)
+- `EntropyFilter::strict()` and `confidence_entropy` exist (verified)
+- `SchemaTransformer::transform` accepts `&[SchemaTask]` (verified —
+  multi-task is supported at the transformer level)
+
+Identified gaps that this spec acknowledges :
+
+- No `extract_composite` method exists. Must be written.
+- No `resolve_pronoun` method exists. The centering module exposes
+  `track_centers` only; the pronoun-mapping layer must be built on top.
+- `FieldType::Choice` is documented as not-shipped in Phase 2.
+- `DiscourseScope::sentences()` not verified — may need a local
+  sentence splitter.
 
 ## Out of scope
 
