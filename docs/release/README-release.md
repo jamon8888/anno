@@ -10,8 +10,11 @@ Current candidate promoted as GitHub "Latest": `v0.11.0-rc.16`.
 | Platform | Asset |
 |---|---|
 | Windows 11 x64 | `hacienda-<tag>-x86_64-pc-windows-msvc.zip` |
-| macOS Intel | `hacienda-<tag>-x86_64-apple-darwin.tar.gz` |
 | macOS Apple Silicon | `hacienda-<tag>-aarch64-apple-darwin.tar.gz` |
+
+macOS Intel archives are not published by the default CPU release because the
+current ONNX Runtime dependency does not provide prebuilt binaries for
+`x86_64-apple-darwin`.
 
 For new tags, the canonical CPU release path is the `Release` workflow generated
 by cargo-dist. It publishes platform archives/installers, checksums, and `.mcpb`
@@ -124,7 +127,7 @@ Open Claude Code and paste:
 
 ```text
 Install Hacienda anno-rag v0.11.0-rc.16 into Claude Desktop/Cowork and Claude Code from https://github.com/jamon8888/anno/releases/tag/v0.11.0-rc.16.
-Download the asset for this machine (Windows x64: hacienda-v0.11.0-rc.16-x86_64-pc-windows-msvc.zip; macOS Intel: hacienda-v0.11.0-rc.16-x86_64-apple-darwin.tar.gz; macOS Apple Silicon: hacienda-v0.11.0-rc.16-aarch64-apple-darwin.tar.gz) plus SHA256SUMS.txt, verify the checksum, extract it to a stable local folder, and update Claude Desktop's claude_desktop_config.json so mcpServers.anno-rag runs the extracted anno-rag binary with args ["mcp"]. If Claude Code is installed, also run claude mcp add --transport stdio --scope user with the same binary and ANNO_MODELS_DIR. If models are not already installed, run anno-rag download-models once and set ANNO_MODELS_DIR to the path it prints. Do not add ANNO_RAG_VAULT_PASSPHRASE unless I provide one. After editing the config, tell me to fully restart Claude Desktop/Cowork and verify anno-rag appears under Connectors.
+Download the asset for this machine (Windows x64: hacienda-v0.11.0-rc.16-x86_64-pc-windows-msvc.zip; macOS Apple Silicon: hacienda-v0.11.0-rc.16-aarch64-apple-darwin.tar.gz) plus SHA256SUMS.txt, verify the checksum, extract it to a stable local folder, and update Claude Desktop's claude_desktop_config.json so mcpServers.anno-rag runs the extracted anno-rag binary with args ["mcp"]. If Claude Code is installed, also run claude mcp add --transport stdio --scope user with the same binary and ANNO_MODELS_DIR. If models are not already installed, run anno-rag download-models once and set ANNO_MODELS_DIR to the path it prints. Do not add ANNO_RAG_VAULT_PASSPHRASE unless I provide one. After editing the config, tell me to fully restart Claude Desktop/Cowork and verify anno-rag appears under Connectors.
 ```
 
 ### Manual Desktop/Cowork config
