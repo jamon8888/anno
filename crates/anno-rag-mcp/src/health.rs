@@ -103,6 +103,7 @@ pub fn all_tool_names() -> Vec<String> {
     let mut tools: Vec<String> = vec![
         // Unified MCP surface (Phase 2.5)
         "index",
+        "sync_corpus",
         "search",
         "sources",
         "corpus_list",
@@ -165,13 +166,14 @@ mod tests {
     fn all_tool_names_lists_new_unified_tools_first() {
         let names = all_tool_names();
         assert_eq!(names[0], "index");
-        assert_eq!(names[1], "search");
-        assert_eq!(names[2], "sources");
-        assert_eq!(names[3], "corpus_list");
-        assert_eq!(names[4], "corpus_get");
-        assert_eq!(names[5], "corpus_health");
-        assert_eq!(names[6], "status");
-        assert_eq!(names[7], "forget");
+        assert_eq!(names[1], "sync_corpus");
+        assert_eq!(names[2], "search");
+        assert_eq!(names[3], "sources");
+        assert_eq!(names[4], "corpus_list");
+        assert_eq!(names[5], "corpus_get");
+        assert_eq!(names[6], "corpus_health");
+        assert_eq!(names[7], "status");
+        assert_eq!(names[8], "forget");
     }
 
     #[test]

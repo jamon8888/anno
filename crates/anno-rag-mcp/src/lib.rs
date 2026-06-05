@@ -11,6 +11,7 @@
 #![warn(missing_docs)]
 
 pub mod corpus;
+mod corpus_sync;
 pub mod health;
 mod indexer;
 pub mod knowledge;
@@ -2030,6 +2031,104 @@ impl AnnoRagServer {
             .await
     }
 
+    async fn sync_corpus_impl(
+        &self,
+        p: crate::corpus_sync::SyncCorpusParams,
+    ) -> Result<crate::corpus_sync::SyncCorpusResult, String> {
+        let corpus_id = crate::corpus::parse_corpus_id(&p.corpus_id)?;
+        let requested = crate::corpus_sync::parse_requested_outputs(&p.outputs)?;
+        let corpus = self.corpus().await.map_err(|e| e.to_string())?;
+        if !corpus.corpus_exists(corpus_id).map_err(|e| e.to_string())? {
+            return Err(format!("unknown corpus_id: {}", p.corpus_id));
+        }
+
+        let bound_sources = corpus
+            .store()
+            .binding_ids_for_corpus_kind(
+                corpus_id,
+                anno_corpus_core::CorpusBindingKind::KnowledgeSource,
+            )
+            .map_err(|e| e.to_string())?;
+        let selected_sources: Vec<String> = match p.sources {
+            Some(sources) => bound_sources
+                .iter()
+                .filter(|source_id| sources.iter().any(|wanted| wanted == *source_id))
+                .cloned()
+                .collect(),
+            None => bound_sources.clone(),
+        };
+
+        let started_at = chrono::Utc::now().to_rfc3339();
+        let mut warnings = Vec::new();
+        let mut total = crate::indexer::SyncSummary::default();
+
+        if requested.knowledge_fast {
+            for source_id in &selected_sources {
+                match self
+                    .knowledge_sync_impl(KnowledgeSyncParams {
+                        source_id: Some(source_id.clone()),
+                    })
+                    .await
+                {
+                    Ok(summary) => {
+                        total.seen += summary.seen;
+                        total.skipped_unchanged += summary.skipped_unchanged;
+                        total.extracted += summary.extracted;
+                        total.pseudonymized += summary.pseudonymized;
+                        total.fts_ready += summary.fts_ready;
+                        total.forgotten += summary.forgotten;
+                        total.failed += summary.failed;
+                        total.truncated |= summary.truncated;
+                    }
+                    Err(error) => warnings.push(format!("knowledge source {source_id}: {error}")),
+                }
+            }
+        }
+
+        let legal = if requested.legal_semantic {
+            serde_json::json!({"ran": false, "reason": "legal_semantic not enabled in this phase"})
+        } else {
+            serde_json::json!({"ran": false, "reason": "output not requested"})
+        };
+        let freshness = if total.failed == 0 && !total.truncated && warnings.is_empty() {
+            "fresh"
+        } else {
+            "maybe_stale"
+        };
+        let finished_at = chrono::Utc::now().to_rfc3339();
+        let summary = serde_json::json!({
+            "knowledge_fast": total,
+            "legal": legal.clone(),
+            "warnings": warnings.clone(),
+        });
+        corpus
+            .store()
+            .upsert_sync_state(
+                corpus_id,
+                freshness,
+                Some(&started_at),
+                Some(&finished_at),
+                Some(total.seen),
+                None,
+                &summary,
+            )
+            .map_err(|e| e.to_string())?;
+
+        Ok(crate::corpus_sync::SyncCorpusResult {
+            ok: true,
+            corpus_id: corpus_id.as_string(),
+            freshness: freshness.to_string(),
+            sources: crate::corpus_sync::SyncSourceSummary {
+                bound_sources: bound_sources.len(),
+                synced_sources: selected_sources.len(),
+                skipped_sources: bound_sources.len().saturating_sub(selected_sources.len()),
+            },
+            knowledge: serde_json::to_value(total).map_err(|e| e.to_string())?,
+            legal,
+            warnings,
+        })
+    }
+
     pub(crate) async fn index_impl_routing(&self, p: IndexParams) -> String {
         if let Err(error) = validate_profile(&p.profile) {
             return serde_json::json!({
@@ -2580,6 +2679,21 @@ impl AnnoRagServer {
     )]
     async fn search(&self, Parameters(p): Parameters<SearchUnifiedParams>) -> String {
         self.search_impl_routing(p).await
+    }
+
+    #[tool(
+        description = "Synchronize a selected corpus. Defaults to knowledge_fast; legal_semantic must be requested explicitly."
+    )]
+    async fn sync_corpus(
+        &self,
+        Parameters(p): Parameters<crate::corpus_sync::SyncCorpusParams>,
+    ) -> String {
+        match self.sync_corpus_impl(p).await {
+            Ok(result) => {
+                serde_json::to_string_pretty(&result).unwrap_or_else(|e| format!("Error: {e}"))
+            }
+            Err(e) => serde_json::json!({"ok": false, "error": e}).to_string(),
+        }
     }
 
     #[tool(
@@ -4750,6 +4864,26 @@ mod lazy_tests {
         assert_eq!(v["mode_used"], "auto");
         assert_eq!(v["scope_modes"]["knowledge"], "fast");
         assert_eq!(v["scope_modes"]["legal"], "semantic");
+    }
+
+    #[tokio::test]
+    async fn sync_corpus_unknown_corpus_returns_structured_error() {
+        let server = AnnoRagServer::new_lazy(AnnoRagConfig::default(), [0u8; 32]);
+        let out = server
+            .sync_corpus(Parameters(crate::corpus_sync::SyncCorpusParams {
+                corpus_id: uuid::Uuid::new_v4().to_string(),
+                sources: None,
+                outputs: vec!["knowledge_fast".to_string()],
+                max_files: None,
+                max_millis: None,
+            }))
+            .await;
+        let parsed: serde_json::Value = serde_json::from_str(&out).expect("json");
+        assert_eq!(parsed["ok"], false);
+        assert!(parsed["error"]
+            .as_str()
+            .unwrap()
+            .contains("unknown corpus_id"));
     }
 
     #[tokio::test]
