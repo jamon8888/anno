@@ -70,6 +70,40 @@ pub struct Vault {
     inner: Arc<Mutex<CpVault>>,
 }
 
+/// Pseudonymized text plus local replacement metadata for reports.
+#[derive(Debug, Clone)]
+pub struct PseudonymizeReport {
+    /// Pseudonymized text.
+    pub text: String,
+    /// Replacement metadata ordered by raw offset.
+    pub replacements: Vec<ReplacementRecord>,
+    /// Offset map used by legal span translation.
+    pub offset_map: PseudoOffsetMap,
+}
+
+/// One replacement made by the vault.
+#[derive(Debug, Clone, PartialEq)]
+pub struct ReplacementRecord {
+    /// Original local cleartext value. Never return through MCP.
+    pub original: String,
+    /// Pseudonym token.
+    pub token: String,
+    /// Entity category display.
+    pub category: String,
+    /// Detection confidence.
+    pub confidence: f64,
+    /// Detection source display.
+    pub source: String,
+    /// Raw-text byte start.
+    pub raw_start: u32,
+    /// Raw-text byte end.
+    pub raw_end: u32,
+    /// Pseudonymized-text byte start.
+    pub pseudo_start: u32,
+    /// Pseudonymized-text byte end.
+    pub pseudo_end: u32,
+}
+
 impl Vault {
     /// Open or create the vault at `path` with the given 32-byte key.
     pub fn open(path: &Path, key: [u8; 32]) -> Result<Self> {
@@ -202,6 +236,77 @@ impl Vault {
         }
 
         Ok((result.text, PseudoOffsetMap { subs }))
+    }
+
+    /// Pseudonymize text and return local replacement metadata for reports.
+    ///
+    /// # Errors
+    /// Returns [`Error::Vault`] on replacer or vault persistence failures.
+    pub async fn pseudonymize_with_report_map(
+        &self,
+        text: &str,
+        entities: &[DetectedEntity],
+    ) -> Result<PseudonymizeReport> {
+        let mut v = self.inner.lock().await;
+        let result = Replacer::pseudonymize(text, entities, &mut v)
+            .map_err(|e| Error::Vault(format!("replacer: {e}")))?;
+        v.save()
+            .map_err(|e| Error::Vault(format!("save after pseudonymize_with_report_map: {e}")))?;
+        drop(v);
+
+        let mut sorted_entities: Vec<&DetectedEntity> = entities.iter().collect();
+        sorted_entities.sort_by_key(|entity| entity.start);
+
+        let mut subs = Vec::with_capacity(sorted_entities.len());
+        let mut replacements = Vec::with_capacity(sorted_entities.len());
+        let mut pseudo_cursor: usize = 0;
+        let mut raw_cursor: usize = 0;
+
+        for entity in sorted_entities {
+            if entity.start < raw_cursor || entity.end > text.len() {
+                continue;
+            }
+
+            pseudo_cursor += entity.start - raw_cursor;
+            let token = result
+                .mappings
+                .iter()
+                .find(|(_, original)| original.as_str() == entity.original)
+                .map(|(token, _)| token.as_str())
+                .ok_or_else(|| {
+                    Error::Vault(format!(
+                        "pseudonymize_with_report_map: no mapping for original {:?}",
+                        entity.original
+                    ))
+                })?;
+            let pseudo_start = pseudo_cursor as u32;
+            let pseudo_end = (pseudo_cursor + token.len()) as u32;
+            subs.push(Substitution {
+                raw_start: entity.start as u32,
+                raw_end: entity.end as u32,
+                pseudo_start,
+                pseudo_end,
+            });
+            replacements.push(ReplacementRecord {
+                original: entity.original.clone(),
+                token: token.to_string(),
+                category: format!("{:?}", entity.category),
+                confidence: entity.confidence,
+                source: format!("{:?}", entity.source),
+                raw_start: entity.start as u32,
+                raw_end: entity.end as u32,
+                pseudo_start,
+                pseudo_end,
+            });
+            pseudo_cursor += token.len();
+            raw_cursor = entity.end;
+        }
+
+        Ok(PseudonymizeReport {
+            text: result.text,
+            replacements,
+            offset_map: PseudoOffsetMap { subs },
+        })
     }
 
     /// Reverse-lookup a pseudo-token to its original.
@@ -818,6 +923,44 @@ mod tests {
             .find(|w| w.starts_with("PERSON_"))
             .expect("token in r2");
         assert_eq!(tok1, tok2);
+    }
+
+    #[tokio::test]
+    async fn pseudonymize_with_report_map_returns_replacements() {
+        let dir = tempfile::tempdir().expect("tempdir");
+        let vault_path = dir.path().join("vault.enc");
+        let vault = Vault::open(&vault_path, [7u8; 32]).expect("vault");
+        let text = "Jean Dupont appelle jean@example.test.";
+        let entities = vec![
+            cloakpipe_core::DetectedEntity {
+                original: "Jean Dupont".to_string(),
+                start: 0,
+                end: 11,
+                category: cloakpipe_core::EntityCategory::Person,
+                confidence: 0.98,
+                source: cloakpipe_core::DetectionSource::Ner,
+            },
+            cloakpipe_core::DetectedEntity {
+                original: "jean@example.test".to_string(),
+                start: 20,
+                end: 37,
+                category: cloakpipe_core::EntityCategory::Email,
+                confidence: 1.0,
+                source: cloakpipe_core::DetectionSource::Pattern,
+            },
+        ];
+
+        let report = vault
+            .pseudonymize_with_report_map(text, &entities)
+            .await
+            .expect("pseudo report");
+
+        assert!(!report.text.contains("Jean Dupont"));
+        assert_eq!(report.replacements.len(), 2);
+        assert_eq!(report.replacements[0].original, "Jean Dupont");
+        assert!(report.replacements[0].token.starts_with("PERSON_"));
+        assert_eq!(report.replacements[0].raw_start, 0);
+        assert_eq!(report.replacements[0].raw_end, 11);
     }
 
     #[tokio::test]
