@@ -217,6 +217,26 @@ impl Pipeline {
         Ok(self.detector.get().expect("just set"))
     }
 
+    /// Borrow config for privacy workspace orchestration.
+    #[must_use]
+    pub fn config(&self) -> &AnnoRagConfig {
+        &self.cfg
+    }
+
+    /// Load detector for privacy workspace orchestration.
+    ///
+    /// # Errors
+    /// Returns detector initialization errors.
+    pub fn detector_for_privacy(&self) -> Result<&crate::detect::Detector> {
+        self.detector_get_or_init().map(|arc| arc.as_ref())
+    }
+
+    /// Borrow vault for privacy workspace orchestration.
+    #[must_use]
+    pub fn vault_for_privacy(&self) -> &crate::vault::Vault {
+        &self.vault
+    }
+
     /// Returns `true` if the embedder has been initialized (model weights loaded).
     #[must_use]
     pub fn embedder_loaded(&self) -> bool {
@@ -1566,6 +1586,16 @@ fn legal_ingest_candidate_paths(
     }
     paths.sort();
     paths
+}
+
+/// Privacy workspace candidate paths. Excludes generated output folders.
+#[must_use]
+pub fn privacy_candidate_paths(
+    folder: &Path,
+    recursive: bool,
+    workspace_dir: &Path,
+) -> Vec<std::path::PathBuf> {
+    legal_ingest_candidate_paths(folder, recursive, workspace_dir)
 }
 
 fn is_supported_ingest_path(path: &Path) -> bool {

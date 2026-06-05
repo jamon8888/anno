@@ -65,6 +65,19 @@ pub fn write_normalized_docx(path: &Path, doc: &NormalizedDocx) -> Result<()> {
     Ok(())
 }
 
+/// Write a simple shareable report with safe counts only.
+///
+/// # Errors
+/// Returns DOCX writing errors.
+pub fn write_shareable_report(path: &Path, title: &str, rows: &[(String, String)]) -> Result<()> {
+    let doc = NormalizedDocx {
+        title: title.to_string(),
+        metadata: rows.to_vec(),
+        sections: Vec::new(),
+    };
+    write_normalized_docx(path, &doc)
+}
+
 fn document_xml(doc: &NormalizedDocx) -> String {
     let mut body = String::new();
     body.push_str(&paragraph(&doc.title, "Title"));

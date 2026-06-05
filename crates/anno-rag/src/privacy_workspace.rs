@@ -102,24 +102,130 @@ pub fn write_manifest(path: &Path, manifest: &WorkspaceManifest) -> Result<()> {
 /// Prepare a folder privacy workspace.
 ///
 /// # Errors
-/// Returns IO or manifest serialization errors.
+/// Returns privacy, extraction, detection, vault, or IO errors.
 pub async fn prepare_folder(
-    _pipeline: &crate::pipeline::Pipeline,
+    pipeline: &crate::pipeline::Pipeline,
     source_root: &Path,
-    _recursive: bool,
+    recursive: bool,
 ) -> Result<PrivacyPrepareSummary> {
     let paths = PrivacyWorkspacePaths::from_source_root(source_root);
     paths.create_all()?;
-    let manifest = WorkspaceManifest::new(source_root.display().to_string());
+
+    let mut manifest = WorkspaceManifest::new(source_root.display().to_string());
+    let source_paths =
+        crate::pipeline::privacy_candidate_paths(source_root, recursive, &paths.workspace);
+    let mut prepared = 0usize;
+    let mut failed = 0usize;
+
+    for source_path in &source_paths {
+        match prepare_one_document(pipeline, &paths, source_path).await {
+            Ok(document) => {
+                prepared += 1;
+                manifest.documents.push(document);
+            }
+            Err(e) => {
+                failed += 1;
+                tracing::warn!(
+                    path = %source_path.display(),
+                    error = %e,
+                    "privacy prepare skipped document"
+                );
+            }
+        }
+    }
+
+    manifest.updated_at = chrono::Utc::now();
     write_manifest(&paths.manifest, &manifest)?;
+    crate::privacy_docx::write_shareable_report(
+        &paths.reports.join("shareable_report.docx"),
+        "Privacy Workspace Report",
+        &[
+            ("Documents seen".to_string(), source_paths.len().to_string()),
+            ("Documents prepared".to_string(), prepared.to_string()),
+            ("Documents failed".to_string(), failed.to_string()),
+        ],
+    )?;
+
     Ok(PrivacyPrepareSummary {
         workspace: paths.workspace.display().to_string(),
         working_folder: paths.working.display().to_string(),
         anonymized_folder: paths.anonymized.display().to_string(),
         reports_folder: paths.reports.display().to_string(),
-        documents_seen: 0,
-        documents_prepared: 0,
-        documents_failed: 0,
+        documents_seen: source_paths.len(),
+        documents_prepared: prepared,
+        documents_failed: failed,
+    })
+}
+
+async fn prepare_one_document(
+    pipeline: &crate::pipeline::Pipeline,
+    paths: &PrivacyWorkspacePaths,
+    source_path: &Path,
+) -> Result<crate::privacy_artifacts::ManifestDocument> {
+    let extracted = crate::ingest::extract(source_path, pipeline.config()).await?;
+    let out_paths = build_relative_output_paths(paths, source_path);
+
+    let working_doc = crate::privacy_docx::NormalizedDocx {
+        title: out_paths.relative_path.clone(),
+        metadata: vec![
+            ("Source".to_string(), out_paths.relative_path.clone()),
+            ("Extraction".to_string(), "Kreuzberg".to_string()),
+        ],
+        sections: extracted
+            .chunks
+            .iter()
+            .map(|chunk| crate::privacy_docx::NormalizedSection {
+                heading: format!("Chunk {}", chunk.idx + 1),
+                body: chunk.text.clone(),
+            })
+            .collect(),
+    };
+    crate::privacy_docx::write_normalized_docx(&out_paths.working_path, &working_doc)?;
+
+    let detector = pipeline.detector_for_privacy()?;
+    let no_legal = Vec::new();
+    let no_thresholds = std::collections::HashMap::new();
+    let mut pseudo_sections = Vec::new();
+    let mut detected_count = 0usize;
+    for chunk in &extracted.chunks {
+        let bundle = detector.detect_for_ingest(&chunk.text, &no_legal, &no_thresholds)?;
+        detected_count += bundle.pii.len();
+        let report = pipeline
+            .vault_for_privacy()
+            .pseudonymize_with_report_map(&chunk.text, &bundle.pii)
+            .await?;
+        pseudo_sections.push(crate::privacy_docx::NormalizedSection {
+            heading: format!("Chunk {}", chunk.idx + 1),
+            body: report.text,
+        });
+    }
+    let anonymized_doc = crate::privacy_docx::NormalizedDocx {
+        title: out_paths.relative_path.clone(),
+        metadata: vec![
+            ("Source".to_string(), out_paths.relative_path.clone()),
+            ("PII".to_string(), "Anonymized".to_string()),
+        ],
+        sections: pseudo_sections,
+    };
+    crate::privacy_docx::write_normalized_docx(&out_paths.anonymized_path, &anonymized_doc)?;
+
+    let source_bytes = std::fs::read(source_path)?;
+    let working_bytes = std::fs::read(&out_paths.working_path)?;
+    Ok(crate::privacy_artifacts::ManifestDocument {
+        document_id: uuid::Uuid::new_v5(&uuid::Uuid::NAMESPACE_OID, &source_bytes).to_string(),
+        relative_path: out_paths.relative_path,
+        source_path: source_path.display().to_string(),
+        working_path: out_paths.working_path.display().to_string(),
+        anonymized_path: out_paths.anonymized_path.display().to_string(),
+        source_hash: crate::privacy_artifacts::sha256_hex(&source_bytes),
+        working_hash: Some(crate::privacy_artifacts::sha256_hex(&working_bytes)),
+        last_indexed_hash: None,
+        status: "prepared".to_string(),
+        counts: crate::privacy_artifacts::ManifestCounts {
+            detected: detected_count,
+            forced_mask: 0,
+            kept_visible: 0,
+        },
     })
 }
 
