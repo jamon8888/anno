@@ -207,10 +207,10 @@ The right fix is therefore not to remove knowledge or fold everything into legal
 
 The source discovery layer should skip generated Anno artifacts before extraction:
 
-- Directories named `anon`, `outputs`, `.anno`, `.anno-rag`, `.git`, `node_modules`, `target`.
+- Directories named `anon`, `.anno`, `.anno-rag`, `.git`, `node_modules`, `target`.
 - Files matching `.anon.*` or `*.anon.*`.
 - Files carrying a future Anno-generated metadata marker, when available.
-- The configured internal output root, even if a user points `index(path=...)` near it.
+- The configured internal output root, including any internal `outputs` directory, even if a user points `index(path=...)` near it.
 
 This exclusion must be applied in shared discovery code where possible. If knowledge and legal discovery currently use separate walkers, both paths need tests.
 

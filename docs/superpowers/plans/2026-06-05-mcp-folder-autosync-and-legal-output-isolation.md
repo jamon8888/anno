@@ -28,8 +28,8 @@ Use a clean implementation worktree when executing. The current branch may alrea
 
 Modify:
 
-- `crates/anno-source-local/src/folder.rs` - stronger generated-artifact directory/file exclusion for knowledge local-folder discovery.
-- `crates/anno-rag/src/pipeline.rs` - stronger generated-artifact exclusion for legal recursive ingest.
+- `crates/anno-source-local/src/folder.rs` - stronger generated-artifact directory/file exclusion for knowledge local-folder discovery without suppressing ordinary client folders named `outputs`.
+- `crates/anno-rag/src/pipeline.rs` - stronger generated-artifact exclusion for legal recursive ingest without suppressing ordinary client folders named `outputs`.
 - `crates/anno-corpus-core/src/model.rs` - small sync/freshness enums shared by corpus store and MCP.
 - `crates/anno-corpus-store/src/migrations.rs` - add corpus sync state table.
 - `crates/anno-corpus-store/src/store.rs` - read/write corpus sync state and freshness.
@@ -173,8 +173,11 @@ In `crates/anno-source-local/src/folder.rs`, extend `skips_anno_generated_output
         )
         .expect("nested anon output");
         fs::create_dir_all(dir.path().join("outputs")).expect("outputs dir");
-        fs::write(dir.path().join("outputs").join("export.md"), b"# generated")
-            .expect("outputs file");
+        fs::write(
+            dir.path().join("outputs").join("client-output.md"),
+            b"# legitimate client output",
+        )
+        .expect("client output");
         fs::create_dir_all(dir.path().join(".anno")).expect(".anno dir");
         fs::write(dir.path().join(".anno").join("state.md"), b"# generated")
             .expect(".anno file");
@@ -186,7 +189,7 @@ In `crates/anno-source-local/src/folder.rs`, extend `skips_anno_generated_output
 Keep the final assertion:
 
 ```rust
-        assert_eq!(names, vec!["source.md"]);
+        assert_eq!(names, vec!["client-output.md", "source.md"]);
 ```
 
 - [ ] **Step 2: Run the knowledge-source test and verify it fails**
@@ -197,7 +200,7 @@ Run:
 cargo test -p anno-source-local skips_anno_generated_outputs -- --nocapture
 ```
 
-Expected: FAIL because nested `anon`, `outputs`, `.anno`, or `.anno-rag` files are still discovered.
+Expected: FAIL because nested `anon`, `.anno`, or `.anno-rag` files are still discovered, while `outputs/client-output.md` remains discoverable.
 
 - [ ] **Step 3: Implement stronger knowledge-source filters**
 
@@ -225,7 +228,7 @@ fn is_generated_anno_dir(root: &Path, path: &Path) -> bool {
 fn is_generated_anno_dir_name(name: &str) -> bool {
     matches!(
         name.to_ascii_lowercase().as_str(),
-        "anon" | "outputs" | ".anno" | ".anno-rag"
+        "anon" | ".anno" | ".anno-rag"
     )
 }
 ```
@@ -244,8 +247,11 @@ In `crates/anno-rag/src/pipeline.rs`, extend `legal_ingest_candidate_paths_skip_
         )
         .expect("nested anon generated");
         std::fs::create_dir_all(dir.path().join("outputs")).expect("outputs dir");
-        std::fs::write(dir.path().join("outputs").join("ignored.md"), b"# generated")
-            .expect("outputs generated");
+        std::fs::write(
+            dir.path().join("outputs").join("kept.md"),
+            b"# legitimate client output",
+        )
+        .expect("client outputs");
         std::fs::create_dir_all(dir.path().join(".anno")).expect(".anno dir");
         std::fs::write(dir.path().join(".anno").join("ignored.md"), b"# generated")
             .expect(".anno generated");
@@ -257,7 +263,7 @@ In `crates/anno-rag/src/pipeline.rs`, extend `legal_ingest_candidate_paths_skip_
 Keep the expected names:
 
 ```rust
-        assert_eq!(names, vec!["contract.md", "source.md"]);
+        assert_eq!(names, vec!["contract.md", "kept.md", "source.md"]);
 ```
 
 - [ ] **Step 5: Run the legal walker test and verify it fails**
@@ -319,7 +325,7 @@ fn is_anno_generated_output(path: &Path, source_root: &Path, output_dir: &Path) 
 fn is_generated_anno_dir_name(name: &str) -> bool {
     matches!(
         name.to_ascii_lowercase().as_str(),
-        "anon" | "outputs" | ".anno" | ".anno-rag"
+        "anon" | ".anno" | ".anno-rag"
     )
 }
 ```
@@ -1858,7 +1864,7 @@ git commit -m "fix: finalize corpus sync verification"
 
 ## Acceptance Checklist
 
-- [ ] Recursive local discovery skips `anon`, `outputs`, `.anno`, `.anno-rag`, and `.anon.*` generated files.
+- [ ] Recursive local discovery skips `anon`, `.anno`, `.anno-rag`, and `.anon.*` generated files while preserving ordinary client `outputs` folders.
 - [ ] Corpus-scoped legal ingest writes generated files under `data_dir/corpora/<corpus_id>/outputs/legal-anon/`.
 - [ ] Legacy `legal_ingest` without corpus remains backward-compatible.
 - [ ] `sync_corpus` is listed in MCP tools and defaults to `knowledge_fast`.
