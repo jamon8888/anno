@@ -1,10 +1,10 @@
 # Release Management
 
-Status: Available in v0.11.0-rc.11
+Status: Available in v0.11.0-rc.16
 Audience: Admin, Developer
 Language: EN
 
-The current release candidate is `v0.11.0-rc.11`. Treat release upgrades as a
+The current release candidate is `v0.11.0-rc.16`. Treat release upgrades as a
 controlled change to binaries, MCP configuration, gateway configuration, model
 cache, and local state directories.
 

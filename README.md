@@ -39,7 +39,7 @@ Double licence MIT ou Apache-2.0. MSRV : 1.88.
 
 Le tronc local contient les travaux récents suivants :
 
-- **Release binaire v0.11.0-rc.11** : archives Windows x64 et macOS Apple Silicon publiées sur GitHub Releases, avec `anno-rag`, `anno-privacy-gateway`, exemples Claude Desktop et checksums SHA-256.
+- **Release binaire v0.11.0-rc.16** : archives Windows x64 et macOS Apple Silicon publiées sur GitHub Releases, avec `anno-rag`, `anno-privacy-gateway`, exemples Claude Desktop et checksums SHA-256.
 - **Setup MCP cross-platform** : `anno-rag setup-mcp` et les wrappers `scripts/setup-mcp.*` installent `anno-rag`, vérifient ou téléchargent les modèles GLiNER + embeddings, puis configurent Claude Desktop/Cowork et Claude Code sans build local.
 - **anno-memory v0.2** dans `anno-rag` : mémoire bi-temporelle, références d'entités, rappel avec expansion graphe, invalidation de mémoires et audit MCP.
 - **RGPD core + gateway v0.4** : routes de sujet `find` / `forget` / `export`, audit JSONL chaîné, bearer auth, pseudonymisation en streaming SSE et arrêt gracieux du gateway comme du serveur MCP.
@@ -387,8 +387,8 @@ voulez contrôler le JSON vous-même.
 Pour tester une release candidate GitHub sans compiler, ouvrez Claude Code puis collez ce prompt :
 
 ```text
-Install Hacienda anno-rag v0.11.0-rc.11 into Claude Desktop/Cowork from https://github.com/jamon8888/anno/releases/tag/v0.11.0-rc.11.
-Download the asset for this machine (Windows x64: hacienda-v0.11.0-rc.11-x86_64-pc-windows-msvc.zip; macOS Apple Silicon: hacienda-v0.11.0-rc.11-aarch64-apple-darwin.tar.gz) plus SHA256SUMS.txt, verify the checksum, extract it to a stable local folder, and update Claude Desktop's claude_desktop_config.json so mcpServers.anno-rag runs the extracted anno-rag binary with args ["mcp"]. If models are not already installed, run anno-rag download-models once and set ANNO_MODELS_DIR to the path it prints. Do not add ANNO_RAG_VAULT_PASSPHRASE unless I provide one. After editing the config, tell me to fully restart Claude Desktop/Cowork and verify anno-rag appears under Connectors.
+Install Hacienda anno-rag v0.11.0-rc.16 into Claude Desktop/Cowork from https://github.com/jamon8888/anno/releases/tag/v0.11.0-rc.16.
+Download the asset for this machine (Windows x64: hacienda-v0.11.0-rc.16-x86_64-pc-windows-msvc.zip; macOS Apple Silicon: hacienda-v0.11.0-rc.16-aarch64-apple-darwin.tar.gz) plus SHA256SUMS.txt, verify the checksum, extract it to a stable local folder, and update Claude Desktop's claude_desktop_config.json so mcpServers.anno-rag runs the extracted anno-rag binary with args ["mcp"]. If models are not already installed, run anno-rag download-models once and set ANNO_MODELS_DIR to the path it prints. Do not add ANNO_RAG_VAULT_PASSPHRASE unless I provide one. After editing the config, tell me to fully restart Claude Desktop/Cowork and verify anno-rag appears under Connectors.
 ```
 
 Remplacez le tag si vous installez une RC plus récente. Pour les builds depuis source, utilisez la configuration manuelle ci-dessous.

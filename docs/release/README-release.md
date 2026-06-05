@@ -3,7 +3,7 @@
 This document explains how to install the GitHub Release binary archives for
 Claude Desktop/Cowork, Claude Code, and local HTTP gateway use.
 
-Current candidate promoted as GitHub "Latest": `v0.11.0-rc.11`.
+Current candidate promoted as GitHub "Latest": `v0.11.0-rc.16`.
 
 ## Pick the Right Asset
 
@@ -123,8 +123,8 @@ only when you need to inspect or edit the generated config yourself.
 Open Claude Code and paste:
 
 ```text
-Install Hacienda anno-rag v0.11.0-rc.11 into Claude Desktop/Cowork and Claude Code from https://github.com/jamon8888/anno/releases/tag/v0.11.0-rc.11.
-Download the asset for this machine (Windows x64: hacienda-v0.11.0-rc.11-x86_64-pc-windows-msvc.zip; macOS Intel: hacienda-v0.11.0-rc.11-x86_64-apple-darwin.tar.gz; macOS Apple Silicon: hacienda-v0.11.0-rc.11-aarch64-apple-darwin.tar.gz) plus SHA256SUMS.txt, verify the checksum, extract it to a stable local folder, and update Claude Desktop's claude_desktop_config.json so mcpServers.anno-rag runs the extracted anno-rag binary with args ["mcp"]. If Claude Code is installed, also run claude mcp add --transport stdio --scope user with the same binary and ANNO_MODELS_DIR. If models are not already installed, run anno-rag download-models once and set ANNO_MODELS_DIR to the path it prints. Do not add ANNO_RAG_VAULT_PASSPHRASE unless I provide one. After editing the config, tell me to fully restart Claude Desktop/Cowork and verify anno-rag appears under Connectors.
+Install Hacienda anno-rag v0.11.0-rc.16 into Claude Desktop/Cowork and Claude Code from https://github.com/jamon8888/anno/releases/tag/v0.11.0-rc.16.
+Download the asset for this machine (Windows x64: hacienda-v0.11.0-rc.16-x86_64-pc-windows-msvc.zip; macOS Intel: hacienda-v0.11.0-rc.16-x86_64-apple-darwin.tar.gz; macOS Apple Silicon: hacienda-v0.11.0-rc.16-aarch64-apple-darwin.tar.gz) plus SHA256SUMS.txt, verify the checksum, extract it to a stable local folder, and update Claude Desktop's claude_desktop_config.json so mcpServers.anno-rag runs the extracted anno-rag binary with args ["mcp"]. If Claude Code is installed, also run claude mcp add --transport stdio --scope user with the same binary and ANNO_MODELS_DIR. If models are not already installed, run anno-rag download-models once and set ANNO_MODELS_DIR to the path it prints. Do not add ANNO_RAG_VAULT_PASSPHRASE unless I provide one. After editing the config, tell me to fully restart Claude Desktop/Cowork and verify anno-rag appears under Connectors.
 ```
 
 ### Manual Desktop/Cowork config
@@ -170,7 +170,7 @@ Use the Claude Code CLI for Claude Code MCP configuration:
 ```powershell
 claude mcp add --transport stdio --scope user `
   --env ANNO_MODELS_DIR=C:\Users\you\.anno-rag\models `
-  anno-rag -- C:\Users\you\Tools\hacienda-v0.11.0-rc.11\anno-rag.exe mcp
+  anno-rag -- C:\Users\you\Tools\hacienda-v0.11.0-rc.16\anno-rag.exe mcp
 ```
 
 macOS:
@@ -178,7 +178,7 @@ macOS:
 ```bash
 claude mcp add --transport stdio --scope user \
   --env ANNO_MODELS_DIR="$HOME/.anno-rag/models" \
-  anno-rag -- "$HOME/Tools/hacienda-v0.11.0-rc.11/anno-rag" mcp
+  anno-rag -- "$HOME/Tools/hacienda-v0.11.0-rc.16/anno-rag" mcp
 ```
 
 Use `claude mcp list` and `/mcp` in Claude Code to verify the server. Use
@@ -248,15 +248,15 @@ Use this flow to create an optimized GitHub candidate release for Claude Desktop
 
 - `origin/main` equals local `main`.
 - Latest GitHub Actions CI on `main` is successful.
-- `v0.11.0-rc.11` or the target tag points at the intended commit.
+- `v0.11.0-rc.16` or the target tag points at the intended commit.
 - No local Claude Desktop MCP process is still expected to run from `D:\cargo-shared-target\debug\anno-rag.exe` after install.
 
 ### Create the RC
 
 ```powershell
-git tag v0.11.0-rc.11
+git tag v0.11.0-rc.16
 git push origin main
-git push origin v0.11.0-rc.11
+git push origin v0.11.0-rc.16
 gh run list --repo jamon8888/anno --workflow "Release" --limit 5
 ```
 
