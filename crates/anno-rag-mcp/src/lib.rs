@@ -5077,6 +5077,58 @@ mod lazy_tests {
     }
 
     #[tokio::test]
+    async fn search_marks_index_not_fresh_before_sync_corpus() {
+        let server = AnnoRagServer::new_lazy(AnnoRagConfig::default(), [0u8; 32]);
+        let corpus = server.corpus().await.expect("corpus");
+        let registered = corpus
+            .register_index_root("c:/clients/living-folder", "general")
+            .expect("register");
+
+        let out = server
+            .search_impl_routing(SearchUnifiedParams {
+                query: "new document".to_string(),
+                top_k: 5,
+                mode: Some("fast".to_string()),
+                scope: Some("knowledge".to_string()),
+                filters: None,
+                corpus_id: Some(registered.corpus_id.as_string()),
+                allow_cross_corpus: false,
+            })
+            .await;
+        let parsed: serde_json::Value = serde_json::from_str(&out).expect("json");
+        assert_eq!(parsed["ok"], true);
+        assert_eq!(parsed["index_fresh"], false);
+        assert!(parsed["freshness"].as_str().is_some());
+    }
+
+    #[tokio::test]
+    async fn search_still_requires_corpus_when_multiple_corpora_exist_after_freshness_changes() {
+        let server = AnnoRagServer::new_lazy(AnnoRagConfig::default(), [0u8; 32]);
+        let corpus = server.corpus().await.expect("corpus");
+        corpus
+            .register_index_root("c:/clients/a", "general")
+            .expect("register a");
+        corpus
+            .register_index_root("c:/clients/b", "general")
+            .expect("register b");
+
+        let out = server
+            .search_impl_routing(SearchUnifiedParams {
+                query: "contrat".to_string(),
+                top_k: 5,
+                mode: Some("fast".to_string()),
+                scope: Some("knowledge".to_string()),
+                filters: None,
+                corpus_id: None,
+                allow_cross_corpus: false,
+            })
+            .await;
+        let parsed: serde_json::Value = serde_json::from_str(&out).expect("json");
+        assert_eq!(parsed["ok"], false);
+        assert!(parsed["error"].as_str().unwrap().contains("corpus"));
+    }
+
+    #[tokio::test]
     async fn sync_corpus_unknown_corpus_returns_structured_error() {
         let server = AnnoRagServer::new_lazy(AnnoRagConfig::default(), [0u8; 32]);
         let out = server
