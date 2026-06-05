@@ -2027,7 +2027,12 @@ impl AnnoRagServer {
         let service = self.knowledge().await.map_err(|e| e.to_string())?;
         let pipeline = self.pipeline().await.map_err(|e| e.to_string())?;
         service
-            .sync(pipeline, self.cfg.as_ref(), p.source_id.as_deref())
+            .sync(
+                pipeline,
+                self.cfg.as_ref(),
+                p.source_id.as_deref(),
+                crate::indexer::SyncOptions::default(),
+            )
             .await
     }
 
@@ -2063,11 +2068,22 @@ impl AnnoRagServer {
         let mut total = crate::indexer::SyncSummary::default();
 
         if requested.knowledge_fast {
+            let service = self.knowledge().await.map_err(|e| e.to_string())?;
+            let pipeline = self.pipeline().await.map_err(|e| e.to_string())?;
+            let options = crate::indexer::SyncOptions {
+                max_files: p
+                    .max_files
+                    .unwrap_or_else(|| crate::indexer::SyncOptions::default().max_files),
+                max_millis: p.max_millis,
+            };
             for source_id in &selected_sources {
-                match self
-                    .knowledge_sync_impl(KnowledgeSyncParams {
-                        source_id: Some(source_id.clone()),
-                    })
+                match service
+                    .sync(
+                        pipeline,
+                        self.cfg.as_ref(),
+                        Some(source_id.as_str()),
+                        options,
+                    )
                     .await
                 {
                     Ok(summary) => {

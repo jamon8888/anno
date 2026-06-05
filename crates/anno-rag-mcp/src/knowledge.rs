@@ -7,7 +7,7 @@ use rmcp::schemars;
 use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
 
-use crate::indexer::{sync_local_scope, SyncSummary};
+use crate::indexer::{sync_local_scope, SyncOptions, SyncSummary};
 
 /// Parameters for `knowledge_search`.
 #[derive(Debug, Clone, Deserialize, schemars::JsonSchema)]
@@ -134,6 +134,7 @@ impl KnowledgeService {
         pipeline: &anno_rag::pipeline::Pipeline,
         cfg: &AnnoRagConfig,
         source_id: Option<&str>,
+        options: SyncOptions,
     ) -> Result<SyncSummary, String> {
         let sources = self
             .store
@@ -151,7 +152,8 @@ impl KnowledgeService {
                 .enabled_scopes_for_source(&source.source_id)
                 .map_err(|e| format!("scopes: {e}"))?;
             for scope in &scopes {
-                let s = sync_local_scope(&self.store, pipeline, cfg, source, scope).await?;
+                let s =
+                    sync_local_scope(&self.store, pipeline, cfg, source, scope, options).await?;
                 total.seen += s.seen;
                 total.skipped_unchanged += s.skipped_unchanged;
                 total.extracted += s.extracted;
