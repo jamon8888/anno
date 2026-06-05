@@ -13,7 +13,7 @@ fn date_re() -> &'static Regex {
     static RE: OnceLock<Regex> = OnceLock::new();
     RE.get_or_init(|| {
         Regex::new(
-            r"(?i)(?:\ble\s+)?\d{1,2}\s+(?:janvier|février|mars|avril|mai|juin|juillet|ao[uû]t|septembre|octobre|novembre|décembre)\s+\d{4}|\b\d{1,2}[\/\-\.]\d{1,2}[\/\-\.]\d{2,4}\b"
+            r"(?i)\d{1,2}\s+(?:janvier|février|mars|avril|mai|juin|juillet|ao[uû]t|septembre|octobre|novembre|décembre)\s+\d{4}|\b\d{1,2}[\/\-\.]\d{1,2}[\/\-\.]\d{2,4}\b"
         ).expect("date regex")
     })
 }

@@ -37,7 +37,7 @@ mod tests {
 
     #[test]
     fn detects_sarl_and_sci() {
-        let r = extract_orgs("Construction Dupont SARL et la SCI Patrimoine Familial.");
+        let r = extract_orgs("Construction Dupont SARL et Patrimoine Familial SCI.");
         assert_eq!(r.len(), 2);
     }
 

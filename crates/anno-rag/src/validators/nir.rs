@@ -139,56 +139,30 @@ mod tests {
 
     #[test]
     fn nir_handles_corsica_2a() {
-        // NIR with 2A (Corsica) — should be substituted to 19 before modulo
-        // Create a valid NIR with department 2A
-        let base = "0184127645108"; // 2A in positions 5-6
-        let body_str = "0118427645108"; // After 2A → 19 substitution
+        // NIR format: [sex(1)][yy(2)][mm(2)][dept(2)][commune(3)][order(3)][key(2)] = 15 chars
+        // dept = "2A" at positions 5-6; substituted to "19" before modulo
+        // body_str = sex+yy+mm+19+commune+order = "184122A750123" → "1841219750123"
+        let body_str = "1841219750123"; // after 2A→19 substitution, 13 digits
         let body: u64 = body_str.parse().unwrap();
         let key = 97 - (body % 97) as u32;
-        let nir = format!("01{}2A{:02}", "8427645108", key);
-        // Actually, let me construct it properly:
-        // We want: [00] [84] [2A] [76 45 10 89]
-        // After substitution: [00] [84] [19] [76 45 10 89]
-        // Body = 0084197645108
-        let nir_with_2a = "008419764510889"; // This is the format with Corsica code
-        let e = entity_with(nir_with_2a);
-        // The body part is 0084197645108, key is 89
-        // 0084197645108 % 97 = ?
-        let body: u64 = 0084197645108u64;
-        let expected_key = 97 - (body % 97) as u32;
-        if expected_key == 89 {
-            assert_eq!(
-                NirControlKeyValidator.validate(&e, ""),
-                ValidationResult::Accept
-            );
-        } else {
-            // Use the correct key
-            let nir_correct = format!("008419764510{:02}", expected_key);
-            let e_correct = entity_with(&nir_correct);
-            assert_eq!(
-                NirControlKeyValidator.validate(&e_correct, ""),
-                ValidationResult::Accept
-            );
-        }
+        // Reconstruct with "2A" at positions 5-6
+        let nir = format!("18412{}{}{:02}", "2A", "750123", key);
+        assert_eq!(nir.len(), 15, "NIR must be 15 chars");
+        let e = entity_with(&nir);
+        assert_eq!(NirControlKeyValidator.validate(&e, ""), ValidationResult::Accept);
     }
 
     #[test]
     fn nir_handles_corsica_2b() {
-        // NIR with 2B (Corsica) — should be substituted to 18 before modulo
-        let body_str = "0118327645108"; // After 2B → 18 substitution
+        // dept = "2B" at positions 5-6; substituted to "18" before modulo
+        // body_str after 2B→18: "1841218750123"
+        let body_str = "1841218750123"; // after 2B→18 substitution, 13 digits
         let body: u64 = body_str.parse().unwrap();
         let key = 97 - (body % 97) as u32;
-        let nir = format!("01832764510{:02}", key);
-        // Actual format: positions 5-6 should have "2B"
-        // Let me create one properly: [01] [83] [2B] [76 45 10]
-        let constructed_body_str = "0118327645108"; // With 2B → 18
-        let constructed_body: u64 = constructed_body_str.parse().unwrap();
-        let constructed_key = 97 - (constructed_body % 97) as u32;
-        let nir_with_2b = format!("01832B764510{:02}", constructed_key);
-        let e = entity_with(&nir_with_2b);
-        assert_eq!(
-            NirControlKeyValidator.validate(&e, ""),
-            ValidationResult::Accept
-        );
+        // Reconstruct with "2B" at positions 5-6
+        let nir = format!("18412{}{}{:02}", "2B", "750123", key);
+        assert_eq!(nir.len(), 15, "NIR must be 15 chars");
+        let e = entity_with(&nir);
+        assert_eq!(NirControlKeyValidator.validate(&e, ""), ValidationResult::Accept);
     }
 }
