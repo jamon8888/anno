@@ -28,7 +28,11 @@ param(
     [string[]]$TestTarget = @(),
 
     # Override Cargo target directory for this run, useful if the configured disk is unstable.
-    [string]$TargetDir = ""
+    [string]$TargetDir = "",
+
+    # Use nightly + Cranelift codegen backend for faster test compilation.
+    # Requires: rustup toolchain install nightly && rustup component add rustc-codegen-cranelift-preview --toolchain nightly
+    [switch]$Cranelift
 )
 
 $ErrorActionPreference = "Stop"
@@ -46,6 +50,13 @@ if (-not $Force) {
 
 $repoRoot = (& git rev-parse --show-toplevel).Trim()
 Set-Location -LiteralPath $repoRoot
+
+# -- Cranelift codegen backend (nightly-only) ----------------------------------
+if ($Cranelift) {
+    $env:RUSTUP_TOOLCHAIN = "nightly"
+    $env:RUSTFLAGS = "-Z codegen-backend=cranelift"
+    Write-Host "==> Cranelift enabled (nightly toolchain, -Z codegen-backend=cranelift)" -ForegroundColor Magenta
+}
 
 if ($TargetDir -ne "") {
     New-Item -ItemType Directory -Force -Path $TargetDir | Out-Null
