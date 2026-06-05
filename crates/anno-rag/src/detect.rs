@@ -17,7 +17,18 @@
 //! plan a normalization pass via `anno::offset::bytes_to_chars` in v0.2.
 
 use crate::error::{Error, Result};
+use crate::layers::GdprLayerSet;
 use crate::legal::{LegalEntity, LegalLabel};
+use crate::validators::{
+    apply_validators, EntityValidator, RejectionCounts,
+    dates::DateRangeValidator,
+    email::EmailRfcValidator,
+    iban::Iban97Validator,
+    luhn::LuhnValidator,
+    network::IpAddressValidator,
+    nir::NirControlKeyValidator,
+    postal::PostalCodeValidator,
+};
 use anno::backends::gliner2_fastino::GLiNER2Fastino;
 use anno::backends::inference::ZeroShotNER;
 use anno::EntityType;
@@ -391,6 +402,8 @@ impl NerBackend {
 
 pub struct Detector {
     ner: NerBackend,
+    #[cfg(feature = "heuristic-fr")]
+    heuristic_fr: anno::backends::heuristic_fr::HeuristicFrNer,
 }
 
 impl Detector {
@@ -422,6 +435,8 @@ impl Detector {
             .map_err(|e| Error::Detect(format!("gliner2_fastino load (local): {e}")))?;
             return Ok(Self {
                 ner: NerBackend::Onnx(ner),
+                #[cfg(feature = "heuristic-fr")]
+                heuristic_fr: anno::backends::heuristic_fr::HeuristicFrNer::new(),
             });
         }
         // ─────────────────────────────────────────────────────────────────────
@@ -429,6 +444,8 @@ impl Detector {
             .map_err(|e| Error::Detect(format!("gliner2_fastino load: {e}")))?;
         Ok(Self {
             ner: NerBackend::Onnx(ner),
+            #[cfg(feature = "heuristic-fr")]
+            heuristic_fr: anno::backends::heuristic_fr::HeuristicFrNer::new(),
         })
     }
 
@@ -454,6 +471,8 @@ impl Detector {
                 })?;
             return Ok(Self {
                 ner: NerBackend::Candle(ner),
+                #[cfg(feature = "heuristic-fr")]
+                heuristic_fr: anno::backends::heuristic_fr::HeuristicFrNer::new(),
             });
         }
         let ner =
@@ -464,6 +483,8 @@ impl Detector {
             .map_err(|e| Error::Detect(format!("gliner2_fastino_candle load: {e}")))?;
         Ok(Self {
             ner: NerBackend::Candle(ner),
+            #[cfg(feature = "heuristic-fr")]
+            heuristic_fr: anno::backends::heuristic_fr::HeuristicFrNer::new(),
         })
     }
 
@@ -518,6 +539,18 @@ impl Detector {
         // 1. FR regex layer (model-free).
         let mut all = detect_patterns(text);
 
+        // 1b. FR heuristics (defense layer and above).
+        #[cfg(feature = "heuristic-fr")]
+        if GdprLayerSet::from_env().includes_heuristics() {
+            let labels = pii_label_set();
+            let label_refs: Vec<&str> = labels.iter().copied().collect();
+            if let Ok(heur_entities) =
+                self.heuristic_fr.extract_with_types(text, &label_refs, 0.5)
+            {
+                all.extend(anno_entities_to_detected(text, heur_entities)?);
+            }
+        }
+
         // 2. NER with GDPR label descriptions.
         //    Floor threshold 0.25 passes everything through; per-label thresholds
         //    from GDPR_NER_LABELS are applied as a post-filter so Art. 9 labels
@@ -542,6 +575,18 @@ impl Detector {
                 .then_with(|| pattern_priority(&a.source).cmp(&pattern_priority(&b.source)))
         });
         dedup_overlaps(&mut all);
+
+        // 4. Validators (defense layer and above).
+        let rejection_counts = if GdprLayerSet::from_env().includes_validators() {
+            let validators = default_validators();
+            let (kept, counts) = apply_validators(all, text, &validators);
+            all = kept;
+            counts
+        } else {
+            RejectionCounts::new()
+        };
+        let _ = rejection_counts; // emitted in audit via detect() wrapper in a future task
+
         Ok(all)
     }
 
@@ -688,6 +733,21 @@ fn emit_detect_audit(input_chars: usize, elapsed_us: u64, out: &[DetectedEntity]
         per_category = %per_category_json,
         "detector pass complete"
     );
+}
+
+fn default_validators() -> Vec<Box<dyn EntityValidator>> {
+    vec![
+        Box::new(LuhnValidator::new("SIRET")),
+        Box::new(LuhnValidator::new("card_number")),
+        Box::new(LuhnValidator::new("bank_account")),
+        Box::new(Iban97Validator::new("IBAN_FR")),
+        Box::new(Iban97Validator::new("iban")),
+        Box::new(NirControlKeyValidator),
+        Box::new(DateRangeValidator),
+        Box::new(IpAddressValidator),
+        Box::new(EmailRfcValidator),
+        Box::new(PostalCodeValidator),
+    ]
 }
 
 fn pattern_priority(s: &DetectionSource) -> u8 {
