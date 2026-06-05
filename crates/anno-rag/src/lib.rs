@@ -10,6 +10,7 @@ pub mod canonicalize;
 pub mod config;
 pub mod conflict;
 pub mod detect;
+pub mod docx_instructions;
 pub mod download_models;
 pub mod embed;
 #[cfg(test)]
@@ -25,6 +26,10 @@ pub mod memory;
 pub(crate) mod ocr;
 pub mod pii_eval;
 pub mod pipeline;
+pub mod privacy_artifacts;
+pub mod privacy_decisions;
+pub mod privacy_docx;
+pub mod privacy_workspace;
 #[cfg(feature = "rerank")]
 pub mod rerank;
 pub mod store;
