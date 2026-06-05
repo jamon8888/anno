@@ -183,7 +183,7 @@ Validators run after the aggregator. Rejections are emitted as
 #### Single-pass multi-task schema (new API to build)
 
 Currently every `extract_*` method calls `transformer.transform(text, &[task])`
-with a single-element slice (verified at [`mod.rs`](crates/anno/src/backends/gliner2_fastino/mod.rs)
+with a single-element slice (verified at `crates/anno/src/backends/gliner2_fastino/mod.rs`
 lines 331, 561, 619, 686, 744). The architecture supports multi-task
 because `transform` accepts `&[SchemaTask]` and produces one
 `ProcessedRecord` with combined tokens — the encoder runs once on the
@@ -234,7 +234,7 @@ let composite = ner.extract_composite(text, &tasks, &thresholds)?;
 ```
 
 Note: `FieldType::Choice` is documented as Phase 2 not-shipped at
-[`mod.rs:62`](crates/anno/src/backends/gliner2_fastino/mod.rs:62) — falls
+`crates/anno/src/backends/gliner2_fastino/mod.rs:62` — falls
 back to single-best-span decoding. Use `String` for now and parse the
 output text against an allowlist post-hoc.
 
@@ -252,14 +252,14 @@ to iterate over all `task_map` entries in `record.tasks`, dispatching
 to the right scorer (`scorer` for Entities, `classifier` for
 Classifications, `count_lstm_fixed`+`scorer` for Structures) on the same
 encoder output. The Candle backend
-([`gliner2_fastino_candle/`](crates/anno/src/backends/gliner2_fastino_candle/))
+(`crates/anno/src/backends/gliner2_fastino_candle/`)
 must implement the same method for parity on Metal.
 
 #### Discourse centering for French pronouns
 
 The existing `crates/anno/src/discourse/centering.rs` provides
 **low-level primitives only** : `track_centers(utterances, config) ->
-Vec<CenteringState>` at [`centering.rs:615`](crates/anno/src/discourse/centering.rs:615)
+Vec<CenteringState>` at `crates/anno/src/discourse/centering.rs:615`
 takes a list of utterances (each itself a list of `ForwardCenter`) and
 returns per-utterance backward-looking centers (`Cb`) and transition
 types. **There is no built-in pronoun-resolution API.**
@@ -499,7 +499,7 @@ Each phase is an independently mergeable PR with rollback via feature flag.
 | Review queue floods on Art. 9 | Configurable entropy threshold per label class, default `FlagForReview` only on Art. 9/10 |
 | Calibration runtime memory growth | Reservoir sampling (10k observations max per label) |
 | Snapshot tests block PRs on noise | Snapshots reviewed in PR diff, `cargo insta review` workflow documented |
-| `extract_composite` does not exist — must be written | Phase C deliverable. Includes Candle-backend parity at [`gliner2_fastino_candle/`](crates/anno/src/backends/gliner2_fastino_candle/) so Apple Metal builds match. |
+| `extract_composite` does not exist — must be written | Phase C deliverable. Includes Candle-backend parity at `crates/anno/src/backends/gliner2_fastino_candle/` so Apple Metal builds match. |
 | `DiscourseScope::sentences()` may not exist | Verify in Phase C kick-off. Fallback : local sentence splitter using `regex` crate. |
 | `FieldType::Choice` not shipped in Phase 2 | Use `FieldType::String` and parse the output against an allowlist post-hoc. Document the gap so a future Phase upgrade can drop the parser. |
 

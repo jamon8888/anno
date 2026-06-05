@@ -14,7 +14,9 @@ but it is not a complete inventory of every `review_*` method.
 
 | Tool | Purpose | Privacy behavior |
 |---|---|---|
-| `search` | Search the indexed local corpus. | Pseudonymizes the query through the local vault and returns pseudonymized chunks. |
+| `index` | Register a client folder as a corpus and run the requested profile. | Keeps corpus ids pseudonymous; corpus-scoped legal outputs are stored under Anno's data directory. |
+| `sync_corpus` | Synchronize a selected corpus. Defaults to `knowledge_fast`; `legal_semantic` must be requested explicitly. | Refreshes only bound sources for the selected corpus and reports freshness instead of silently widening scope. |
+| `search` | Search the indexed local corpus. | Pseudonymizes the query through the local vault and returns pseudonymized chunks plus freshness metadata. |
 | `rehydrate` | Restore pseudonymized text for trusted local use. | Intentionally returns cleartext to the local MCP client after vault lookup. |
 | `detect` | Dry-run PII detection on supplied text. | Processes cleartext locally and returns categories, confidence, and offsets without replacement. |
 | `vault_stats` | Report vault mapping counts. | Returns aggregate counts, not original sensitive values. |
@@ -29,6 +31,35 @@ but it is not a complete inventory of every `review_*` method.
 | `privacy_prepare_folder` | Create a local `vault` workspace with editable Word review documents, anonymized outputs, reports, and a manifest. | Returns generated paths, counts, and status metadata only. Cleartext stays in local working files. |
 | `privacy_finalize_folder` | Read Word comments from a local `vault` workspace and regenerate anonymized documents after user edits. | Treats `à masquer` and `à garder` comments as local instructions; returns paths and aggregate counts only. |
 | `privacy_status` | Report privacy workflow capabilities. | Does not load models and does not return document content. |
+
+## Corpus Sync
+
+### `sync_corpus`
+
+Synchronizes a selected corpus. By default it refreshes the `knowledge_fast`
+output only. Legal semantic refresh must be requested explicitly with
+`outputs=["legal_semantic"]` or `outputs=["knowledge_fast","legal_semantic"]`.
+
+Example payload:
+
+```json
+{
+  "corpus_id": "00000000-0000-0000-0000-000000000000",
+  "outputs": ["knowledge_fast"],
+  "max_files": 25,
+  "max_millis": 750
+}
+```
+
+The response includes `freshness`, source counts, knowledge summary, legal
+summary, and warnings. `freshness="fresh"` means the bounded sync completed
+without failed files or truncation.
+
+Search responses include corpus freshness metadata:
+
+- `index_fresh=true` means the selected corpus was synced successfully.
+- `index_fresh=false` means Anno answered from the existing index and the caller should consider `sync_corpus`.
+- `sync.attempted=false` with `reason="models_not_loaded"` means Anno avoided a hidden model cold start.
 
 ## Memory Tools
 
@@ -51,6 +82,11 @@ These tools reuse the local vault and RAG index. Search outputs are
 pseudonymized; citation rehydration is a trusted local operation. Inspect the
 tool schema exposed by the installed MCP client before automating exact
 arguments.
+
+For corpus-scoped indexing, generated legal anonymized files are stored under
+Anno's data directory, not under the client source folder. Use the explicit
+export workflow when generated anonymized files need to be copied to a
+user-chosen destination.
 
 ## Review Tools
 

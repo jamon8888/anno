@@ -33,6 +33,14 @@ additional options when built with optional features.
 | `anno-rag review extract` | Run review extraction for existing rows and columns. | Requires configured model/provider support; use `--help` for exact flags. |
 | `anno-rag review export` | Export a review. | Current CLI builds reliably document `xlsx` and `md`; use installed `--help` for available formats. |
 
+## MCP Corpus Sync
+
+Corpus catch-up is exposed through the MCP server rather than a standalone CLI
+command. Use `sync_corpus` from the connected MCP client to refresh a selected
+corpus after adding files. The default output is `knowledge_fast`; request
+`legal_semantic` explicitly when legal vectors, enrichment, graph rows, and
+legal document bindings should be refreshed.
+
 ## Verification
 
 Check the binary version:

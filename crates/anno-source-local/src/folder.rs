@@ -177,7 +177,7 @@ fn is_generated_anno_dir(root: &Path, path: &Path) -> bool {
 fn is_generated_anno_dir_name(name: &str) -> bool {
     matches!(
         name.to_ascii_lowercase().as_str(),
-        "anon" | "outputs" | ".anno" | ".anno-rag" | "vault"
+        "anon" | ".anno" | ".anno-rag" | "vault"
     )
 }
 
@@ -255,19 +255,16 @@ mod tests {
         .expect("generated nested output");
         fs::create_dir_all(dir.path().join("nested").join("anon")).expect("nested anon dir");
         fs::write(
-            dir.path()
-                .join("nested")
-                .join("anon")
-                .join("source.md"),
+            dir.path().join("nested").join("anon").join("source.md"),
             b"# generated nested anon",
         )
         .expect("generated nested anon");
         fs::create_dir_all(dir.path().join("outputs")).expect("outputs dir");
         fs::write(
-            dir.path().join("outputs").join("export.md"),
-            b"# generated export",
+            dir.path().join("outputs").join("client-output.md"),
+            b"# legitimate client output",
         )
-        .expect("generated export");
+        .expect("client output");
         fs::create_dir_all(dir.path().join(".anno")).expect(".anno dir");
         fs::write(
             dir.path().join(".anno").join("state.md"),
@@ -294,7 +291,7 @@ mod tests {
                     .to_string()
             })
             .collect();
-        assert_eq!(names, vec!["source.md"]);
+        assert_eq!(names, vec!["client-output.md", "source.md"]);
     }
 
     #[test]

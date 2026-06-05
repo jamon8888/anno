@@ -1,4 +1,4 @@
-use crate::core::entity::{Entity, EntityType, EntityCategory};
+use crate::core::entity::{Entity, EntityCategory, EntityType};
 use regex::Regex;
 use std::sync::OnceLock;
 
@@ -14,14 +14,23 @@ fn voie_re() -> &'static Regex {
 }
 
 pub fn extract_addresses(text: &str) -> Vec<Entity> {
-    voie_re().find_iter(text).map(|m| {
-        let start = text[..m.start()].chars().count();
-        let end = text[..m.end()].chars().count();
-        Entity::builder(m.as_str(), EntityType::Custom { name: "address".into(), category: EntityCategory::Place })
+    voie_re()
+        .find_iter(text)
+        .map(|m| {
+            let start = text[..m.start()].chars().count();
+            let end = text[..m.end()].chars().count();
+            Entity::builder(
+                m.as_str(),
+                EntityType::Custom {
+                    name: "address".into(),
+                    category: EntityCategory::Place,
+                },
+            )
             .span(start, end)
             .confidence(CONFIDENCE)
             .build()
-    }).collect()
+        })
+        .collect()
 }
 
 #[cfg(test)]

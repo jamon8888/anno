@@ -20,14 +20,9 @@ use crate::error::{Error, Result};
 use crate::layers::GdprLayerSet;
 use crate::legal::{LegalEntity, LegalLabel};
 use crate::validators::{
-    apply_validators, EntityValidator, RejectionCounts,
-    dates::DateRangeValidator,
-    email::EmailRfcValidator,
-    iban::Iban97Validator,
-    luhn::LuhnValidator,
-    network::IpAddressValidator,
-    nir::NirControlKeyValidator,
-    postal::PostalCodeValidator,
+    apply_validators, dates::DateRangeValidator, email::EmailRfcValidator, iban::Iban97Validator,
+    luhn::LuhnValidator, network::IpAddressValidator, nir::NirControlKeyValidator,
+    postal::PostalCodeValidator, EntityValidator, RejectionCounts,
 };
 use anno::backends::gliner2_fastino::GLiNER2Fastino;
 use anno::backends::inference::ZeroShotNER;
@@ -544,8 +539,7 @@ impl Detector {
         if GdprLayerSet::from_env().includes_heuristics() {
             let labels = pii_label_set();
             let label_refs: Vec<&str> = labels.iter().copied().collect();
-            if let Ok(heur_entities) =
-                self.heuristic_fr.extract_with_types(text, &label_refs, 0.5)
+            if let Ok(heur_entities) = self.heuristic_fr.extract_with_types(text, &label_refs, 0.5)
             {
                 all.extend(anno_entities_to_detected(text, heur_entities)?);
             }
@@ -1196,5 +1190,35 @@ mod tests {
                 .expect_err("cuda unavailable");
             assert!(err.to_string().contains("gpu-cuda"));
         }
+    }
+
+    // Phase A integration: validators + heuristics + layers
+    #[test]
+    fn layer_basic_disables_validators() {
+        std::env::set_var("ANNO_GDPR_LAYERS", "basic");
+        assert!(!crate::layers::GdprLayerSet::from_env().includes_validators());
+    }
+
+    #[test]
+    fn layer_defense_enables_validators() {
+        std::env::set_var("ANNO_GDPR_LAYERS", "defense");
+        assert!(crate::layers::GdprLayerSet::from_env().includes_validators());
+        assert!(crate::layers::GdprLayerSet::from_env().includes_heuristics());
+    }
+
+    #[test]
+    fn empty_validators_keeps_all() {
+        use cloakpipe_core::{DetectedEntity, DetectionSource, EntityCategory};
+        let entities = vec![DetectedEntity {
+            original: "test".into(),
+            start: 0,
+            end: 4,
+            category: EntityCategory::Custom("x".into()),
+            confidence: 0.9,
+            source: DetectionSource::Ner,
+        }];
+        let (kept, counts) = crate::validators::apply_validators(entities, "", &[]);
+        assert_eq!(kept.len(), 1);
+        assert!(counts.is_empty());
     }
 }
