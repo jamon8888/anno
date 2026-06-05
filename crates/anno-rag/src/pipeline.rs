@@ -217,6 +217,26 @@ impl Pipeline {
         Ok(self.detector.get().expect("just set"))
     }
 
+    /// Borrow config for privacy workspace orchestration.
+    #[must_use]
+    pub fn config(&self) -> &AnnoRagConfig {
+        &self.cfg
+    }
+
+    /// Load detector for privacy workspace orchestration.
+    ///
+    /// # Errors
+    /// Returns detector initialization errors.
+    pub fn detector_for_privacy(&self) -> Result<&crate::detect::Detector> {
+        self.detector_get_or_init().map(|arc| arc.as_ref())
+    }
+
+    /// Borrow vault for privacy workspace orchestration.
+    #[must_use]
+    pub fn vault_for_privacy(&self) -> &crate::vault::Vault {
+        &self.vault
+    }
+
     /// Returns `true` if the embedder has been initialized (model weights loaded).
     #[must_use]
     pub fn embedder_loaded(&self) -> bool {
@@ -584,6 +604,29 @@ impl Pipeline {
     ) -> Result<LegalIngestSummary> {
         self.ingest_folder_with_scope(folder, recursive, output_dir, Some(scope))
             .await
+    }
+
+    /// Prepare a local privacy workspace under `<source_root>/vault`.
+    ///
+    /// # Errors
+    /// Returns privacy, extraction, detection, vault, or IO errors.
+    pub async fn privacy_prepare_folder(
+        &self,
+        source_root: &Path,
+        recursive: bool,
+    ) -> Result<crate::privacy_workspace::PrivacyPrepareSummary> {
+        crate::privacy_workspace::prepare_folder(self, source_root, recursive).await
+    }
+
+    /// Finalize a local privacy workspace after user Word edits.
+    ///
+    /// # Errors
+    /// Returns privacy, extraction, detection, vault, or IO errors.
+    pub async fn privacy_finalize_folder(
+        &self,
+        workspace: &Path,
+    ) -> Result<crate::privacy_workspace::PrivacyFinalizeSummary> {
+        crate::privacy_workspace::finalize_folder(self, workspace).await
     }
 
     async fn ingest_folder_with_scope(
@@ -1545,6 +1588,16 @@ fn legal_ingest_candidate_paths(
     paths
 }
 
+/// Privacy workspace candidate paths. Excludes generated output folders.
+#[must_use]
+pub fn privacy_candidate_paths(
+    folder: &Path,
+    recursive: bool,
+    workspace_dir: &Path,
+) -> Vec<std::path::PathBuf> {
+    legal_ingest_candidate_paths(folder, recursive, workspace_dir)
+}
+
 fn is_supported_ingest_path(path: &Path) -> bool {
     let ext = path
         .extension()
@@ -1594,7 +1647,7 @@ fn is_anno_generated_output(source_root: &Path, path: &Path, output_dir: &Path) 
 fn is_anno_generated_dir_name(name: &str) -> bool {
     matches!(
         name.to_ascii_lowercase().as_str(),
-        "anon" | ".anno" | ".anno-rag"
+        "anon" | ".anno" | ".anno-rag" | "vault"
     )
 }
 
@@ -2540,6 +2593,16 @@ mod tests {
             .collect();
 
         assert_eq!(names, vec!["contract.md", "kept.md", "source.md"]);
+    }
+
+    #[test]
+    fn generated_output_filter_skips_vault_workspace() {
+        let root = std::path::Path::new("C:/Clients/Matter X");
+        assert!(super::is_anno_generated_output(
+            root,
+            std::path::Path::new("C:/Clients/Matter X/vault/01-working-documents/a.docx"),
+            std::path::Path::new("C:/Clients/Matter X/anon"),
+        ));
     }
 
     #[test]

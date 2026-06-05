@@ -64,6 +64,10 @@ pub enum Error {
     #[error("legal: {0}")]
     Legal(String),
 
+    /// Privacy workspace generation, DOCX parsing, manifest, or report failure.
+    #[error("privacy: {0}")]
+    Privacy(String),
+
     /// Legal knowledge-graph operation failed (open, upsert, query,
     /// compaction). Treated like `Legal` at the ingest path — retried via
     /// `drain_enrichment_backlog`.

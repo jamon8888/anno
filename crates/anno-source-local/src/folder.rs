@@ -177,7 +177,7 @@ fn is_generated_anno_dir(root: &Path, path: &Path) -> bool {
 fn is_generated_anno_dir_name(name: &str) -> bool {
     matches!(
         name.to_ascii_lowercase().as_str(),
-        "anon" | ".anno" | ".anno-rag"
+        "anon" | ".anno" | ".anno-rag" | "vault"
     )
 }
 
@@ -292,6 +292,22 @@ mod tests {
             })
             .collect();
         assert_eq!(names, vec!["client-output.md", "source.md"]);
+    }
+
+    #[test]
+    fn skips_vault_generated_folder() {
+        let dir = tempfile::tempdir().expect("tempdir");
+        std::fs::create_dir_all(dir.path().join("vault")).expect("mkdir");
+        std::fs::write(dir.path().join("vault").join("report.docx"), b"generated").expect("write");
+        std::fs::write(dir.path().join("source.txt"), b"source").expect("write");
+
+        let source = LocalFolderSource::new(dir.path());
+        let discovered = source
+            .discover(&DiscoverBudget::default())
+            .expect("discover");
+
+        assert_eq!(discovered.len(), 1);
+        assert!(discovered[0].external_id.ends_with("source.txt"));
     }
 
     #[test]

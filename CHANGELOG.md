@@ -6,6 +6,11 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Semver: pre-1.
 
 ## [Unreleased] — v0.3 in progress
 
+### Added
+- Added privacy vault Word review design and local workflow tools for preparing
+  editable working documents, reading `à masquer` / `à garder` comments, and
+  regenerating anonymized outputs without returning PII through Cowork.
+
 ### Phase A: Deterministic Stack (MERGED)
 - **Entity validators** — Luhn (SIRET, card_number), IBAN mod-97 (ISO 13616), NIR control key (Corsica 2A/2B), date range, IP address, email RFC-light, postal code (France mainland + DOM)
 - **GdprLayerSet** — tiered detection via `ANNO_GDPR_LAYERS` env: `basic` (regex+NER only), `defense` (+ FR heuristics + validators, default), `shadow` (Phase C placeholder), `full` (Phase D placeholder)

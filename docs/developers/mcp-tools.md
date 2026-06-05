@@ -24,6 +24,16 @@ but it is not a complete inventory of every `review_*` method.
 | `anno_health` | Report version, build target, available tools, and vault state. | Side-effect-free; it does not validate or download model files. |
 | `download_models` | Download local embedder and NER models in the background. | Writes model files locally and returns status/path metadata. |
 
+## Privacy Vault Tools
+
+| Tool | Purpose | Privacy behavior |
+|---|---|---|
+| `privacy_prepare_folder` | Create a local `vault` workspace with editable Word review documents, anonymized outputs, reports, and a manifest. | Returns generated paths, counts, and status metadata only. Cleartext stays in local working files. |
+| `privacy_finalize_folder` | Read Word comments from a local `vault` workspace and regenerate anonymized documents after user edits. | Treats `à masquer` and `à garder` comments as local instructions; returns paths and aggregate counts only. |
+| `privacy_status` | Report privacy workflow capabilities. | Does not load models and does not return document content. |
+
+## Corpus Sync
+
 ### `sync_corpus`
 
 Synchronizes a selected corpus. By default it refreshes the `knowledge_fast`
