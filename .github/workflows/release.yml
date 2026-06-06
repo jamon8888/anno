@@ -535,7 +535,7 @@ jobs:
       PLAN: ${{ needs.plan.outputs.val }}
       GITHUB_USER: "axo bot"
       GITHUB_EMAIL: "admin+bot@axo.dev"
-    if: ${{ !fromJson(needs.plan.outputs.val).announcement_is_prerelease || fromJson(needs.plan.outputs.val).publish_prereleases }}
+    if: ${{ secrets.HOMEBREW_TAP_TOKEN != '' && (!fromJson(needs.plan.outputs.val).announcement_is_prerelease || fromJson(needs.plan.outputs.val).publish_prereleases) }}
     steps:
       - uses: actions/checkout@v6
         with:
@@ -623,6 +623,18 @@ jobs:
         with:
           targets: ${{ matrix.target }}
 
+      # ── protoc (required by lance-encoding/prost) ─────────────────────
+      - name: Install protoc (Linux)
+        if: matrix.os == 'linux'
+        run: sudo apt-get update && sudo apt-get install -y protobuf-compiler
+      - name: Install protoc (macOS)
+        if: matrix.os == 'macos'
+        run: brew list protobuf >/dev/null 2>&1 || brew install protobuf
+      - name: Install protoc (Windows)
+        if: matrix.os == 'windows'
+        shell: pwsh
+        run: choco install protoc -y --no-progress
+
       # ── sccache ─────────────────────────────────────────────────────────
       - name: Set up sccache
         uses: mozilla-actions/sccache-action@v0.0.10
@@ -638,7 +650,7 @@ jobs:
         with:
           cuda: "12.4.1"
           method: network
-          sub-packages: '["nvcc","cudart"]'
+          sub-packages: '["nvcc","cudart","cublas","cublas_dev"]'
 
       - name: Install CUDA toolkit (Windows)
         if: matrix.os == 'windows'
@@ -753,7 +765,7 @@ jobs:
     # use "always() && ..." to allow us to wait for all publish jobs while
     # still allowing individual publish jobs to skip themselves (for prereleases).
     # "host" however must run to completion, no skipping allowed!
-    if: ${{ always() && needs.host.result == 'success' && (needs.publish-homebrew-formula.result == 'skipped' || needs.publish-homebrew-formula.result == 'success') }}
+    if: ${{ always() && needs.host.result == 'success' && (needs.publish-homebrew-formula.result == 'skipped' || needs.publish-homebrew-formula.result == 'success' || needs.publish-homebrew-formula.result == 'failure') }}
     runs-on: "ubuntu-22.04"
     env:
       GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
