@@ -243,7 +243,22 @@ jobs:
           json.dump(m, open('mcpb-staging/manifest.json', 'w'), indent=2)
           print('manifest OK')
           " "$VERSION" "$PLATFORM" "$BIN"
-          cd mcpb-staging && zip -r "../${MCPB_NAME}" . && cd ..
+          python3 - "$MCPB_NAME" <<'PY'
+          import pathlib
+          import sys
+          import zipfile
+
+          package = pathlib.Path(sys.argv[1])
+          staging = pathlib.Path("mcpb-staging")
+          if package.exists():
+              package.unlink()
+
+          with zipfile.ZipFile(package, "w", compression=zipfile.ZIP_DEFLATED) as archive:
+              for path in sorted(p for p in staging.rglob("*") if p.is_file()):
+                  archive.write(path, path.relative_to(staging).as_posix())
+
+          print(f"package OK {package}")
+          PY
           echo "MCPB_NAME=${MCPB_NAME}" >> "$GITHUB_ENV"
 
       # ANNO-PATCH: .mcpb validation and upload — re-apply after every `dist generate`.
