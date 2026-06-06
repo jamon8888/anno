@@ -564,6 +564,180 @@ jobs:
           done
           git push
 
+  # ANNO-PATCH: GPU-optimised build variants — re-apply after every `dist generate`.
+  # Produces separate binaries/DMGs for Metal (Apple Silicon) and CUDA (NVIDIA).
+  # These are uploaded to the same GitHub release as additional optional downloads.
+  build-gpu-artifacts:
+    needs:
+      - plan
+      - host
+    # Run only on real releases (not PRs), after the CPU release is published.
+    if: ${{ always() && needs.plan.result == 'success' && needs.host.result == 'success' }}
+    env:
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      CARGO_INCREMENTAL: "0"
+      RELEASE_TAG: ${{ needs.plan.outputs.tag }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          # ── Apple Silicon — Metal GPU ──────────────────────────────────────
+          - name: metal
+            runner: macos-14
+            target: aarch64-apple-darwin
+            features: gpu-metal
+            suffix: -metal
+            os: macos
+          # ── Intel Mac — Metal not available; CPU-only, kept for completeness
+          # ── Linux x86_64 — NVIDIA CUDA ────────────────────────────────────
+          - name: cuda-linux
+            runner: ubuntu-22.04
+            target: x86_64-unknown-linux-gnu
+            features: gpu-cuda
+            suffix: -cuda
+            os: linux
+          # ── Windows x86_64 — NVIDIA CUDA ──────────────────────────────────
+          - name: cuda-windows
+            runner: windows-2022
+            target: x86_64-pc-windows-msvc
+            features: gpu-cuda
+            suffix: -cuda
+            os: windows
+    runs-on: ${{ matrix.runner }}
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+          submodules: recursive
+
+      # ── Rust toolchain ───────────────────────────────────────────────────
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
+
+      # ── sccache ─────────────────────────────────────────────────────────
+      - name: Set up sccache
+        uses: mozilla-actions/sccache-action@v0.0.10
+      - run: |
+          echo "RUSTC_WRAPPER=sccache" >> "$GITHUB_ENV"
+          echo "SCCACHE_GHA_ENABLED=true" >> "$GITHUB_ENV"
+        shell: bash
+
+      # ── CUDA toolkit (Linux + Windows only) ─────────────────────────────
+      - name: Install CUDA toolkit (Linux)
+        if: matrix.os == 'linux'
+        uses: Jimver/cuda-toolkit@v0.2.23
+        with:
+          cuda: "12.4.1"
+          method: network
+          sub-packages: '["nvcc","cudart"]'
+
+      - name: Install CUDA toolkit (Windows)
+        if: matrix.os == 'windows'
+        uses: Jimver/cuda-toolkit@v0.2.23
+        with:
+          cuda: "12.4.1"
+          method: network
+          sub-packages: '["nvcc","cudart","cublas","cublas_dev"]'
+
+      # ── ORT dylib for macOS Metal build (same as CPU build) ─────────────
+      - name: Set up ORT dylib (macOS Metal)
+        if: matrix.os == 'macos'
+        shell: bash
+        run: |
+          ORT_VERSION="1.24.4"
+          mkdir -p /tmp/ort-arm
+          curl -fsSL "https://github.com/microsoft/onnxruntime/releases/download/v${ORT_VERSION}/onnxruntime-osx-arm64-${ORT_VERSION}.tgz" \
+            -o /tmp/ort-arm/ort.tgz
+          tar -xf /tmp/ort-arm/ort.tgz -C /tmp/ort-arm
+          ORT_DIR=$(find /tmp/ort-arm -maxdepth 1 -type d -name "onnxruntime-*" | head -1)
+          echo "ORT_LIB_LOCATION=${ORT_DIR}/lib" >> "$GITHUB_ENV"
+          echo "ORT_PREFER_DYNAMIC_LINK=1" >> "$GITHUB_ENV"
+
+      # ── Build GPU binary ─────────────────────────────────────────────────
+      - name: Build GPU binary
+        shell: bash
+        run: |
+          cargo build --release -p anno-rag-bin \
+            --target ${{ matrix.target }} \
+            --features ${{ matrix.features }}
+
+      # ── Package macOS .dmg (Metal) ───────────────────────────────────────
+      - name: Package macOS .dmg (Metal)
+        if: matrix.os == 'macos'
+        shell: bash
+        run: |
+          BINARY="target/${{ matrix.target }}/release/anno-rag"
+          ORT_DYLIB="${ORT_LIB_LOCATION}/libonnxruntime.dylib"
+          DMG_NAME="anno-rag${SUFFIX}-${RELEASE_TAG}-${{ matrix.target }}.dmg"
+
+          # Bundle ORT dylib + fix rpath
+          cp "${ORT_DYLIB}" "$(dirname ${BINARY})/libonnxruntime.dylib"
+          LINKED=$(otool -L "${BINARY}" | grep onnxruntime | awk '{print $1}')
+          install_name_tool -change "${LINKED}" "@executable_path/libonnxruntime.dylib" "${BINARY}"
+          install_name_tool -add_rpath "@executable_path" "${BINARY}" 2>/dev/null || true
+
+          # Stage & create DMG
+          mkdir -p dmg-staging
+          cp "${BINARY}" dmg-staging/anno-rag
+          cp "$(dirname ${BINARY})/libonnxruntime.dylib" dmg-staging/
+          cat > dmg-staging/install.sh << 'INSTALL'
+          #!/bin/sh
+          set -e
+          DIR="$(cd "$(dirname "$0")" && pwd)"
+          sudo cp "${DIR}/anno-rag" /usr/local/bin/anno-rag
+          sudo cp "${DIR}/libonnxruntime.dylib" /usr/local/lib/libonnxruntime.dylib
+          echo "anno-rag (Metal GPU) installed"
+          INSTALL
+          chmod +x dmg-staging/install.sh
+
+          hdiutil create -volname "anno-rag Metal ${RELEASE_TAG}" \
+            -srcfolder dmg-staging -ov -format UDZO "${DMG_NAME}"
+          echo "DMG_ASSET=${DMG_NAME}" >> "$GITHUB_ENV"
+        env:
+          SUFFIX: ${{ matrix.suffix }}
+
+      # ── Package Linux CUDA tarball ────────────────────────────────────────
+      - name: Package Linux CUDA tarball
+        if: matrix.os == 'linux'
+        shell: bash
+        run: |
+          BINARY="target/${{ matrix.target }}/release/anno-rag"
+          TAR_NAME="anno-rag${SUFFIX}-${RELEASE_TAG}-${{ matrix.target }}.tar.gz"
+          mkdir -p pkg-staging
+          cp "${BINARY}" pkg-staging/anno-rag
+          tar czf "${TAR_NAME}" -C pkg-staging anno-rag
+          echo "TAR_ASSET=${TAR_NAME}" >> "$GITHUB_ENV"
+        env:
+          SUFFIX: ${{ matrix.suffix }}
+
+      # ── Package Windows CUDA zip ──────────────────────────────────────────
+      - name: Package Windows CUDA zip
+        if: matrix.os == 'windows'
+        shell: pwsh
+        run: |
+          $binary = "target\${{ matrix.target }}\release\anno-rag.exe"
+          $zipName = "anno-rag${{ matrix.suffix }}-${env:RELEASE_TAG}-${{ matrix.target }}.zip"
+          Compress-Archive -Path $binary -DestinationPath $zipName
+          "ZIP_ASSET=$zipName" | Out-File -FilePath $env:GITHUB_ENV -Append
+
+      # ── Upload GPU artifact to the GitHub Release ─────────────────────────
+      - name: Upload GPU artifact to release (macOS)
+        if: matrix.os == 'macos'
+        shell: bash
+        run: gh release upload "${RELEASE_TAG}" "${DMG_ASSET}" --clobber
+
+      - name: Upload GPU artifact to release (Linux)
+        if: matrix.os == 'linux'
+        shell: bash
+        run: gh release upload "${RELEASE_TAG}" "${TAR_ASSET}" --clobber
+
+      - name: Upload GPU artifact to release (Windows)
+        if: matrix.os == 'windows'
+        shell: pwsh
+        run: gh release upload "${env:RELEASE_TAG}" "${env:ZIP_ASSET}" --clobber
+
   announce:
     needs:
       - plan
