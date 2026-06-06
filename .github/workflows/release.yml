@@ -234,6 +234,69 @@ jobs:
           # Actually do builds and make zips and whatnot
           dist build ${{ needs.plan.outputs.tag-flag }} --print=linkage --output-format=json ${{ matrix.dist_args }} > dist-manifest.json
           echo "dist ran successfully"
+      # ANNO-PATCH: macOS .dmg packaging — re-apply after every `dist generate`.
+      # Bundles libonnxruntime.dylib alongside the binary so users need no Homebrew.
+      # Fixes the rpath so @executable_path resolves the bundled dylib at runtime.
+      - name: Bundle ORT dylib + create .dmg (macOS)
+        if: runner.os == 'macOS'
+        shell: bash
+        run: |
+          TARGET="${{ join(matrix.targets, '-') }}"
+          BINARY="target/${TARGET}/dist/anno-rag"
+          RELEASE_TAG="${{ needs.plan.outputs.tag }}"
+          DMG_NAME="anno-rag-${RELEASE_TAG}-${TARGET}.dmg"
+
+          # Locate the ORT dylib that was set up in ORT_LIB_LOCATION
+          ORT_DYLIB="${ORT_LIB_LOCATION}/libonnxruntime.dylib"
+          if [ ! -f "${ORT_DYLIB}" ]; then
+            # Fallback: find any libonnxruntime*.dylib in ORT_LIB_LOCATION
+            ORT_DYLIB=$(find "${ORT_LIB_LOCATION}" -name "libonnxruntime*.dylib" | grep -v dSYM | head -1)
+          fi
+          echo "Bundling ORT dylib: ${ORT_DYLIB}"
+
+          # Copy dylib alongside binary in the dist folder
+          cp "${ORT_DYLIB}" "target/${TARGET}/dist/libonnxruntime.dylib"
+
+          # Patch the binary rpath so it finds @executable_path/libonnxruntime.dylib
+          LINKED=$(otool -L "${BINARY}" | grep onnxruntime | awk '{print $1}')
+          echo "Currently linked ORT: ${LINKED}"
+          install_name_tool -change "${LINKED}" "@executable_path/libonnxruntime.dylib" "${BINARY}"
+          # Also ensure @executable_path is in rpath
+          install_name_tool -add_rpath "@executable_path" "${BINARY}" 2>/dev/null || true
+
+          # Verify the patch
+          echo "After patching:" && otool -L "${BINARY}" | grep -i ort
+
+          # Build .dmg staging
+          DMG_STAGING="dmg-staging-${TARGET}"
+          mkdir -p "${DMG_STAGING}"
+          cp "${BINARY}" "${DMG_STAGING}/anno-rag"
+          cp "target/${TARGET}/dist/libonnxruntime.dylib" "${DMG_STAGING}/"
+          # Simple install helper script
+          cat > "${DMG_STAGING}/install.sh" << 'INSTALL'
+          #!/bin/sh
+          set -e
+          DIR="$(cd "$(dirname "$0")" && pwd)"
+          sudo cp "${DIR}/anno-rag" /usr/local/bin/anno-rag
+          sudo cp "${DIR}/libonnxruntime.dylib" /usr/local/lib/libonnxruntime.dylib
+          echo "anno-rag installed to /usr/local/bin"
+          echo "libonnxruntime.dylib installed to /usr/local/lib"
+          INSTALL
+          chmod +x "${DMG_STAGING}/install.sh"
+
+          # Create .dmg
+          hdiutil create \
+            -volname "anno-rag ${RELEASE_TAG}" \
+            -srcfolder "${DMG_STAGING}" \
+            -ov -format UDZO \
+            "${DMG_NAME}"
+          echo "DMG created: ${DMG_NAME}" && ls -lh "${DMG_NAME}"
+
+          # Upload to the GitHub release
+          gh release upload "${RELEASE_TAG}" "${DMG_NAME}" --clobber
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
       # ANNO-PATCH: Release binary validation — re-apply after every `dist generate`.
       - name: Validate anno-rag release binary (Windows)
         if: runner.os == 'Windows'
