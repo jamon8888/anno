@@ -1,0 +1,102 @@
+id = "senior-facilities-v1"
+name = "Senior Facilities Agreement (DD)"
+version = "1.0.0"
+description = "Senior debt facilities — tranches, pricing, covenants, prepayment, defaults."
+vertical = "legal-intl"
+
+[[column]]
+name = "borrower"
+prompt = "Borrower(s) (full legal names)."
+type = "text"
+
+[[column]]
+name = "lenders"
+prompt = "Lender(s) / agent."
+type = "text"
+
+[[column]]
+name = "agreement_date"
+prompt = "Agreement date. Return ISO 8601 (YYYY-MM-DD)."
+type = "date"
+
+[[column]]
+name = "facility_tranches"
+prompt = "Facility tranches (Term A/B, RCF, capex), verbatim."
+type = "verbatim"
+
+[[column]]
+name = "total_commitment_amount"
+prompt = "Total commitment as a number."
+type = "number"
+
+[[column]]
+name = "total_commitment_currency"
+prompt = "Currency of the total commitment."
+type = "enum"
+options = ["EUR", "USD", "GBP", "CHF", "OTHER"]
+
+[[column]]
+name = "margin"
+prompt = "Margin / pricing grid, verbatim."
+type = "verbatim"
+
+[[column]]
+name = "maturity_date"
+prompt = "Final maturity date. Return ISO 8601 (YYYY-MM-DD)."
+type = "date"
+
+[[column]]
+name = "financial_covenants"
+prompt = "Financial covenants (leverage, ICR, etc.), verbatim."
+type = "verbatim"
+
+[[column]]
+name = "covenant_levels"
+prompt = "Covenant thresholds and step-downs, verbatim."
+type = "verbatim"
+
+[[column]]
+name = "mandatory_prepayment"
+prompt = "Mandatory prepayment events, verbatim."
+type = "verbatim"
+
+[[column]]
+name = "change_of_control"
+prompt = "Is there a change-of-control prepayment/default? true/false."
+type = "boolean"
+
+[[column]]
+name = "mac_clause"
+prompt = "Is there a Material Adverse Change clause? true/false."
+type = "boolean"
+
+[[column]]
+name = "events_of_default"
+prompt = "Key events of default, verbatim."
+type = "verbatim"
+
+[[column]]
+name = "security_summary"
+prompt = "Summary of security granted, verbatim."
+type = "verbatim"
+
+[[column]]
+name = "governing_law"
+prompt = "Governing law as an ISO 3166-1 alpha-2 country code."
+type = "enum"
+options = ["FR", "DE", "UK", "US", "CH", "BE", "LU", "NL", "ES", "IT", "SE", "OTHER"]
+
+[[column]]
+name = "source_reference"
+prompt = "Quote verbatim the single most material clause supporting this row."
+type = "verbatim"
+
+[[column]]
+name = "key_risk_flag"
+prompt = "Does this document warrant a red flag for the deal? true/false."
+type = "boolean"
+
+[[column]]
+name = "risk_note"
+prompt = "One sentence explaining the risk, if any. Otherwise 'none'."
+type = "text"

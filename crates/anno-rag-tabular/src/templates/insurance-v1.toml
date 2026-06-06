@@ -1,0 +1,83 @@
+id = "insurance-v1"
+name = "Insurance Policies (DD)"
+version = "1.0.0"
+description = "Insurance policies — coverage, limits, deductibles, exclusions, claims history."
+vertical = "legal-intl"
+
+[[column]]
+name = "insurer"
+prompt = "Insurer name."
+type = "text"
+
+[[column]]
+name = "policy_type"
+prompt = "Type of policy."
+type = "enum"
+options = ["liability", "property", "d_and_o", "cyber", "credit", "w_and_i", "other"]
+
+[[column]]
+name = "policy_number"
+prompt = "Policy number."
+type = "text"
+
+[[column]]
+name = "coverage_limit_amount"
+prompt = "Coverage limit as a number."
+type = "number"
+
+[[column]]
+name = "coverage_limit_currency"
+prompt = "Currency of the coverage limit."
+type = "enum"
+options = ["EUR", "USD", "GBP", "CHF", "OTHER"]
+
+[[column]]
+name = "deductible_amount"
+prompt = "Deductible/excess as a number. Null if none."
+type = "number"
+
+[[column]]
+name = "deductible_currency"
+prompt = "Currency of the deductible."
+type = "enum"
+options = ["EUR", "USD", "GBP", "CHF", "OTHER"]
+
+[[column]]
+name = "period_start"
+prompt = "Policy period start. Return ISO 8601 (YYYY-MM-DD)."
+type = "date"
+
+[[column]]
+name = "period_end"
+prompt = "Policy period end. Return ISO 8601 (YYYY-MM-DD)."
+type = "date"
+
+[[column]]
+name = "key_exclusions"
+prompt = "Key exclusions, verbatim."
+type = "verbatim"
+
+[[column]]
+name = "claims_history"
+prompt = "Claims history, verbatim. Otherwise 'none'."
+type = "verbatim"
+
+[[column]]
+name = "change_of_control"
+prompt = "Does the policy survive a change of control? true/false."
+type = "boolean"
+
+[[column]]
+name = "source_reference"
+prompt = "Quote verbatim the single most material clause supporting this row."
+type = "verbatim"
+
+[[column]]
+name = "key_risk_flag"
+prompt = "Does this policy warrant a red flag for the deal? true/false."
+type = "boolean"
+
+[[column]]
+name = "risk_note"
+prompt = "One sentence explaining the risk, if any. Otherwise 'none'."
+type = "text"

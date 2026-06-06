@@ -1,0 +1,85 @@
+id = "litigation-v1"
+name = "Litigation & Disputes (DD)"
+version = "1.0.0"
+description = "Pending and threatened disputes — type, status, exposure, provisions."
+vertical = "legal-intl"
+
+[[column]]
+name = "matter_reference"
+prompt = "Matter reference or case number."
+type = "text"
+
+[[column]]
+name = "parties"
+prompt = "Parties to the dispute."
+type = "text"
+
+[[column]]
+name = "dispute_type"
+prompt = "Type of dispute."
+type = "enum"
+options = ["commercial", "employment", "ip", "tax", "regulatory", "product", "other"]
+
+[[column]]
+name = "status"
+prompt = "Status of the dispute."
+type = "enum"
+options = ["pending", "threatened", "settled", "appeal", "closed"]
+
+[[column]]
+name = "forum"
+prompt = "Court or arbitration forum, verbatim."
+type = "verbatim"
+
+[[column]]
+name = "amount_at_stake_amount"
+prompt = "Amount at stake as a number. Null if unquantified."
+type = "number"
+
+[[column]]
+name = "amount_at_stake_currency"
+prompt = "Currency of the amount at stake."
+type = "enum"
+options = ["EUR", "USD", "GBP", "CHF", "OTHER"]
+
+[[column]]
+name = "provision_booked_amount"
+prompt = "Accounting provision booked as a number. Null if none."
+type = "number"
+
+[[column]]
+name = "provision_booked_currency"
+prompt = "Currency of the booked provision."
+type = "enum"
+options = ["EUR", "USD", "GBP", "CHF", "OTHER"]
+
+[[column]]
+name = "commenced_date"
+prompt = "Date the dispute commenced. Return ISO 8601 (YYYY-MM-DD)."
+type = "date"
+
+[[column]]
+name = "summary"
+prompt = "Short summary of the dispute."
+type = "text"
+
+[[column]]
+name = "governing_law"
+prompt = "Governing law as an ISO 3166-1 alpha-2 country code."
+type = "enum"
+options = ["FR", "DE", "UK", "US", "CH", "BE", "LU", "NL", "ES", "IT", "SE", "OTHER"]
+
+[[column]]
+name = "source_reference"
+prompt = "Quote verbatim the single most material passage supporting this row."
+type = "verbatim"
+
+[[column]]
+name = "key_risk_flag"
+prompt = "Does this matter warrant a red flag for the deal? true/false."
+type = "boolean"
+
+[[column]]
+name = "risk_note"
+prompt = "One sentence explaining the risk, if any. Otherwise 'none'."
+type = "text"

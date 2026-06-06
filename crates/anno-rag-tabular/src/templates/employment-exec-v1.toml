@@ -1,0 +1,88 @@
+id = "employment-exec-v1"
+name = "Executive Employment & Officers (DD)"
+version = "1.0.0"
+description = "Executives and corporate officers — comp, equity, severance, change of control."
+vertical = "legal-intl"
+
+[[column]]
+name = "name_role"
+prompt = "Name and role of the executive/officer."
+type = "text"
+
+[[column]]
+name = "contract_type"
+prompt = "Type of engagement."
+type = "enum"
+options = ["employment", "mandate", "consulting", "other"]
+
+[[column]]
+name = "start_date"
+prompt = "Start date. Return ISO 8601 (YYYY-MM-DD)."
+type = "date"
+
+[[column]]
+name = "base_comp_amount"
+prompt = "Annual base compensation as a number."
+type = "number"
+
+[[column]]
+name = "base_comp_currency"
+prompt = "Currency of the base compensation."
+type = "enum"
+options = ["EUR", "USD", "GBP", "CHF", "OTHER"]
+
+[[column]]
+name = "variable_comp"
+prompt = "Variable compensation (bonus, LTIP), verbatim. Otherwise 'none'."
+type = "verbatim"
+
+[[column]]
+name = "equity_incentives"
+prompt = "Equity incentives (BSPCE, stock options, free shares), verbatim. Otherwise 'none'."
+type = "verbatim"
+
+[[column]]
+name = "severance_terms"
+prompt = "Severance / golden parachute terms, verbatim. Otherwise 'none'."
+type = "verbatim"
+
+[[column]]
+name = "change_of_control_trigger"
+prompt = "Is there a change-of-control acceleration or severance trigger? true/false."
+type = "boolean"
+
+[[column]]
+name = "non_compete"
+prompt = "Is there a post-termination non-compete? true/false."
+type = "boolean"
+
+[[column]]
+name = "non_compete_indemnity"
+prompt = "Non-compete indemnity terms, verbatim. Otherwise 'none'."
+type = "verbatim"
+
+[[column]]
+name = "notice_period"
+prompt = "Notice period, verbatim."
+type = "verbatim"
+
+[[column]]
+name = "governing_law"
+prompt = "Governing law as an ISO 3166-1 alpha-2 country code."
+type = "enum"
+options = ["FR", "DE", "UK", "US", "CH", "BE", "LU", "NL", "ES", "IT", "SE", "OTHER"]
+
+[[column]]
+name = "source_reference"
+prompt = "Quote verbatim the single most material clause supporting this row."
+type = "verbatim"
+
+[[column]]
+name = "key_risk_flag"
+prompt = "Does this document warrant a red flag for the deal? true/false."
+type = "boolean"
+
+[[column]]
+name = "risk_note"
+prompt = "One sentence explaining the risk, if any. Otherwise 'none'."
+type = "text"

@@ -1,0 +1,58 @@
+id = "red-flags-register-v1"
+name = "Red Flags Register (DD)"
+version = "1.0.0"
+description = "Issues register — one row per risk, the client deliverable."
+vertical = "legal-intl"
+
+[[column]]
+name = "issue_title"
+prompt = "Short title of the issue."
+type = "text"
+
+[[column]]
+name = "workstream"
+prompt = "DD workstream the issue belongs to."
+type = "enum"
+options = ["corporate", "commercial", "employment", "ip_it", "real_estate", "litigation", "regulatory", "finance_debt", "tax", "data_protection", "insurance", "environmental"]
+
+[[column]]
+name = "severity"
+prompt = "Severity of the issue."
+type = "enum"
+options = ["critical", "high", "medium", "low", "info"]
+
+[[column]]
+name = "description"
+prompt = "Description of the risk."
+type = "text"
+
+[[column]]
+name = "source_citation"
+prompt = "Quote verbatim the clause or passage evidencing the issue."
+type = "verbatim"
+
+[[column]]
+name = "source_document"
+prompt = "Document/exhibit the citation comes from."
+type = "text"
+
+[[column]]
+name = "impact"
+prompt = "Impact of the issue on the deal."
+type = "text"
+
+[[column]]
+name = "recommendation"
+prompt = "Recommended mitigation or SPA protection."
+type = "text"
+
+[[column]]
+name = "status"
+prompt = "Status of the issue."
+type = "enum"
+options = ["open", "mitigated", "accepted", "resolved"]
+
+[[column]]
+name = "owner"
+prompt = "Advisor responsible for the issue."
+type = "text"

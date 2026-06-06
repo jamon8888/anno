@@ -1,0 +1,60 @@
+id = "data-room-index-v1"
+name = "Data Room Index (DD)"
+version = "1.0.0"
+description = "Data-room inventory — one row per document, surfaces gaps and priorities."
+vertical = "legal-intl"
+
+[[column]]
+name = "document_title"
+prompt = "Title of the document."
+type = "text"
+
+[[column]]
+name = "doc_type"
+prompt = "Document type."
+type = "enum"
+options = ["spa", "sha", "jva", "facilities", "security", "intercreditor", "commercial", "lease", "employment", "ip", "litigation", "insurance", "data_protection", "debt", "corporate", "other"]
+
+[[column]]
+name = "workstream"
+prompt = "DD workstream this document belongs to."
+type = "enum"
+options = ["corporate", "commercial", "employment", "ip_it", "real_estate", "litigation", "regulatory", "finance_debt", "tax", "data_protection", "insurance", "environmental"]
+
+[[column]]
+name = "language"
+prompt = "Primary language of the document."
+type = "enum"
+options = ["fr", "en", "de", "other"]
+
+[[column]]
+name = "document_date"
+prompt = "Document date. Return ISO 8601 (YYYY-MM-DD). Null if undated."
+type = "date"
+
+[[column]]
+name = "parties"
+prompt = "Parties named in the document."
+type = "text"
+
+[[column]]
+name = "status"
+prompt = "Completeness status in the data room."
+type = "enum"
+options = ["received", "missing", "partial", "na"]
+
+[[column]]
+name = "priority"
+prompt = "Review priority."
+type = "enum"
+options = ["high", "medium", "low"]
+
+[[column]]
+name = "page_count"
+prompt = "Number of pages as a number. Null if unknown."
+type = "number"
+
+[[column]]
+name = "notes"
+prompt = "Reviewer notes."
+type = "text"

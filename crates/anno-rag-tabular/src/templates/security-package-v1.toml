@@ -1,0 +1,80 @@
+id = "security-package-v1"
+name = "Security Package (DD)"
+version = "1.0.0"
+description = "Security interests / sûretés — type, asset, ranking, perfection, amount secured."
+vertical = "legal-intl"
+
+[[column]]
+name = "grantor"
+prompt = "Security grantor (full legal name)."
+type = "text"
+
+[[column]]
+name = "secured_party"
+prompt = "Secured party / security agent."
+type = "text"
+
+[[column]]
+name = "security_type"
+prompt = "Type of security interest."
+type = "enum"
+options = ["share_pledge", "asset_pledge", "mortgage", "dailly_assignment", "fiducie", "floating_charge", "guarantee", "other"]
+
+[[column]]
+name = "secured_asset"
+prompt = "Asset over which security is granted."
+type = "text"
+
+[[column]]
+name = "secured_amount"
+prompt = "Maximum secured amount as a number. Null if all-monies."
+type = "number"
+
+[[column]]
+name = "secured_currency"
+prompt = "Currency of the secured amount."
+type = "enum"
+options = ["EUR", "USD", "GBP", "CHF", "OTHER"]
+
+[[column]]
+name = "ranking"
+prompt = "Ranking of the security."
+type = "enum"
+options = ["first", "second", "junior", "pari_passu", "other"]
+
+[[column]]
+name = "perfection_status"
+prompt = "Perfection/registration status."
+type = "enum"
+options = ["registered", "pending", "unperfected", "na"]
+
+[[column]]
+name = "grant_date"
+prompt = "Date the security was granted. Return ISO 8601 (YYYY-MM-DD)."
+type = "date"
+
+[[column]]
+name = "release_conditions"
+prompt = "Conditions for release of the security, verbatim. Otherwise 'none'."
+type = "verbatim"
+
+[[column]]
+name = "governing_law"
+prompt = "Governing law as an ISO 3166-1 alpha-2 country code."
+type = "enum"
+options = ["FR", "DE", "UK", "US", "CH", "BE", "LU", "NL", "ES", "IT", "SE", "OTHER"]
+
+[[column]]
+name = "source_reference"
+prompt = "Quote verbatim the single most material clause supporting this row."
+type = "verbatim"
+
+[[column]]
+name = "key_risk_flag"
+prompt = "Does this document warrant a red flag for the deal? true/false."
+type = "boolean"
+
+[[column]]
+name = "risk_note"
+prompt = "One sentence explaining the risk, if any. Otherwise 'none'."
+type = "text"

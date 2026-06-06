@@ -1,0 +1,93 @@
+id = "commercial-lease-v1"
+name = "Commercial Lease (DD)"
+version = "1.0.0"
+description = "Commercial leases / baux commerciaux — rent, term, use, assignment, restoration."
+vertical = "legal-intl"
+
+[[column]]
+name = "landlord"
+prompt = "Landlord (full legal name)."
+type = "text"
+
+[[column]]
+name = "tenant"
+prompt = "Tenant (full legal name)."
+type = "text"
+
+[[column]]
+name = "premises"
+prompt = "Premises address and surface area."
+type = "text"
+
+[[column]]
+name = "lease_type"
+prompt = "Type of lease."
+type = "enum"
+options = ["commercial_369", "derogatory", "professional", "other"]
+
+[[column]]
+name = "commencement_date"
+prompt = "Commencement date. Return ISO 8601 (YYYY-MM-DD)."
+type = "date"
+
+[[column]]
+name = "term_years"
+prompt = "Lease term in years as a number."
+type = "number"
+
+[[column]]
+name = "annual_rent_amount"
+prompt = "Annual rent as a number."
+type = "number"
+
+[[column]]
+name = "annual_rent_currency"
+prompt = "Currency of the annual rent."
+type = "enum"
+options = ["EUR", "USD", "GBP", "CHF", "OTHER"]
+
+[[column]]
+name = "permitted_use"
+prompt = "Permitted use / destination, verbatim."
+type = "verbatim"
+
+[[column]]
+name = "assignment_sublet"
+prompt = "Assignment and sub-let rights, verbatim."
+type = "verbatim"
+
+[[column]]
+name = "change_of_control"
+prompt = "Is there a change-of-control restriction? true/false."
+type = "boolean"
+
+[[column]]
+name = "restoration_obligations"
+prompt = "Restoration/dilapidation obligations, verbatim. Otherwise 'none'."
+type = "verbatim"
+
+[[column]]
+name = "break_options"
+prompt = "Break options, verbatim. Otherwise 'none'."
+type = "verbatim"
+
+[[column]]
+name = "governing_law"
+prompt = "Governing law as an ISO 3166-1 alpha-2 country code."
+type = "enum"
+options = ["FR", "DE", "UK", "US", "CH", "BE", "LU", "NL", "ES", "IT", "SE", "OTHER"]
+
+[[column]]
+name = "source_reference"
+prompt = "Quote verbatim the single most material clause supporting this row."
+type = "verbatim"
+
+[[column]]
+name = "key_risk_flag"
+prompt = "Does this document warrant a red flag for the deal? true/false."
+type = "boolean"
+
+[[column]]
+name = "risk_note"
+prompt = "One sentence explaining the risk, if any. Otherwise 'none'."
+type = "text"

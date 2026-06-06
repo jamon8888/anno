@@ -1,0 +1,139 @@
+id = "spa-v1"
+name = "Share Purchase Agreement (DD)"
+version = "1.0.0"
+description = "SPA abstraction — price, conditions precedent, R&W, indemnities, MAC, restrictive covenants."
+vertical = "legal-intl"
+
+[[column]]
+name = "target"
+prompt = "Name of the target entity (full legal name and corporate form)."
+type = "text"
+
+[[column]]
+name = "seller"
+prompt = "Name(s) of the seller(s)."
+type = "text"
+
+[[column]]
+name = "buyer"
+prompt = "Name(s) of the buyer(s)."
+type = "text"
+
+[[column]]
+name = "signing_date"
+prompt = "Signing date. Return ISO 8601 (YYYY-MM-DD)."
+type = "date"
+
+[[column]]
+name = "completion_date"
+prompt = "Completion/closing date. Return ISO 8601 (YYYY-MM-DD)."
+type = "date"
+
+[[column]]
+name = "purchase_price_amount"
+prompt = "Total purchase price as a number, no currency symbol."
+type = "number"
+
+[[column]]
+name = "purchase_price_currency"
+prompt = "Currency of the purchase price."
+type = "enum"
+options = ["EUR", "USD", "GBP", "CHF", "OTHER"]
+
+[[column]]
+name = "price_mechanism"
+prompt = "Price mechanism."
+type = "enum"
+options = ["locked_box", "completion_accounts", "fixed"]
+
+[[column]]
+name = "earn_out"
+prompt = "Is there an earn-out? true/false."
+type = "boolean"
+
+[[column]]
+name = "earn_out_terms"
+prompt = "If earn-out present, summarise its terms verbatim. Otherwise 'none'."
+type = "verbatim"
+
+[[column]]
+name = "conditions_precedent"
+prompt = "List the conditions precedent to completion, verbatim."
+type = "verbatim"
+
+[[column]]
+name = "mac_clause"
+prompt = "Is there a Material Adverse Change clause? true/false."
+type = "boolean"
+
+[[column]]
+name = "mac_terms"
+prompt = "If MAC present, quote the clause verbatim. Otherwise 'none'."
+type = "verbatim"
+
+[[column]]
+name = "reps_warranties_scope"
+prompt = "Summarise the scope of representations and warranties, verbatim where possible."
+type = "verbatim"
+
+[[column]]
+name = "warranty_cap_amount"
+prompt = "Warranty/indemnity liability cap as a number. Null if uncapped."
+type = "number"
+
+[[column]]
+name = "warranty_cap_currency"
+prompt = "Currency of the warranty cap."
+type = "enum"
+options = ["EUR", "USD", "GBP", "CHF", "OTHER"]
+
+[[column]]
+name = "de_minimis_amount"
+prompt = "De minimis threshold for claims as a number. Null if none."
+type = "number"
+
+[[column]]
+name = "basket_amount"
+prompt = "Basket/tipping threshold for claims as a number. Null if none."
+type = "number"
+
+[[column]]
+name = "survival_period_months"
+prompt = "Survival period for general warranty claims, in months. Null if not stated."
+type = "number"
+
+[[column]]
+name = "indemnities"
+prompt = "Specific indemnities granted, verbatim. Otherwise 'none'."
+type = "verbatim"
+
+[[column]]
+name = "restrictive_covenants"
+prompt = "Non-compete / non-solicit covenants binding the seller, verbatim. Otherwise 'none'."
+type = "verbatim"
+
+[[column]]
+name = "governing_law"
+prompt = "Governing law as an ISO 3166-1 alpha-2 country code."
+type = "enum"
+options = ["FR", "DE", "UK", "US", "CH", "BE", "LU", "NL", "ES", "IT", "SE", "OTHER"]
+
+[[column]]
+name = "jurisdiction"
+prompt = "Court or arbitration forum, verbatim."
+type = "verbatim"
+
+[[column]]
+name = "source_reference"
+prompt = "Quote verbatim the single most material clause supporting this row."
+type = "verbatim"
+
+[[column]]
+name = "key_risk_flag"
+prompt = "Does this document warrant a red flag for the deal? true/false."
+type = "boolean"
+
+[[column]]
+name = "risk_note"
+prompt = "One sentence explaining the risk, if any. Otherwise 'none'."
+type = "text"

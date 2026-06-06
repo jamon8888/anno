@@ -1,0 +1,71 @@
+id = "corporate-captable-v1"
+name = "Capital Structure (DD)"
+version = "1.0.0"
+description = "Cap table — share classes, ownership, options, encumbrances, voting rights."
+vertical = "legal-intl"
+
+[[column]]
+name = "holder"
+prompt = "Shareholder / holder name."
+type = "text"
+
+[[column]]
+name = "share_class"
+prompt = "Share class (ordinary, preferred, etc.)."
+type = "text"
+
+[[column]]
+name = "shares_held"
+prompt = "Number of shares held as a number."
+type = "number"
+
+[[column]]
+name = "ownership_pct"
+prompt = "Ownership percentage as a number (0-100)."
+type = "number"
+
+[[column]]
+name = "fully_diluted_pct"
+prompt = "Fully diluted percentage as a number (0-100)."
+type = "number"
+
+[[column]]
+name = "instrument_type"
+prompt = "Type of instrument held."
+type = "enum"
+options = ["shares", "options", "warrants", "bsa", "bspce", "convertible", "other"]
+
+[[column]]
+name = "vesting_terms"
+prompt = "Vesting terms for options/equity, verbatim. Otherwise 'none'."
+type = "verbatim"
+
+[[column]]
+name = "encumbrances"
+prompt = "Pledges or encumbrances over the holding, verbatim. Otherwise 'none'."
+type = "verbatim"
+
+[[column]]
+name = "transfer_restrictions"
+prompt = "Transfer restrictions on the holding, verbatim. Otherwise 'none'."
+type = "verbatim"
+
+[[column]]
+name = "voting_rights"
+prompt = "Voting rights attached, verbatim."
+type = "verbatim"
+
+[[column]]
+name = "source_reference"
+prompt = "Quote verbatim the single most material passage supporting this row."
+type = "verbatim"
+
+[[column]]
+name = "key_risk_flag"
+prompt = "Does this holding warrant a red flag for the deal? true/false."
+type = "boolean"
+
+[[column]]
+name = "risk_note"
+prompt = "One sentence explaining the risk, if any. Otherwise 'none'."
+type = "text"

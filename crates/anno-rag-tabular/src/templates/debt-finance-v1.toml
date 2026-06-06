@@ -1,0 +1,84 @@
+id = "debt-finance-v1"
+name = "Existing Debt (DD)"
+version = "1.0.0"
+description = "Existing debt instruments — amount, maturity, covenants, change of control, security."
+vertical = "legal-intl"
+
+[[column]]
+name = "lender"
+prompt = "Lender name."
+type = "text"
+
+[[column]]
+name = "instrument_type"
+prompt = "Type of debt instrument."
+type = "enum"
+options = ["term_loan", "revolving", "bond", "leasing", "factoring", "shareholder_loan", "other"]
+
+[[column]]
+name = "principal_amount"
+prompt = "Original principal as a number."
+type = "number"
+
+[[column]]
+name = "principal_currency"
+prompt = "Currency of the principal."
+type = "enum"
+options = ["EUR", "USD", "GBP", "CHF", "OTHER"]
+
+[[column]]
+name = "outstanding_amount"
+prompt = "Outstanding balance as a number. Null if unknown."
+type = "number"
+
+[[column]]
+name = "outstanding_currency"
+prompt = "Currency of the outstanding balance."
+type = "enum"
+options = ["EUR", "USD", "GBP", "CHF", "OTHER"]
+
+[[column]]
+name = "interest_terms"
+prompt = "Interest rate / margin terms, verbatim."
+type = "verbatim"
+
+[[column]]
+name = "maturity_date"
+prompt = "Maturity date. Return ISO 8601 (YYYY-MM-DD)."
+type = "date"
+
+[[column]]
+name = "financial_covenants"
+prompt = "Financial covenants, verbatim. Otherwise 'none'."
+type = "verbatim"
+
+[[column]]
+name = "change_of_control"
+prompt = "Is there a change-of-control prepayment/default? true/false."
+type = "boolean"
+
+[[column]]
+name = "security_granted"
+prompt = "Security granted for this debt, verbatim. Otherwise 'none'."
+type = "verbatim"
+
+[[column]]
+name = "governing_law"
+prompt = "Governing law as an ISO 3166-1 alpha-2 country code."
+type = "enum"
+options = ["FR", "DE", "UK", "US", "CH", "BE", "LU", "NL", "ES", "IT", "SE", "OTHER"]
+
+[[column]]
+name = "source_reference"
+prompt = "Quote verbatim the single most material clause supporting this row."
+type = "verbatim"
+
+[[column]]
+name = "key_risk_flag"
+prompt = "Does this instrument warrant a red flag for the deal? true/false."
+type = "boolean"
+
+[[column]]
+name = "risk_note"
+prompt = "One sentence explaining the risk, if any. Otherwise 'none'."
+type = "text"

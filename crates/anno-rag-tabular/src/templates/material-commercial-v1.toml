@@ -1,0 +1,93 @@
+id = "material-commercial-v1"
+name = "Material Commercial Contract (DD)"
+version = "1.0.0"
+description = "Material customer/supplier contracts — term, exclusivity, change of control, termination."
+vertical = "legal-intl"
+
+[[column]]
+name = "counterparty"
+prompt = "Counterparty (full legal name)."
+type = "text"
+
+[[column]]
+name = "contract_type"
+prompt = "Type of commercial contract."
+type = "enum"
+options = ["customer", "supplier", "distribution", "framework", "other"]
+
+[[column]]
+name = "effective_date"
+prompt = "Effective date. Return ISO 8601 (YYYY-MM-DD)."
+type = "date"
+
+[[column]]
+name = "expiry_date"
+prompt = "Expiry date. Return ISO 8601 (YYYY-MM-DD). Null if perpetual."
+type = "date"
+
+[[column]]
+name = "term"
+prompt = "Term/duration, verbatim."
+type = "verbatim"
+
+[[column]]
+name = "auto_renewal"
+prompt = "Does the contract auto-renew? true/false."
+type = "boolean"
+
+[[column]]
+name = "annual_value_amount"
+prompt = "Annual contract value as a number. Null if not stated."
+type = "number"
+
+[[column]]
+name = "annual_value_currency"
+prompt = "Currency of the annual value."
+type = "enum"
+options = ["EUR", "USD", "GBP", "CHF", "OTHER"]
+
+[[column]]
+name = "exclusivity"
+prompt = "Is there an exclusivity obligation? true/false."
+type = "boolean"
+
+[[column]]
+name = "minimum_commitments"
+prompt = "Minimum purchase/volume commitments, verbatim. Otherwise 'none'."
+type = "verbatim"
+
+[[column]]
+name = "change_of_control"
+prompt = "Is there a change-of-control termination or consent right? true/false."
+type = "boolean"
+
+[[column]]
+name = "termination_rights"
+prompt = "Termination rights, verbatim."
+type = "verbatim"
+
+[[column]]
+name = "liability_cap"
+prompt = "Liability cap, verbatim. Otherwise 'none'."
+type = "verbatim"
+
+[[column]]
+name = "governing_law"
+prompt = "Governing law as an ISO 3166-1 alpha-2 country code."
+type = "enum"
+options = ["FR", "DE", "UK", "US", "CH", "BE", "LU", "NL", "ES", "IT", "SE", "OTHER"]
+
+[[column]]
+name = "source_reference"
+prompt = "Quote verbatim the single most material clause supporting this row."
+type = "verbatim"
+
+[[column]]
+name = "key_risk_flag"
+prompt = "Does this document warrant a red flag for the deal? true/false."
+type = "boolean"
+
+[[column]]
+name = "risk_note"
+prompt = "One sentence explaining the risk, if any. Otherwise 'none'."
+type = "text"

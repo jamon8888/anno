@@ -1,0 +1,78 @@
+id = "ip-portfolio-v1"
+name = "IP & IT Portfolio (DD)"
+version = "1.0.0"
+description = "IP/IT assets — type, ownership, registration, licenses, open source, encumbrances."
+vertical = "legal-intl"
+
+[[column]]
+name = "asset_name"
+prompt = "Name/identifier of the IP or IT asset."
+type = "text"
+
+[[column]]
+name = "ip_type"
+prompt = "Type of IP asset."
+type = "enum"
+options = ["patent", "trademark", "copyright", "domain", "trade_secret", "software", "other"]
+
+[[column]]
+name = "ownership"
+prompt = "Ownership status of the asset."
+type = "enum"
+options = ["owned", "licensed_in", "licensed_out", "joint", "disputed"]
+
+[[column]]
+name = "registration_status"
+prompt = "Registration status (filed, granted, pending), verbatim."
+type = "verbatim"
+
+[[column]]
+name = "jurisdiction_coverage"
+prompt = "Territories/jurisdictions covered."
+type = "text"
+
+[[column]]
+name = "license_terms"
+prompt = "License terms if licensed, verbatim. Otherwise 'none'."
+type = "verbatim"
+
+[[column]]
+name = "open_source_usage"
+prompt = "Does the asset use open-source components? true/false."
+type = "boolean"
+
+[[column]]
+name = "open_source_terms"
+prompt = "Copyleft/open-source obligations, verbatim. Otherwise 'none'."
+type = "verbatim"
+
+[[column]]
+name = "change_of_control"
+prompt = "Is there a change-of-control restriction in any license? true/false."
+type = "boolean"
+
+[[column]]
+name = "encumbrances"
+prompt = "Encumbrances or disputes affecting the asset, verbatim. Otherwise 'none'."
+type = "verbatim"
+
+[[column]]
+name = "governing_law"
+prompt = "Governing law as an ISO 3166-1 alpha-2 country code."
+type = "enum"
+options = ["FR", "DE", "UK", "US", "CH", "BE", "LU", "NL", "ES", "IT", "SE", "OTHER"]
+
+[[column]]
+name = "source_reference"
+prompt = "Quote verbatim the single most material clause supporting this row."
+type = "verbatim"
+
+[[column]]
+name = "key_risk_flag"
+prompt = "Does this document warrant a red flag for the deal? true/false."
+type = "boolean"
+
+[[column]]
+name = "risk_note"
+prompt = "One sentence explaining the risk, if any. Otherwise 'none'."
+type = "text"

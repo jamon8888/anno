@@ -1,0 +1,101 @@
+id = "jva-v1"
+name = "Joint Venture Agreement (DD)"
+version = "1.0.0"
+description = "JV agreement — contributions, scope, governance, profit sharing, exit."
+vertical = "legal-intl"
+
+[[column]]
+name = "jv_parties"
+prompt = "JV parties (full legal names and corporate form)."
+type = "text"
+
+[[column]]
+name = "jv_vehicle"
+prompt = "JV vehicle (NewCo name) or 'contractual' if no entity."
+type = "text"
+
+[[column]]
+name = "effective_date"
+prompt = "Effective date. Return ISO 8601 (YYYY-MM-DD)."
+type = "date"
+
+[[column]]
+name = "scope_purpose"
+prompt = "Business scope and purpose of the JV, verbatim."
+type = "verbatim"
+
+[[column]]
+name = "contributions"
+prompt = "Contributions of each party (cash, assets, IP), verbatim."
+type = "verbatim"
+
+[[column]]
+name = "ownership_split"
+prompt = "Ownership percentage per party."
+type = "text"
+
+[[column]]
+name = "governance"
+prompt = "Governance structure (board, management), verbatim."
+type = "verbatim"
+
+[[column]]
+name = "profit_sharing"
+prompt = "Profit-sharing / distribution policy, verbatim."
+type = "verbatim"
+
+[[column]]
+name = "funding_obligations"
+prompt = "Future funding obligations, verbatim. Otherwise 'none'."
+type = "verbatim"
+
+[[column]]
+name = "non_compete"
+prompt = "Is there a non-compete binding the parties? true/false."
+type = "boolean"
+
+[[column]]
+name = "non_compete_terms"
+prompt = "If non-compete present, quote verbatim. Otherwise 'none'."
+type = "verbatim"
+
+[[column]]
+name = "exclusivity"
+prompt = "Is there exclusivity between the parties? true/false."
+type = "boolean"
+
+[[column]]
+name = "deadlock_mechanism"
+prompt = "Deadlock resolution mechanism, verbatim. Otherwise 'none'."
+type = "verbatim"
+
+[[column]]
+name = "exit_terms"
+prompt = "Exit terms (buy-out, put/call, dissolution), verbatim."
+type = "verbatim"
+
+[[column]]
+name = "term"
+prompt = "Term/duration of the JV, verbatim."
+type = "verbatim"
+
+[[column]]
+name = "governing_law"
+prompt = "Governing law as an ISO 3166-1 alpha-2 country code."
+type = "enum"
+options = ["FR", "DE", "UK", "US", "CH", "BE", "LU", "NL", "ES", "IT", "SE", "OTHER"]
+
+[[column]]
+name = "source_reference"
+prompt = "Quote verbatim the single most material clause supporting this row."
+type = "verbatim"
+
+[[column]]
+name = "key_risk_flag"
+prompt = "Does this document warrant a red flag for the deal? true/false."
+type = "boolean"
+
+[[column]]
+name = "risk_note"
+prompt = "One sentence explaining the risk, if any. Otherwise 'none'."
+type = "text"

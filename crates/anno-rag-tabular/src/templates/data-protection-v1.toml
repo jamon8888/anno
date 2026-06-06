@@ -1,0 +1,77 @@
+id = "data-protection-v1"
+name = "Data Protection / GDPR (DD)"
+version = "1.0.0"
+description = "GDPR / DPA posture — roles, transfers, subprocessors, breaches, DPIA."
+vertical = "legal-intl"
+
+[[column]]
+name = "counterparty"
+prompt = "Counterparty (full legal name)."
+type = "text"
+
+[[column]]
+name = "role"
+prompt = "Data-protection role under GDPR."
+type = "enum"
+options = ["controller", "processor", "joint_controller", "na"]
+
+[[column]]
+name = "dpa_in_place"
+prompt = "Is a Data Processing Agreement in place? true/false."
+type = "boolean"
+
+[[column]]
+name = "processing_purpose"
+prompt = "Purpose of processing, verbatim."
+type = "verbatim"
+
+[[column]]
+name = "data_categories"
+prompt = "Categories of personal data, including special categories, verbatim."
+type = "verbatim"
+
+[[column]]
+name = "international_transfers"
+prompt = "Are there international transfers outside the EEA? true/false."
+type = "boolean"
+
+[[column]]
+name = "transfer_mechanism"
+prompt = "Transfer mechanism."
+type = "enum"
+options = ["sccs", "adequacy", "bcr", "derogation", "none", "na"]
+
+[[column]]
+name = "subprocessors"
+prompt = "Sub-processors used, verbatim. Otherwise 'none'."
+type = "verbatim"
+
+[[column]]
+name = "breach_history"
+prompt = "Personal-data breach history, verbatim. Otherwise 'none'."
+type = "verbatim"
+
+[[column]]
+name = "dpia_done"
+prompt = "Has a DPIA (AIPD) been performed? true/false."
+type = "boolean"
+
+[[column]]
+name = "retention_terms"
+prompt = "Data retention terms, verbatim. Otherwise 'none'."
+type = "verbatim"
+
+[[column]]
+name = "source_reference"
+prompt = "Quote verbatim the single most material clause supporting this row."
+type = "verbatim"
+
+[[column]]
+name = "key_risk_flag"
+prompt = "Does this warrant a red flag for the deal? true/false."
+type = "boolean"
+
+[[column]]
+name = "risk_note"
+prompt = "One sentence explaining the risk, if any. Otherwise 'none'."
+type = "text"

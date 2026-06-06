@@ -1,0 +1,66 @@
+id = "intercreditor-v1"
+name = "Intercreditor Agreement (DD)"
+version = "1.0.0"
+description = "Intercreditor / mezzanine — ranking, subordination, standstill, enforcement."
+vertical = "legal-intl"
+
+[[column]]
+name = "parties"
+prompt = "Parties (senior, mezzanine, hedge, shareholder creditors)."
+type = "text"
+
+[[column]]
+name = "agreement_date"
+prompt = "Agreement date. Return ISO 8601 (YYYY-MM-DD)."
+type = "date"
+
+[[column]]
+name = "ranking_waterfall"
+prompt = "Priority of payments / waterfall, verbatim."
+type = "verbatim"
+
+[[column]]
+name = "subordination_terms"
+prompt = "Subordination terms, verbatim."
+type = "verbatim"
+
+[[column]]
+name = "standstill_period"
+prompt = "Standstill period(s), verbatim. Otherwise 'none'."
+type = "verbatim"
+
+[[column]]
+name = "payment_blockage"
+prompt = "Payment blockage provisions, verbatim. Otherwise 'none'."
+type = "verbatim"
+
+[[column]]
+name = "enforcement_control"
+prompt = "Who controls enforcement, verbatim."
+type = "verbatim"
+
+[[column]]
+name = "turnover_provisions"
+prompt = "Are there turnover provisions? true/false."
+type = "boolean"
+
+[[column]]
+name = "governing_law"
+prompt = "Governing law as an ISO 3166-1 alpha-2 country code."
+type = "enum"
+options = ["FR", "DE", "UK", "US", "CH", "BE", "LU", "NL", "ES", "IT", "SE", "OTHER"]
+
+[[column]]
+name = "source_reference"
+prompt = "Quote verbatim the single most material clause supporting this row."
+type = "verbatim"
+
+[[column]]
+name = "key_risk_flag"
+prompt = "Does this document warrant a red flag for the deal? true/false."
+type = "boolean"
+
+[[column]]
+name = "risk_note"
+prompt = "One sentence explaining the risk, if any. Otherwise 'none'."
+type = "text"

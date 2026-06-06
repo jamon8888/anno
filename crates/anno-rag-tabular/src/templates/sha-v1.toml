@@ -1,0 +1,96 @@
+id = "sha-v1"
+name = "Shareholders Agreement (DD)"
+version = "1.0.0"
+description = "Shareholders agreement / pacte d'actionnaires — governance, transfer restrictions, exit."
+vertical = "legal-intl"
+
+[[column]]
+name = "parties"
+prompt = "Contracting parties (full legal names and corporate form)."
+type = "text"
+
+[[column]]
+name = "effective_date"
+prompt = "Effective date. Return ISO 8601 (YYYY-MM-DD)."
+type = "date"
+
+[[column]]
+name = "share_classes"
+prompt = "Share classes and their rights, verbatim."
+type = "verbatim"
+
+[[column]]
+name = "board_composition"
+prompt = "Board composition and appointment rights, verbatim."
+type = "verbatim"
+
+[[column]]
+name = "reserved_matters"
+prompt = "Reserved/veto matters requiring supermajority or specific consent, verbatim."
+type = "verbatim"
+
+[[column]]
+name = "preemption_right"
+prompt = "Is there a pre-emption right on transfers? true/false."
+type = "boolean"
+
+[[column]]
+name = "tag_along"
+prompt = "Is there a tag-along right? true/false."
+type = "boolean"
+
+[[column]]
+name = "drag_along"
+prompt = "Is there a drag-along right? true/false."
+type = "boolean"
+
+[[column]]
+name = "transfer_restrictions"
+prompt = "Share transfer restrictions and lock-up, verbatim."
+type = "verbatim"
+
+[[column]]
+name = "deadlock_mechanism"
+prompt = "Deadlock resolution mechanism, verbatim. Otherwise 'none'."
+type = "verbatim"
+
+[[column]]
+name = "exit_provisions"
+prompt = "Exit provisions (IPO, trade sale, put/call), verbatim."
+type = "verbatim"
+
+[[column]]
+name = "non_compete"
+prompt = "Is there a non-compete binding shareholders? true/false."
+type = "boolean"
+
+[[column]]
+name = "change_of_control"
+prompt = "Is there a change-of-control provision? true/false."
+type = "boolean"
+
+[[column]]
+name = "term"
+prompt = "Term/duration of the agreement, verbatim."
+type = "verbatim"
+
+[[column]]
+name = "governing_law"
+prompt = "Governing law as an ISO 3166-1 alpha-2 country code."
+type = "enum"
+options = ["FR", "DE", "UK", "US", "CH", "BE", "LU", "NL", "ES", "IT", "SE", "OTHER"]
+
+[[column]]
+name = "source_reference"
+prompt = "Quote verbatim the single most material clause supporting this row."
+type = "verbatim"
+
+[[column]]
+name = "key_risk_flag"
+prompt = "Does this document warrant a red flag for the deal? true/false."
+type = "boolean"
+
+[[column]]
+name = "risk_note"
+prompt = "One sentence explaining the risk, if any. Otherwise 'none'."
+type = "text"
