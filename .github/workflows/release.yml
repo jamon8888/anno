@@ -221,10 +221,14 @@ jobs:
           # Microsoft dropped x86_64-apple-darwin ORT binaries after 1.22.
           # Homebrew ships onnxruntime for Intel Mac; ORT C API is stable across minor versions.
           brew list onnxruntime &>/dev/null || brew install onnxruntime
-          ORT_PREFIX=$(brew --prefix onnxruntime)
-          echo "ORT_LIB_LOCATION=${ORT_PREFIX}/lib" >> "$GITHUB_ENV"
+          # Use find to locate the dylib — Homebrew keg layout may vary across versions.
+          ORT_CELLAR=$(brew --cellar onnxruntime)
+          ORT_DYLIB=$(find "${ORT_CELLAR}" -name "libonnxruntime*.dylib" | grep -v dSYM | head -1)
+          ORT_LIB_DIR=$(dirname "${ORT_DYLIB}")
+          echo "ORT_LIB_LOCATION=${ORT_LIB_DIR}" >> "$GITHUB_ENV"
           echo "ORT_PREFER_DYNAMIC_LINK=1" >> "$GITHUB_ENV"
-          echo "ORT x86_64 lib: ${ORT_PREFIX}/lib" && ls "${ORT_PREFIX}/lib/" | grep -i ort
+          echo "ORT x86_64 dylib: ${ORT_DYLIB}"
+          ls "${ORT_LIB_DIR}/"
       - name: Build artifacts
         run: |
           # Actually do builds and make zips and whatnot
