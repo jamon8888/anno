@@ -22,7 +22,6 @@ use anno_rag_tabular::{
     extract::{ChunkRef, ChunkSource, Extractor},
     fanout::{run_review, FanoutConfig},
     ids::{ReviewId, RowId},
-    llm::default_from_env,
     schema::template::Template,
     storage::{reviews::Review, rows::Row, StorageHandle},
 };
@@ -103,6 +102,11 @@ pub enum ReviewCmd {
         /// optimisation). Useful after editing a column prompt.
         #[arg(long, default_value_t = false)]
         force: bool,
+        /// Allow a remote LLM fallback for columns the local model cannot
+        /// fill. OFF by default: extraction stays 100% local unless set.
+        /// The remote prompt is still gated by the PII safety check.
+        #[arg(long, default_value_t = false)]
+        allow_remote_llm: bool,
     },
 
     /// Export a filled review to CSV, XLSX, or Markdown.
@@ -137,7 +141,11 @@ pub async fn run(cmd: ReviewCmd, cfg: &AnnoRagConfig) -> anyhow::Result<()> {
             folder_path,
             doc_ids,
         } => cmd_add_rows(cfg, ReviewId(review), folder_path, doc_ids).await,
-        ReviewCmd::Extract { review, force } => cmd_extract(cfg, ReviewId(review), force).await,
+        ReviewCmd::Extract {
+            review,
+            force,
+            allow_remote_llm,
+        } => cmd_extract(cfg, ReviewId(review), force, allow_remote_llm).await,
         ReviewCmd::Export {
             review,
             format,
@@ -246,7 +254,12 @@ async fn cmd_add_rows(
     Ok(())
 }
 
-async fn cmd_extract(cfg: &AnnoRagConfig, review_id: ReviewId, force: bool) -> anyhow::Result<()> {
+async fn cmd_extract(
+    cfg: &AnnoRagConfig,
+    review_id: ReviewId,
+    force: bool,
+    allow_remote_llm: bool,
+) -> anyhow::Result<()> {
     // Extract requires the full pipeline (chunk source) + an LLM client.
     let key = anno_rag::vault::derive_key()?;
     let pipeline = anno_rag::pipeline::Pipeline::new(cfg.clone(), key).await?;
@@ -279,7 +292,13 @@ async fn cmd_extract(cfg: &AnnoRagConfig, review_id: ReviewId, force: bool) -> a
     );
 
     let chunks = Arc::new(CliChunkSource(Arc::clone(&pipeline)));
-    let llm_box = default_from_env().map_err(|e| anyhow::anyhow!("LLM client init failed: {e}"))?;
+    if allow_remote_llm {
+        eprintln!("⚠  Remote LLM fallback ENABLED — pseudonymized prompts may transit to the remote API (PII-gated).");
+    } else {
+        eprintln!("🔒 Local-only extraction (no remote LLM). Pass --allow-remote-llm to enable a PII-gated fallback.");
+    }
+    let llm_box = anno_rag_tabular::llm::routing_client_from_env(allow_remote_llm)
+        .map_err(|e| anyhow::anyhow!("LLM client init failed: {e}"))?;
     let llm: Arc<dyn anno_rag_tabular::llm::LlmClient> = Arc::from(llm_box);
     let extractor = Extractor::new(llm, chunks);
     let fanout_cfg = FanoutConfig {

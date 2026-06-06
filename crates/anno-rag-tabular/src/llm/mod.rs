@@ -120,9 +120,81 @@ pub fn default_from_env() -> crate::error::Result<Box<dyn LlmClient>> {
     Ok(Box::new(anthropic::AnthropicLlm::new(key)))
 }
 
+/// Build the production extraction client: local-first, with an optional
+/// remote fallback.
+///
+/// Security policy:
+/// - The local extractor (GLiNER2/Fastino) always runs first.
+/// - A remote LLM fallback is attached ONLY when `allow_remote` is true
+///   AND an API key resolves via [`default_from_env`]. When `allow_remote`
+///   is false the returned client never makes a network call.
+/// - The remote call itself is additionally gated at runtime by
+///   [`routing::RoutingLlmClient`] via `fallback_prompt_is_safe`.
+///
+/// # Errors
+///
+/// Returns [`crate::error::Error::Extract`] only if the local extractor
+/// cannot be constructed. A missing API key is NOT an error — it simply
+/// yields a local-only client.
+#[cfg(feature = "gliner2")]
+pub fn routing_client_from_env(allow_remote: bool) -> crate::error::Result<Box<dyn LlmClient>> {
+    use crate::llm::local::client::{Gliner2EntityExtractor, LocalTabularClient};
+    use crate::llm::local::DEFAULT_LOCAL_MODEL;
+    use crate::llm::routing::RoutingLlmClient;
+
+    let extractor = Gliner2EntityExtractor::from_pretrained(DEFAULT_LOCAL_MODEL)?;
+    let local: Box<dyn LlmClient> = Box::new(LocalTabularClient::new(Box::new(extractor)));
+
+    let fallback: Option<Box<dyn LlmClient>> = if allow_remote {
+        default_from_env().ok()
+    } else {
+        None
+    };
+
+    Ok(Box::new(RoutingLlmClient::new(local, fallback)))
+}
+
+/// Fallback build used when the `gliner2` feature is OFF: no local model
+/// is available, so this errors unless remote is explicitly allowed and a
+/// key resolves. This keeps non-gliner2 builds compiling while making the
+/// "no silent remote" policy explicit.
+///
+/// # Errors
+///
+/// Returns [`crate::error::Error::Extract`] when `allow_remote` is false
+/// (no local model compiled in) or when the remote key cannot resolve.
+#[cfg(not(feature = "gliner2"))]
+pub fn routing_client_from_env(allow_remote: bool) -> crate::error::Result<Box<dyn LlmClient>> {
+    use crate::error::Error;
+    if allow_remote {
+        return default_from_env();
+    }
+    Err(Error::Extract {
+        doc: "config".into(),
+        col: "?".into(),
+        source: "local extraction requires the `gliner2` feature; \
+                 enable it or pass --allow-remote-llm"
+            .into(),
+    })
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[cfg(feature = "gliner2")]
+    #[test]
+    fn routing_factory_local_only_when_remote_denied() {
+        // With allow_remote = false and no API key, we must still get a
+        // client (local-only), never an error about a missing key.
+        // SAFETY: single-threaded test mutation of a process-global env var.
+        unsafe {
+            std::env::remove_var("ANTHROPIC_API_KEY");
+        }
+        let c = routing_client_from_env(false);
+        assert!(c.is_ok(), "local-only routing must not require an API key");
+        assert_eq!(c.unwrap().model_id(), "routing-local-tabular");
+    }
 
     #[test]
     fn default_from_env_picks_up_env_var() {

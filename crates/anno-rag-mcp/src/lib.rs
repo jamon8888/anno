@@ -10,6 +10,7 @@
 
 #![warn(missing_docs)]
 
+mod allowed_roots;
 pub mod corpus;
 mod corpus_sync;
 pub mod health;
@@ -2748,7 +2749,7 @@ impl AnnoRagServer {
             };
         };
 
-        let llm_client = match anno_rag_tabular::llm::default_from_env() {
+        let llm_client = match anno_rag_tabular::llm::routing_client_from_env(false) {
             Ok(llm_client) => llm_client,
             Err(e) => {
                 let error = e.to_string();
@@ -4210,7 +4211,7 @@ impl AnnoRagServer {
             None => return "Error: pipeline not initialised".into(),
         };
         let chunk_src = std::sync::Arc::new(crate::tabular::PipelineChunkSource(arc_pipeline));
-        let llm = match anno_rag_tabular::llm::default_from_env() {
+        let llm = match anno_rag_tabular::llm::routing_client_from_env(false) {
             Ok(l) => std::sync::Arc::from(l),
             Err(e) => return format!("Error: LLM init: {e}"),
         };
