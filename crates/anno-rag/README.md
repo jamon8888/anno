@@ -26,6 +26,56 @@ All normal data paths are local. Raw PII is kept in the encrypted vault; indexed
 chunks, tabular cells and MCP payloads use pseudonymized text unless explicitly
 rehydrated on the local machine.
 
+## Installation — Pre-built Binaries (v0.11.0)
+
+Download the binary for your platform from the [GitHub Releases page](https://github.com/jamon8888/anno/releases/tag/v0.11.0):
+
+### macOS (Apple Silicon — M1/M2/M3/M4)
+
+```sh
+curl -LsSf https://github.com/jamon8888/anno/releases/download/v0.11.0/anno-rag-aarch64-apple-darwin.tar.gz \
+  | tar xz
+sudo mv anno-rag /usr/local/bin/
+anno-rag --version
+```
+
+### macOS (Intel — x86_64)
+
+> **Requires [Homebrew](https://brew.sh) ONNX Runtime** — install once:
+> ```sh
+> brew install onnxruntime
+> ```
+
+```sh
+curl -LsSf https://github.com/jamon8888/anno/releases/download/v0.11.0/anno-rag-x86_64-apple-darwin.tar.gz \
+  | tar xz
+sudo mv anno-rag /usr/local/bin/
+anno-rag --version
+```
+
+### Windows (x86_64)
+
+Download `anno-rag-x86_64-pc-windows-msvc.msi` from the [releases page](https://github.com/jamon8888/anno/releases/tag/v0.11.0) and run the installer.
+
+Or via PowerShell:
+
+```powershell
+irm https://github.com/jamon8888/anno/releases/download/v0.11.0/anno-rag-installer.ps1 | iex
+```
+
+### First-run setup (all platforms)
+
+```sh
+# Download ML model weights once (~970 MiB: embedder + NER).
+anno-rag download-models
+export ANNO_MODELS_DIR="$HOME/.anno-rag/models"  # add to your shell profile
+
+# Initialize the local encryption vault.
+anno-rag vault status
+```
+
+---
+
 ## Quick Start From Source
 
 ```sh
