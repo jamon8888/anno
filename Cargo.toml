@@ -197,6 +197,7 @@ ci                  = "github"
 targets             = [
   "x86_64-pc-windows-msvc",
   "aarch64-apple-darwin",
+  "x86_64-apple-darwin",
 ]
 installers          = ["msi", "shell", "powershell", "homebrew"]
 tap                 = "jamon8888/homebrew-hacienda"
