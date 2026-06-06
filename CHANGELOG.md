@@ -4,6 +4,18 @@ All notable changes to the `anno-rag` crate are documented here. Other crates in
 
 Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Semver: pre-1.0 minor versions may introduce breaking changes.
 
+## [0.11.0] — 2026-06-06
+
+### Added
+- **Phase A: Deterministic PII stack** — entity validators (Luhn, IBAN mod-97, NIR, date range, IP, email RFC-light, postal code FR), GdprLayerSet feature flag (`ANNO_GDPR_LAYERS`: basic/defense/shadow/full), HeuristicFrNer backend (FR orgs, addresses, dates, intl IBANs)
+- **Multi-platform release binaries**: x86_64-pc-windows-msvc, aarch64-apple-darwin, x86_64-apple-darwin (Intel Mac via Homebrew onnxruntime)
+- **Build/test overhaul**: dev-fast profile, sccache, lld-link, cargo-nextest profiles, CARGO_TARGET_DIR isolation
+
+### Changed
+- Workspace version bumped 0.10.0 → 0.11.0
+
+---
+
 ## [Unreleased] — v0.3 in progress
 
 ### Added
