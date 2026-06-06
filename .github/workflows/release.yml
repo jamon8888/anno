@@ -192,34 +192,39 @@ jobs:
           echo "CFLAGS_x86_64_pc_windows_msvc=/MD" >> "$GITHUB_ENV"
           echo "CXXFLAGS_x86_64-pc-windows-msvc=/MD" >> "$GITHUB_ENV"
           echo "CXXFLAGS_x86_64_pc_windows_msvc=/MD" >> "$GITHUB_ENV"
-      # ANNO-PATCH: Pre-download ONNX Runtime dylib — re-apply after every `dist generate`.
-      # ort-sys 2.0.0-rc.12 checks ORT_LIB_LOCATION / ORT_LIB_PATH BEFORE any platform
-      # restriction. Setting ORT_LIB_LOCATION + ORT_PREFER_DYNAMIC_LINK=1 bypasses the
-      # "no prebuilt binaries for x86_64-apple-darwin" hard-error, enabling Intel Mac builds.
-      # For aarch64, it also skips the in-build-script download (faster on cold cache).
-      # Binaries are linked dynamically; dist's --print=linkage step captures and bundles
-      # the dylib in the release archive automatically.
-      - name: Pre-fetch ONNX Runtime dylib (macOS)
-        if: runner.os == 'macOS'
+      # ANNO-PATCH: Set up ONNX Runtime dylib (macOS) — re-apply after every `dist generate`.
+      # ort-sys 2.0.0-rc.12 checks ORT_LIB_LOCATION BEFORE any platform restriction.
+      # Setting ORT_LIB_LOCATION + ORT_PREFER_DYNAMIC_LINK=1 bypasses the
+      # "no prebuilt binaries for x86_64-apple-darwin" hard-error.
+      #
+      # aarch64: Microsoft ships ORT 1.24.2 arm64 — download directly.
+      # x86_64:  Microsoft stopped shipping x86_64 after ORT 1.22. Use Homebrew
+      #          (onnxruntime 1.26+) which covers Intel Mac. ORT C API is stable;
+      #          ort-sys bindings generated for 1.24 work with 1.26 at runtime.
+      - name: Set up ONNX Runtime dylib (macOS aarch64)
+        if: runner.os == 'macOS' && contains(join(matrix.targets, '-'), 'aarch64')
         shell: bash
         run: |
-          ORT_VERSION="1.24.0"
-          ARCH="${{ join(matrix.targets, '-') }}"
-          if [[ "$ARCH" == *"aarch64"* ]]; then
-            ORT_ARCHIVE="onnxruntime-osx-arm64-${ORT_VERSION}.tgz"
-          else
-            ORT_ARCHIVE="onnxruntime-osx-x86_64-${ORT_VERSION}.tgz"
-          fi
-          ORT_URL="https://github.com/microsoft/onnxruntime/releases/download/v${ORT_VERSION}/${ORT_ARCHIVE}"
-          mkdir -p /tmp/ort
-          echo "Downloading $ORT_URL"
-          curl -fsSL "$ORT_URL" -o "/tmp/ort/${ORT_ARCHIVE}"
-          tar -xf "/tmp/ort/${ORT_ARCHIVE}" -C /tmp/ort
-          ORT_DIR=$(find /tmp/ort -maxdepth 1 -type d -name "onnxruntime-*" | head -1)
+          ORT_VERSION="1.24.4"
+          mkdir -p /tmp/ort-arm
+          curl -fsSL "https://github.com/microsoft/onnxruntime/releases/download/v${ORT_VERSION}/onnxruntime-osx-arm64-${ORT_VERSION}.tgz" \
+            -o /tmp/ort-arm/ort.tgz
+          tar -xf /tmp/ort-arm/ort.tgz -C /tmp/ort-arm
+          ORT_DIR=$(find /tmp/ort-arm -maxdepth 1 -type d -name "onnxruntime-*" | head -1)
           echo "ORT_LIB_LOCATION=${ORT_DIR}/lib" >> "$GITHUB_ENV"
           echo "ORT_PREFER_DYNAMIC_LINK=1" >> "$GITHUB_ENV"
-          echo "ORT dir: ${ORT_DIR}/lib"
-          ls "${ORT_DIR}/lib"
+          echo "ORT arm64 lib: ${ORT_DIR}/lib" && ls "${ORT_DIR}/lib"
+      - name: Set up ONNX Runtime dylib (macOS x86_64 via Homebrew)
+        if: runner.os == 'macOS' && contains(join(matrix.targets, '-'), 'x86_64')
+        shell: bash
+        run: |
+          # Microsoft dropped x86_64-apple-darwin ORT binaries after 1.22.
+          # Homebrew ships onnxruntime for Intel Mac; ORT C API is stable across minor versions.
+          brew list onnxruntime &>/dev/null || brew install onnxruntime
+          ORT_PREFIX=$(brew --prefix onnxruntime)
+          echo "ORT_LIB_LOCATION=${ORT_PREFIX}/lib" >> "$GITHUB_ENV"
+          echo "ORT_PREFER_DYNAMIC_LINK=1" >> "$GITHUB_ENV"
+          echo "ORT x86_64 lib: ${ORT_PREFIX}/lib" && ls "${ORT_PREFIX}/lib/" | grep -i ort
       - name: Build artifacts
         run: |
           # Actually do builds and make zips and whatnot
