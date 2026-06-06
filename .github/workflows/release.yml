@@ -287,18 +287,22 @@ jobs:
           INSTALL
           chmod +x "${DMG_STAGING}/install.sh"
 
-          # Create .dmg
+          # Create .dmg into a staging output dir picked up by the host job.
+          mkdir -p dmg-out
           hdiutil create \
             -volname "anno-rag ${RELEASE_TAG}" \
             -srcfolder "${DMG_STAGING}" \
             -ov -format UDZO \
-            "${DMG_NAME}"
-          echo "DMG created: ${DMG_NAME}" && ls -lh "${DMG_NAME}"
-
-          # Upload to the GitHub release
-          gh release upload "${RELEASE_TAG}" "${DMG_NAME}" --clobber
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+            "dmg-out/${DMG_NAME}"
+          echo "DMG created: dmg-out/${DMG_NAME}" && ls -lh "dmg-out/${DMG_NAME}"
+      # Upload the .dmg as a workflow artifact so the `host` job includes it in
+      # the GitHub Release (the release does not exist yet at build time).
+      - name: Upload .dmg artifact (macOS)
+        if: runner.os == 'macOS'
+        uses: actions/upload-artifact@v7
+        with:
+          name: artifacts-dmg-${{ join(matrix.targets, '-') }}
+          path: dmg-out/*.dmg
 
       # ANNO-PATCH: Release binary validation — re-apply after every `dist generate`.
       - name: Validate anno-rag release binary (Windows)
