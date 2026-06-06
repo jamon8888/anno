@@ -17,9 +17,21 @@ Legora's core is **Tabular Review**: rows = documents, columns = extracted field
 ## Architecture
 
 - **Format:** TOML presets in `crates/anno-rag-tabular/src/templates/`, following the existing `Template` / `TemplateColumn` / `CellTypeWire` shape (`schema/template.rs`).
-- **No code changes to the engine** are required for the abstraction grids and registers — they use existing cell types (`text`, `date`, `verbatim`, `boolean`, `number`, `currency`, `enum`).
+- **Engine cell types are sufficient** — the grids use only existing cell types (`text`, `date`, `verbatim`, `boolean`, `number`, `currency`, `enum`). No new cell type needed.
+- **Template registration requires code** (validated 2026-06-06): each TOML must be registered in two places in `schema/template.rs` — a `match` arm in `Template::builtin()` (via `include_str!`) and an entry in `Template::list_builtin()`. ~2 lines per template (~34 lines for 17). This is the only mandatory engine edit for the grids.
 - **New `vertical` tag:** `"legal-intl"` (alongside existing `"legal-fr"`), so the picker can filter the international DD set.
 - **Prompts in English**, column keys in `snake_case` English, for portability across cross-border data rooms.
+
+## Security requirements (mandatory)
+
+Validated against the live code path 2026-06-06. The current production extract path (CLI `review.rs`, MCP `lib.rs`) calls `llm::default_from_env()` → **Anthropic only**, with **no PII safety gate** before transmission. Chunks are pseudonymized at ingest (`text_pseudo`), so raw PII does not transit *by design* — but residual PII from detection false negatives, and all non-PII confidential deal terms, do reach the remote API. For a DD product handling sensitive client data this is unacceptable as the default.
+
+This library therefore ships with two mandatory security changes:
+
+1. **Local-first extraction by default.** Wire `RoutingLlmClient { local: LocalTabularClient, fallback: <optional Anthropic> }` into both `cmd_extract` (CLI) and the MCP extract handlers, replacing the bare `default_from_env()`. Local extraction (GLiNER2/Fastino, GPU-accelerated on the Metal/CUDA builds) runs first; the remote fallback is **opt-in** (e.g. `--allow-remote-llm` flag / explicit config), never automatic.
+2. **Mandatory PII gate on any remote call.** When a remote fallback IS enabled, the prompt MUST pass `fallback_prompt_is_safe()` before transmission. If raw PII is detected in the (supposedly pseudonymized) prompt, the remote call is skipped and the local result is kept — this is the second net that the current direct-Anthropic path lacks.
+
+Operational guidance baked into the template docs: run ingest with `ANNO_GDPR_LAYERS=defense` or higher to maximise detection recall before any extraction.
 
 ## Cross-template conventions
 
@@ -364,9 +376,18 @@ All extraction stays local; raw PII remains in the encrypted vault. Grids, regis
 - **Enum consistency test:** assert shared enums (`workstream`, `severity`, `governing_law`, `currency`) are identical across templates that use them.
 - **Snapshot test:** one representative grid (`spa-v1`) extracted against a fixture contract, asserting column count and types.
 
+## Implementation scope (work units)
+
+1. **17 TOML templates** in `crates/anno-rag-tabular/src/templates/` (15 grids + 2 registers), bilingual prompts, evidence triplet on every grid.
+2. **Template registration** — `match` arms in `Template::builtin()` + entries in `list_builtin()`.
+3. **Shared-enum consistency** — define the canonical enum value lists once (in spec/tests) and assert identical use across templates.
+4. **Security wiring (mandatory):** `RoutingLlmClient` local-first into CLI `cmd_extract` + MCP handlers; remote fallback opt-in behind a flag/config; `fallback_prompt_is_safe()` gate enforced on remote calls.
+5. **Tests:** load-all-templates, enum consistency, one extraction snapshot (`spa-v1`), and a security test asserting the remote path is not taken without explicit opt-in.
+
 ## Out of scope (v1)
 
 - Automatic flag → register propagation (manual transcription in v1; automation is a follow-up).
 - Per-cell automatic citation rendering in the UI (relies on the `verbatim`/`source_reference` columns for now).
 - Workstream-structured DD report generator (the register pivots cover this).
 - Additional jurisdictions beyond the `governing_law` enum (extend the enum as needed).
+- A data-loading/seed mechanism that auto-discovers TOML files (would remove the registration step) — nice-to-have, deferred.
