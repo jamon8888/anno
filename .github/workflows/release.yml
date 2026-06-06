@@ -192,6 +192,32 @@ jobs:
           echo "CFLAGS_x86_64_pc_windows_msvc=/MD" >> "$GITHUB_ENV"
           echo "CXXFLAGS_x86_64-pc-windows-msvc=/MD" >> "$GITHUB_ENV"
           echo "CXXFLAGS_x86_64_pc_windows_msvc=/MD" >> "$GITHUB_ENV"
+      # ANNO-PATCH: Pre-download ONNX Runtime prebuilt dylib — re-apply after every `dist generate`.
+      # ort 2.0.0-rc.12 links against ONNX Runtime 1.24.0. Without a cached dylib the
+      # build script downloads it at compile time; on a cold cache that races against the
+      # 6-hour job timeout. Pre-fetching it here and pointing ORT_DYLIB_PATH at the
+      # result removes the download from the hot path and fixes x86_64-apple-darwin where
+      # ort's build script refuses to download at all.
+      - name: Pre-fetch ONNX Runtime dylib (macOS)
+        if: runner.os == 'macOS'
+        shell: bash
+        run: |
+          ORT_VERSION="1.24.0"
+          ARCH="${{ join(matrix.targets, '-') }}"
+          if [[ "$ARCH" == *"aarch64"* ]]; then
+            ORT_ARCHIVE="onnxruntime-osx-arm64-${ORT_VERSION}.tgz"
+          else
+            ORT_ARCHIVE="onnxruntime-osx-x86_64-${ORT_VERSION}.tgz"
+          fi
+          ORT_URL="https://github.com/microsoft/onnxruntime/releases/download/v${ORT_VERSION}/${ORT_ARCHIVE}"
+          mkdir -p /tmp/ort
+          echo "Downloading $ORT_URL"
+          curl -fsSL "$ORT_URL" -o "/tmp/ort/${ORT_ARCHIVE}" || { echo "ORT download failed — falling back to ort-sys built-in download"; exit 0; }
+          tar -xf "/tmp/ort/${ORT_ARCHIVE}" -C /tmp/ort
+          ORT_DIR=$(find /tmp/ort -maxdepth 1 -type d -name "onnxruntime-*" | head -1)
+          ORT_LIB=$(find "$ORT_DIR/lib" -name "libonnxruntime*.dylib" | head -1)
+          echo "ORT_DYLIB_PATH=${ORT_LIB}" >> "$GITHUB_ENV"
+          echo "Found ORT dylib at ${ORT_LIB}"
       - name: Build artifacts
         run: |
           # Actually do builds and make zips and whatnot
