@@ -117,6 +117,35 @@ cargo run --release --example warmup_model -p anno-rag
 | `anno-rag vault rotate` | Rotate the keyring vault key. |
 | `anno-rag review ...` | Manage tabular legal review grids. |
 
+## Due-Diligence Template Library (legal-intl)
+
+Bilingual (FR/EN) M&A / LBO / JV due-diligence presets. Each grid ends with an
+evidence triplet (`source_reference`, `key_risk_flag`, `risk_note`); two
+transversal registers aggregate findings.
+
+Grids: `spa-v1`, `sha-v1`, `jva-v1`, `senior-facilities-v1`, `security-package-v1`,
+`intercreditor-v1`, `material-commercial-v1`, `commercial-lease-v1`,
+`employment-exec-v1`, `ip-portfolio-v1`, `litigation-v1`, `insurance-v1`,
+`data-protection-v1`, `debt-finance-v1`, `corporate-captable-v1`.
+Registers: `data-room-index-v1`, `red-flags-register-v1`.
+
+```sh
+# Ingest with maximum PII recall before extraction:
+ANNO_GDPR_LAYERS=defense anno-rag ingest ~/deal-acme --recursive
+
+# Create a review from a template, add documents, extract (LOCAL by default):
+anno-rag review create --name "Acme SPA" --template spa-v1
+anno-rag review add-rows --review <id> --folder-path "Acme/01_SPA" --doc-ids <uuid,uuid>
+anno-rag review extract --review <id>                      # 100% local, no network
+anno-rag review extract --review <id> --allow-remote-llm   # PII-gated remote fallback
+anno-rag review export --review <id> --format xlsx --output acme-spa.xlsx
+```
+
+**Privacy:** extraction is local-first by default. Chunks are pseudonymized at
+ingest; a remote fallback transits pseudonymized text ONLY with
+`--allow-remote-llm`, and even then every remote prompt passes a PII safety
+gate. The MCP server is always local-only.
+
 ## MCP Tools
 
 Core privacy/RAG:
