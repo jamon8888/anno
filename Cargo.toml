@@ -197,8 +197,7 @@ ci                  = "github"
 targets             = [
   "x86_64-pc-windows-msvc",
   "aarch64-apple-darwin",
-  # x86_64-apple-darwin: ort 2.0.0-rc.12 has no prebuilt ORT binaries for Intel Mac.
-  # Intel Mac users can run the aarch64 binary via Rosetta 2 (transparent, no config).
+  "x86_64-apple-darwin",
 ]
 installers          = ["msi", "shell", "powershell", "homebrew"]
 tap                 = "jamon8888/homebrew-hacienda"
