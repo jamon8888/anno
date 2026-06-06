@@ -332,6 +332,15 @@ async fn cmd_export(
 ) -> anyhow::Result<()> {
     let storage = open_tabular_storage(cfg).await?;
     match format.to_lowercase().as_str() {
+        "csv" => {
+            let content = export_csv(&storage, review_id).await?;
+            if let Some(path) = output {
+                std::fs::write(&path, &content)?;
+                println!("Exported CSV → {}", path.display());
+            } else {
+                print!("{content}");
+            }
+        }
         "xlsx" => {
             let path = output
                 .ok_or_else(|| anyhow::anyhow!("--output <path> is required for xlsx format"))?;

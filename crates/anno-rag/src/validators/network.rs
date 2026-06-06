@@ -2,6 +2,7 @@ use super::{EntityValidator, ValidationResult};
 use cloakpipe_core::DetectedEntity;
 use std::net::IpAddr;
 
+/// Validates IPv4/IPv6 addresses (tolerates bracketed IPv6) via `std::net::IpAddr` parsing.
 #[derive(Debug, Clone, Copy)]
 pub struct IpAddressValidator;
 

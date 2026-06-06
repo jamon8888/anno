@@ -70,6 +70,9 @@ impl ClaudeCodeScope {
 
 #[derive(Debug, Clone)]
 pub struct WriteResult {
+    /// Whether the write actually modified the target file. Retained for
+    /// callers/telemetry even when the current binary path ignores it.
+    #[allow(dead_code)]
     pub changed: bool,
     pub message: String,
 }
@@ -132,6 +135,9 @@ const CREATE_NEW_ATTEMPTS: u32 = 100;
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum TempCleanup {
     Remove,
+    /// Keep the temp file for post-mortem on certain failures. Reserved
+    /// API — not constructed on the current code path.
+    #[allow(dead_code)]
     Preserve,
 }
 
@@ -149,6 +155,7 @@ impl ReplaceFileError {
         }
     }
 
+    #[allow(dead_code)]
     fn preserve_temp(error: anyhow::Error) -> Self {
         Self {
             error,

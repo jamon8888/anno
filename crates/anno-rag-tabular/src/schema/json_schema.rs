@@ -10,7 +10,7 @@
 //! Manual columns (human-only) are excluded — the LLM never produces
 //! a value for them.
 
-use crate::schema::{CellType, Column, ExtractionLabel, ExtractionMode, ExtractionSpec};
+use crate::schema::{CellType, Column};
 use serde_json::{json, Value};
 
 /// Build a JSON Schema describing the expected per-row extraction output.

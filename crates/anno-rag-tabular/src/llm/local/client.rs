@@ -31,6 +31,12 @@ pub struct LocalEntity {
 
 /// Abstraction over GLiNER2/Fastino so tests can inject a cheap double.
 pub trait LocalEntityExtractor: Send + Sync {
+    /// Extract entity spans from `text` for the given `(name, description)`
+    /// labels, keeping spans at or above `threshold` confidence.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`crate::error::Error`] if the underlying model fails.
     fn extract(
         &self,
         text: &str,
@@ -68,6 +74,7 @@ impl LocalTabularClient {
 
 #[derive(Debug, Deserialize)]
 struct ColumnMeta {
+    #[allow(dead_code)]
     name: String,
     #[allow(dead_code)]
     prompt: String,

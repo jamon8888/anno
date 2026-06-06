@@ -11,6 +11,8 @@ description = "Harvey/Legora-style tabular review for anno-rag — schema-driven
 # Adds anno::GLiNEROnnx as the LocalEntityExtractor implementation.
 # Ignored by default so CI never downloads model weights.
 gliner2 = ["dep:anno"]
+# Exposes `*_for_tests` constructors to downstream integration tests.
+test-utils = []
 
 [dependencies]
 # Single-crate workspace today — pulls in detector, vault, store, embed, audit.

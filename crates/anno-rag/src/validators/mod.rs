@@ -9,12 +9,19 @@
 use cloakpipe_core::{DetectedEntity, EntityCategory};
 use std::collections::BTreeMap;
 
+/// Date-range validator (rejects implausible years).
 pub mod dates;
+/// RFC-light email-address validator.
 pub mod email;
+/// IBAN mod-97 (ISO 13616) checksum validator.
 pub mod iban;
+/// Luhn checksum validator (SIRET, card numbers).
 pub mod luhn;
+/// IP-address validator (IPv4/IPv6).
 pub mod network;
+/// French NIR control-key validator (with Corsica 2A/2B handling).
 pub mod nir;
+/// French postal-code validator (mainland + DOM).
 pub mod postal;
 
 /// Outcome of a single validator on a single entity.
@@ -23,7 +30,10 @@ pub enum ValidationResult {
     /// Pass-through, no change.
     Accept,
     /// Drop the entity. `reason` is a static identifier (e.g. "luhn_failed").
-    Reject { reason: &'static str },
+    Reject {
+        /// Static identifier for the rejection cause (used as a counter key).
+        reason: &'static str,
+    },
     /// Keep the entity but override its confidence to the given value.
     AdjustConfidence(f32),
 }

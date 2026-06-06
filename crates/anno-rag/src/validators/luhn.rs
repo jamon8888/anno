@@ -1,12 +1,14 @@
 use super::{EntityValidator, ValidationResult};
 use cloakpipe_core::DetectedEntity;
 
+/// Validates numbers via the Luhn checksum (SIRET, card numbers), scoped to one entity label.
 #[derive(Debug, Clone, Copy)]
 pub struct LuhnValidator {
     target_label: &'static str,
 }
 
 impl LuhnValidator {
+    /// Build a validator bound to `label` (the entity category it applies to).
     pub const fn new(label: &'static str) -> Self {
         Self {
             target_label: label,

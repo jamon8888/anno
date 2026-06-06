@@ -2,6 +2,7 @@
 
 use std::str::FromStr;
 
+/// Tiered GDPR detection layer set, selected at runtime via `ANNO_GDPR_LAYERS`.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum GdprLayerSet {
     /// Regex + GLiNER2 only — original behaviour.
@@ -24,10 +25,12 @@ impl GdprLayerSet {
             .unwrap_or_default()
     }
 
+    /// Whether this layer set runs the deterministic FR heuristics backend.
     pub fn includes_heuristics(self) -> bool {
         matches!(self, Self::Defense | Self::Shadow | Self::Full)
     }
 
+    /// Whether this layer set runs the post-aggregator entity validators.
     pub fn includes_validators(self) -> bool {
         matches!(self, Self::Defense | Self::Shadow | Self::Full)
     }

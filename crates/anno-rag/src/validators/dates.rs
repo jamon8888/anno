@@ -3,6 +3,7 @@ use cloakpipe_core::DetectedEntity;
 use regex::Regex;
 use std::sync::OnceLock;
 
+/// Validates date-of-birth entities by rejecting years outside a plausible range (1900–2026).
 #[derive(Debug, Clone, Copy)]
 pub struct DateRangeValidator;
 

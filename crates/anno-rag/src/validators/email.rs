@@ -1,6 +1,7 @@
 use super::{EntityValidator, ValidationResult};
 use cloakpipe_core::DetectedEntity;
 
+/// Validates email addresses with RFC-light structural checks (local/domain lengths, single `@`, dotted domain).
 #[derive(Debug, Clone, Copy)]
 pub struct EmailRfcValidator;
 

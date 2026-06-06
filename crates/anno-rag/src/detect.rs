@@ -202,7 +202,6 @@ pub const NER_MODEL_ID: &str = "SemplificaAI/gliner2-multi-v1-onnx";
 
 /// Candle/PyTorch GLiNER2 repo used for Apple Metal detector acceleration.
 pub const CANDLE_NER_MODEL_ID: &str = "fastino/gliner2-multi-v1";
-const CANDLE_NER_MODEL_DIR: &str = "gliner2-multi-v1-candle";
 
 /// GDPR-coverage NER labels: (label, description sent to the model, per-label threshold).
 ///
@@ -395,6 +394,8 @@ impl NerBackend {
     }
 }
 
+/// PII detector: GLiNER2 NER plus, on defense+ layers, the deterministic
+/// French heuristics backend.
 pub struct Detector {
     ner: NerBackend,
     #[cfg(feature = "heuristic-fr")]

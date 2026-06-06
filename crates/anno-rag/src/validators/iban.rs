@@ -1,12 +1,14 @@
 use super::{EntityValidator, ValidationResult};
 use cloakpipe_core::DetectedEntity;
 
+/// Validates IBANs via the ISO 13616 mod-97 checksum, scoped to one entity label.
 #[derive(Debug, Clone, Copy)]
 pub struct Iban97Validator {
     target_label: &'static str,
 }
 
 impl Iban97Validator {
+    /// Build a validator bound to `label` (the entity category it applies to).
     pub const fn new(label: &'static str) -> Self {
         Self {
             target_label: label,

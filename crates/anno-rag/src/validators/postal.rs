@@ -1,6 +1,7 @@
 use super::{EntityValidator, ValidationResult};
 use cloakpipe_core::DetectedEntity;
 
+/// Validates French postal codes (5 digits; mainland 01000–95999, DOM 97000–98999).
 #[derive(Debug, Clone, Copy)]
 pub struct PostalCodeValidator;
 
