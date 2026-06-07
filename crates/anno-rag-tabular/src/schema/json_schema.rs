@@ -127,6 +127,7 @@ mod tests {
     use super::*;
     use crate::ids::ReviewId;
     use crate::schema::column::ColumnBuilder;
+    use crate::schema::{ExtractionLabel, ExtractionMode, ExtractionSpec};
 
     #[test]
     fn empty_columns_yields_empty_object() {

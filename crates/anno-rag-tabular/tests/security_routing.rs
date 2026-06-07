@@ -44,10 +44,12 @@ impl LocalEntityExtractor for NoopExtractor {
 
 #[tokio::test]
 async fn no_remote_call_when_fallback_absent() {
+    let chunk_id = uuid::Uuid::now_v7();
     let local: Box<dyn LlmClient> = Box::new(LocalTabularClient::new(Box::new(NoopExtractor)));
     let router = RoutingLlmClient::new(local, None); // allow_remote == false equivalent
+    let prompt = format!("[CHUNK::{chunk_id}]hello[/CHUNK]");
     let _ = router
-        .generate_structured("sys", "[CHUNK::x]hello[/CHUNK]", &json!({}))
+        .generate_structured("sys", &prompt, &json!({}))
         .await
         .expect("local-only call succeeds");
     // No remote attached → nothing to count, but the call must not panic
@@ -56,13 +58,15 @@ async fn no_remote_call_when_fallback_absent() {
 
 #[tokio::test]
 async fn remote_called_only_when_attached_and_safe() {
+    let chunk_id = uuid::Uuid::now_v7();
     let counter = Arc::new(AtomicUsize::new(0));
     let local: Box<dyn LlmClient> = Box::new(LocalTabularClient::new(Box::new(NoopExtractor)));
     let remote: Box<dyn LlmClient> = Box::new(CountingRemote(Arc::clone(&counter)));
     let router = RoutingLlmClient::new(local, Some(remote));
     // A PII-free prompt passes the safety gate → remote IS consulted.
+    let prompt = format!("[CHUNK::{chunk_id}]the term is 24 months[/CHUNK]");
     let _ = router
-        .generate_structured("sys", "[CHUNK::x]the term is 24 months[/CHUNK]", &json!({}))
+        .generate_structured("sys", &prompt, &json!({}))
         .await
         .expect("call succeeds");
     assert_eq!(
