@@ -10,7 +10,7 @@ use crate::llm::{LlmClient, StructuredOutput, Usage};
 use crate::schema::{CellType, ExtractionMode, ExtractionSpec};
 use async_trait::async_trait;
 use serde::Deserialize;
-use serde_json::{Value, json};
+use serde_json::{json, Value};
 
 // ---------------------------------------------------------------------------
 // Extractor trait
