@@ -184,6 +184,7 @@ mod tests {
 
     #[cfg(feature = "gliner2")]
     #[test]
+    #[ignore = "downloads GLiNER2 model weights at runtime"]
     fn routing_factory_local_only_when_remote_denied() {
         // With allow_remote = false and no API key, we must still get a
         // client (local-only), never an error about a missing key.
