@@ -10,7 +10,7 @@ use crate::llm::{LlmClient, StructuredOutput, Usage};
 use crate::schema::{CellType, ExtractionMode, ExtractionSpec};
 use async_trait::async_trait;
 use serde::Deserialize;
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 
 // ---------------------------------------------------------------------------
 // Extractor trait
@@ -304,11 +304,16 @@ impl LocalEntityExtractor for Gliner2EntityExtractor {
 
         Ok(entities
             .into_iter()
-            .map(|e| LocalEntity {
-                text: e.text,
-                start_char: e.start(),
-                end_char: e.end(),
-                confidence: f32::from(e.confidence),
+            .map(|e| {
+                let start_char = e.start();
+                let end_char = e.end();
+                let confidence = f32::from(e.confidence);
+                LocalEntity {
+                    text: e.text,
+                    start_char,
+                    end_char,
+                    confidence,
+                }
             })
             .collect())
     }
