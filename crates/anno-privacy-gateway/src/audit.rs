@@ -19,6 +19,18 @@ pub struct AuditEvent {
     pub request_id: String,
     /// Provider profile used for routing.
     pub provider_profile: String,
+    /// Provider id, for provider-router mode.
+    #[serde(default)]
+    pub provider_id: String,
+    /// Gateway-facing model id.
+    #[serde(default)]
+    pub model_id: String,
+    /// Upstream provider model id.
+    #[serde(default)]
+    pub upstream_model: String,
+    /// Privacy mode label.
+    #[serde(default)]
+    pub privacy_mode: String,
     /// Count of replaced entities.
     pub entity_count: usize,
     /// Count of fresh PII redactions on response.
@@ -184,6 +196,10 @@ mod tests {
         AuditEvent {
             request_id: id.to_string(),
             provider_profile: "test".to_string(),
+            provider_id: "test".to_string(),
+            model_id: "anno/test/model:pseudonymized".to_string(),
+            upstream_model: "model".to_string(),
+            privacy_mode: "pseudonymized".to_string(),
             entity_count: 0,
             fresh_pii_redacted: 0,
         }

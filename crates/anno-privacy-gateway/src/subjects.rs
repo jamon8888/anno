@@ -114,6 +114,10 @@ pub async fn forget(
     state.audit().record(AuditEvent {
         request_id: format!("forget:{}", receipt.executed_at),
         provider_profile: state.config().provider_profile.clone(),
+        provider_id: String::new(),
+        model_id: String::new(),
+        upstream_model: String::new(),
+        privacy_mode: String::new(),
         entity_count: receipt.mappings_removed,
         fresh_pii_redacted: 0,
     });
