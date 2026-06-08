@@ -13,6 +13,8 @@ pub struct SetupMcpArgs {
     pub binary: Option<PathBuf>,
     #[arg(long, value_name = "DIR")]
     pub models_dir: Option<PathBuf>,
+    #[arg(long = "allowed-root", value_name = "DIR")]
+    pub allowed_roots: Vec<PathBuf>,
     #[arg(long, value_name = "PATH")]
     pub desktop_config: Option<PathBuf>,
     #[arg(long, value_enum, default_value_t = DesktopMode::Json)]
@@ -104,7 +106,9 @@ pub fn default_desktop_config_path() -> anyhow::Result<PathBuf> {
 
     #[cfg(not(any(windows, target_os = "macos")))]
     {
-        anyhow::bail!("Claude Desktop config auto-detection is supported on Windows and macOS only; pass --desktop-config for managed clients")
+        anyhow::bail!(
+            "Claude Desktop config auto-detection is supported on Windows and macOS only; pass --desktop-config for managed clients"
+        )
     }
 }
 
@@ -120,6 +124,19 @@ fn path_to_config_string(path: &Path) -> anyhow::Result<String> {
     path.to_str()
         .map(str::to_owned)
         .context("path must be valid UTF-8 for desktop config")
+}
+
+fn allowed_roots_env_value(allowed_roots: &[PathBuf]) -> anyhow::Result<Option<String>> {
+    if allowed_roots.is_empty() {
+        return Ok(None);
+    }
+
+    let mut roots = Vec::with_capacity(allowed_roots.len());
+    for root in allowed_roots {
+        validate_absolute_path(root).map_err(|e| anyhow!(e))?;
+        roots.push(path_to_config_string(root)?);
+    }
+    Ok(Some(roots.join(";")))
 }
 
 pub fn read_json_file_or_empty(path: &Path) -> anyhow::Result<Value> {
@@ -219,6 +236,7 @@ pub fn build_claude_code_args(
     scope: ClaudeCodeScope,
     models_dir: &Path,
     binary: &Path,
+    allowed_roots: &[PathBuf],
 ) -> anyhow::Result<Vec<String>> {
     validate_absolute_path(models_dir).map_err(|e| anyhow!(e))?;
     validate_absolute_path(binary).map_err(|e| anyhow!(e))?;
@@ -226,7 +244,7 @@ pub fn build_claude_code_args(
     let models_dir = path_to_config_string(models_dir)?;
     let binary = path_to_config_string(binary)?;
 
-    Ok(vec![
+    let mut args = vec![
         "mcp".to_string(),
         "add".to_string(),
         "--transport".to_string(),
@@ -235,20 +253,31 @@ pub fn build_claude_code_args(
         scope.as_cli_value().to_string(),
         "--env".to_string(),
         format!("ANNO_MODELS_DIR={models_dir}"),
+    ];
+
+    if let Some(roots) = allowed_roots_env_value(allowed_roots)? {
+        args.push("--env".to_string());
+        args.push(format!("ANNO_RAG_ALLOWED_ROOTS={roots}"));
+    }
+
+    args.extend([
         "anno-rag".to_string(),
         "--".to_string(),
         binary,
         "mcp".to_string(),
-    ])
+    ]);
+
+    Ok(args)
 }
 
 pub fn configure_claude_code(
     scope: ClaudeCodeScope,
     models_dir: &Path,
     binary: &Path,
+    allowed_roots: &[PathBuf],
     dry_run: bool,
 ) -> anyhow::Result<String> {
-    let args = build_claude_code_args(scope, models_dir, binary)?;
+    let args = build_claude_code_args(scope, models_dir, binary, allowed_roots)?;
     let command = display_command("claude", &args);
     if dry_run {
         return Ok(format!("dry-run: {command}"));
@@ -493,9 +522,20 @@ pub async fn run(args: SetupMcpArgs) -> anyhow::Result<()> {
     summary.push(format!("binary: {}", binary.display()));
     summary.push(format!("models_dir: {}", models_dir.display()));
     summary.push(format!("models_verified: {models_verified}"));
+    if let Some(roots) = allowed_roots_env_value(&args.allowed_roots)? {
+        summary.push(format!("allowed_roots: {roots}"));
+    } else {
+        summary.push("allowed_roots: not configured".to_string());
+    }
 
     if args.target == SetupTarget::Manual {
-        let desktop = merge_desktop_config(json!({}), &binary, &models_dir, models_verified)?;
+        let desktop = merge_desktop_config(
+            json!({}),
+            &binary,
+            &models_dir,
+            models_verified,
+            &args.allowed_roots,
+        )?;
         summary.push(format!(
             "desktop_json: {}",
             serde_json::to_string_pretty(&desktop)?
@@ -504,7 +544,12 @@ pub async fn run(args: SetupMcpArgs) -> anyhow::Result<()> {
             "claude_code_command: {}",
             display_command(
                 "claude",
-                &build_claude_code_args(args.claude_code_scope, &models_dir, &binary)?,
+                &build_claude_code_args(
+                    args.claude_code_scope,
+                    &models_dir,
+                    &binary,
+                    &args.allowed_roots,
+                )?,
             )
         ));
         println!("{}", summary.join("\n"));
@@ -523,15 +568,26 @@ pub async fn run(args: SetupMcpArgs) -> anyhow::Result<()> {
                 None => default_desktop_config_path()?,
             };
             let existing = read_json_file_or_empty(&config_path)?;
-            let merged = merge_desktop_config(existing, &binary, &models_dir, models_verified)?;
+            let merged = merge_desktop_config(
+                existing,
+                &binary,
+                &models_dir,
+                models_verified,
+                &args.allowed_roots,
+            )?;
             let result = write_desktop_config(&config_path, &merged, args.dry_run)?;
             summary.push(format!("desktop: {}", result.message));
         }
     }
 
     if args.target.includes_claude_code() {
-        let result =
-            configure_claude_code(args.claude_code_scope, &models_dir, &binary, args.dry_run)?;
+        let result = configure_claude_code(
+            args.claude_code_scope,
+            &models_dir,
+            &binary,
+            &args.allowed_roots,
+            args.dry_run,
+        )?;
         summary.push(format!("claude_code: {result}"));
     }
 
@@ -765,6 +821,7 @@ pub fn merge_desktop_config(
     binary: &Path,
     models_dir: &Path,
     models_verified: bool,
+    allowed_roots: &[PathBuf],
 ) -> anyhow::Result<Value> {
     validate_absolute_path(binary).map_err(|e| anyhow!(e))?;
     validate_absolute_path(models_dir).map_err(|e| anyhow!(e))?;
@@ -787,6 +844,9 @@ pub fn merge_desktop_config(
             "ANNO_NO_DOWNLOADS".to_string(),
             Value::String("1".to_string()),
         );
+    }
+    if let Some(roots) = allowed_roots_env_value(allowed_roots)? {
+        env.insert("ANNO_RAG_ALLOWED_ROOTS".to_string(), Value::String(roots));
     }
 
     servers.insert(
@@ -854,7 +914,7 @@ mod tests {
         let expected_binary = path_to_config_string(&binary).expect("binary path");
 
         let args =
-            build_claude_code_args(ClaudeCodeScope::User, &models_dir, &binary).expect("args");
+            build_claude_code_args(ClaudeCodeScope::User, &models_dir, &binary, &[]).expect("args");
 
         assert_eq!(args[0], "mcp");
         assert_eq!(args[1], "add");
@@ -878,10 +938,39 @@ mod tests {
     }
 
     #[test]
+    fn claude_code_args_include_allowed_roots_env_when_configured() {
+        let models_dir = absolute_test_path(&["anno-rag", "models"]);
+        let binary = absolute_test_path(&["hacienda", "anno-rag"]);
+        let root_a = absolute_test_path(&["clients", "a"]);
+        let root_b = absolute_test_path(&["clients", "b"]);
+
+        let args = build_claude_code_args(
+            ClaudeCodeScope::User,
+            &models_dir,
+            &binary,
+            &[root_a.clone(), root_b.clone()],
+        )
+        .expect("args");
+
+        let expected = format!(
+            "ANNO_RAG_ALLOWED_ROOTS={};{}",
+            path_to_config_string(&root_a).expect("root a"),
+            path_to_config_string(&root_b).expect("root b")
+        );
+        assert!(args.contains(&"--env".to_string()));
+        assert!(args.contains(&expected));
+    }
+
+    #[test]
     fn claude_code_args_reject_relative_paths() {
         let models_dir = absolute_test_path(&["anno-rag", "models"]);
-        let err = build_claude_code_args(ClaudeCodeScope::User, &models_dir, Path::new("anno-rag"))
-            .expect_err("relative binary must fail");
+        let err = build_claude_code_args(
+            ClaudeCodeScope::User,
+            &models_dir,
+            Path::new("anno-rag"),
+            &[],
+        )
+        .expect_err("relative binary must fail");
 
         assert!(err.to_string().contains("absolute"));
     }
@@ -889,7 +978,7 @@ mod tests {
     #[test]
     fn claude_code_args_reject_relative_models_dir() {
         let binary = absolute_test_path(&["hacienda", "anno-rag"]);
-        let err = build_claude_code_args(ClaudeCodeScope::User, Path::new("models"), &binary)
+        let err = build_claude_code_args(ClaudeCodeScope::User, Path::new("models"), &binary, &[])
             .expect_err("relative models dir must fail");
 
         assert!(err.to_string().contains("absolute"));
@@ -899,8 +988,9 @@ mod tests {
     fn configure_claude_code_dry_run_returns_command_without_running_cli() {
         let models_dir = absolute_test_path(&["anno rag", "models"]);
         let binary = absolute_test_path(&["hacienda tools", "anno-rag"]);
-        let result = configure_claude_code(ClaudeCodeScope::Project, &models_dir, &binary, true)
-            .expect("dry run");
+        let result =
+            configure_claude_code(ClaudeCodeScope::Project, &models_dir, &binary, &[], true)
+                .expect("dry run");
 
         assert!(result.starts_with("dry-run: claude mcp add"));
         assert!(result.contains("--scope project"));
@@ -950,6 +1040,7 @@ mod tests {
             target: SetupTarget::Manual,
             binary: Some(binary),
             models_dir: Some(models_dir.clone()),
+            allowed_roots: Vec::new(),
             desktop_config: None,
             desktop_mode: DesktopMode::Json,
             claude_code_scope: ClaudeCodeScope::User,
@@ -1106,7 +1197,8 @@ mod tests {
                 }
             }
         });
-        let merged = merge_desktop_config(existing, &binary, &models_dir, true).expect("merge");
+        let merged =
+            merge_desktop_config(existing, &binary, &models_dir, true, &[]).expect("merge");
 
         assert_eq!(merged["theme"], "dark");
         assert_eq!(merged["mcpServers"]["filesystem"], filesystem_server);
@@ -1134,10 +1226,30 @@ mod tests {
     }
 
     #[test]
+    fn desktop_config_includes_allowed_roots_env_when_configured() {
+        let binary = absolute_test_path(&["hacienda", "anno-rag.exe"]);
+        let models_dir = absolute_test_path(&["anno-rag", "models"]);
+        let root = absolute_test_path(&["clients"]);
+
+        let merged = merge_desktop_config(json!({}), &binary, &models_dir, true, &[root.clone()])
+            .expect("merge");
+        let env = merged["mcpServers"]["anno-rag"]["env"]
+            .as_object()
+            .expect("anno-rag env");
+
+        assert_eq!(
+            env.get("ANNO_RAG_ALLOWED_ROOTS")
+                .and_then(|value| value.as_str()),
+            Some(path_to_config_string(&root).expect("root").as_str())
+        );
+    }
+
+    #[test]
     fn desktop_merge_omits_no_downloads_when_models_are_not_verified() {
         let binary = absolute_test_path(&["hacienda", "anno-rag"]);
         let models_dir = absolute_test_path(&["anno-rag", "models"]);
-        let merged = merge_desktop_config(json!({}), &binary, &models_dir, false).expect("merge");
+        let merged =
+            merge_desktop_config(json!({}), &binary, &models_dir, false, &[]).expect("merge");
 
         assert!(merged["mcpServers"]["anno-rag"].is_object());
         assert_eq!(
@@ -1159,8 +1271,14 @@ mod tests {
     fn desktop_merge_rejects_non_object_root() {
         let binary = absolute_test_path(&["hacienda", "anno-rag"]);
         let models_dir = absolute_test_path(&["anno-rag", "models"]);
-        let err = merge_desktop_config(json!(["not", "an", "object"]), &binary, &models_dir, true)
-            .expect_err("non-object roots must be rejected");
+        let err = merge_desktop_config(
+            json!(["not", "an", "object"]),
+            &binary,
+            &models_dir,
+            true,
+            &[],
+        )
+        .expect_err("non-object roots must be rejected");
 
         assert!(err.to_string().contains("root"));
     }

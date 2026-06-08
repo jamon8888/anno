@@ -2,7 +2,7 @@
 
 use crate::{upstream, Error, GatewayConfig, PrivacyEngine, Result};
 use axum::{
-    extract::State,
+    extract::{DefaultBodyLimit, Multipart, Path, State},
     http::{HeaderMap, HeaderValue},
     response::{
         sse::{Event, Sse},
@@ -27,6 +27,8 @@ pub struct AppState {
     client: Client,
     privacy: Arc<Mutex<PrivacyEngine>>,
     audit: Arc<dyn crate::audit::AuditSink>,
+    provider_catalog: Option<crate::provider::ProviderCatalog>,
+    file_registry: Arc<crate::file_registry::FileRegistry>,
 }
 
 type SseResultStream = Pin<Box<dyn Stream<Item = std::result::Result<Event, Infallible>> + Send>>;
@@ -54,7 +56,20 @@ impl AppState {
     /// Build app state and validate persistent vault configuration.
     pub fn try_new(config: GatewayConfig) -> Result<Self> {
         config.validate_security()?;
+        let provider_catalog = match &config.provider_catalog_path {
+            Some(path) => {
+                Some(crate::provider::ProviderCatalog::from_path(path).map_err(Error::Config)?)
+            }
+            None => None,
+        };
         let privacy = PrivacyEngine::from_config(&config)?;
+        let file_registry = Arc::new(crate::file_registry::FileRegistry::new(
+            crate::file_registry::FileRegistryConfig {
+                root: config.file_store_dir.clone(),
+                retain_raw: config.file_retain_raw,
+                retain_cleartext: config.file_retain_cleartext,
+            },
+        ));
         let audit: Arc<dyn crate::audit::AuditSink> =
             match (&config.audit_dir, &config.audit_hmac_key_hex) {
                 (Some(dir), Some(key_hex)) => {
@@ -71,7 +86,7 @@ impl AppState {
                 (Some(_), None) => {
                     return Err(Error::Config(
                         "audit_dir set but audit_hmac_key_hex missing".into(),
-                    ))
+                    ));
                 }
                 _ => Arc::new(crate::audit::NoopAuditSink),
             };
@@ -80,6 +95,8 @@ impl AppState {
             client: Client::new(),
             privacy: Arc::new(Mutex::new(privacy)),
             audit,
+            provider_catalog,
+            file_registry,
         })
     }
 
@@ -116,16 +133,17 @@ impl AppState {
 /// initialization unless `config.bearer_token` is set.
 pub fn router(state: AppState) -> Router {
     let public = Router::new().route("/health", get(health));
+    let file_body_limit = state.config.file_max_bytes.saturating_add(1024 * 1024);
+    let file_routes = Router::new()
+        .route("/v1/files", post(upload_file).get(list_files_unsupported))
+        .route("/v1/files/{id}", get(get_file_metadata).delete(delete_file))
+        .route("/v1/files/{id}/content", get(get_file_content))
+        .layer(DefaultBodyLimit::max(file_body_limit));
 
     let protected = Router::new()
         .route("/v1/messages", post(messages))
         .route("/v1/models", get(models))
-        .route("/v1/files", post(files_unsupported).get(files_unsupported))
-        .route(
-            "/v1/files/{id}",
-            get(files_unsupported).delete(files_unsupported),
-        )
-        .route("/v1/files/{id}/content", get(files_unsupported))
+        .merge(file_routes)
         .route("/v1/subjects/find", post(crate::subjects::find))
         .route("/v1/subjects/forget", post(crate::subjects::forget))
         .route(
@@ -158,6 +176,10 @@ async fn messages(
         return stream_messages(state, body).await;
     }
 
+    if state.provider_catalog.is_some() {
+        return provider_messages(state, body).await;
+    }
+
     {
         let mut privacy = state.privacy.lock().await;
         privacy.pseudonymize_request(&mut body)?;
@@ -177,6 +199,66 @@ async fn messages(
             headers.insert("x-anno-pii-leak-redacted", count);
         }
     }
+
+    Ok(MessagesResponse::Json(headers, Json(response)))
+}
+
+async fn provider_messages(state: AppState, mut body: Value) -> Result<MessagesResponse> {
+    let catalog = state
+        .provider_catalog
+        .as_ref()
+        .ok_or_else(|| Error::Config("provider catalog missing".to_string()))?;
+    let model_id = body
+        .get("model")
+        .and_then(Value::as_str)
+        .ok_or_else(|| Error::Privacy("model is required".to_string()))?
+        .to_string();
+    let resolved = catalog.resolve_model(&model_id).map_err(Error::Config)?;
+
+    let document_report = {
+        let mut privacy = state.privacy.lock().await;
+        crate::document_blocks::expand_document_blocks(
+            &mut body,
+            &state.file_registry,
+            resolved.privacy_mode,
+            state.config.file_max_bytes,
+            &mut privacy,
+        )
+        .await?
+    };
+    let privacy_report = {
+        let mut privacy = state.privacy.lock().await;
+        privacy.transform_request_for_mode(&mut body, resolved.privacy_mode, false)?
+    };
+    let request = crate::chat::ChatRequest::from_anthropic(&body, &resolved.upstream_model)?;
+    let upstream = crate::openai_compat::complete(&state.client, &resolved, &request).await?;
+    let mut response = crate::chat::anthropic_response_from_openai(&upstream)?;
+
+    let mut headers = HeaderMap::new();
+    let mut fresh_pii_redacted = 0usize;
+    if state.config.auto_rehydrate
+        && resolved.privacy_mode == crate::privacy_mode::PrivacyMode::Pseudonymized
+    {
+        let privacy = state.privacy.lock().await;
+        let report = privacy.rehydrate_response(&mut response)?;
+        fresh_pii_redacted = report.fresh_pii_redacted;
+        if fresh_pii_redacted > 0 {
+            let count = HeaderValue::from_str(&fresh_pii_redacted.to_string())
+                .map_err(|e| Error::Privacy(e.to_string()))?;
+            headers.insert("x-anno-pii-leak-redacted", count);
+        }
+    }
+
+    state.audit.record(crate::audit::AuditEvent {
+        request_id: "provider-router".to_string(),
+        provider_profile: state.config.provider_profile.clone(),
+        provider_id: resolved.provider.id.clone(),
+        model_id: resolved.requested_model.clone(),
+        upstream_model: resolved.upstream_model.clone(),
+        privacy_mode: resolved.privacy_mode.audit_label().to_string(),
+        entity_count: privacy_report.entities + document_report.entity_count,
+        fresh_pii_redacted,
+    });
 
     Ok(MessagesResponse::Json(headers, Json(response)))
 }
@@ -264,6 +346,10 @@ fn next_sse_frame_boundary(raw: &str) -> Option<(usize, usize)> {
 }
 
 async fn stream_messages(state: AppState, mut body: Value) -> Result<MessagesResponse> {
+    if state.provider_catalog.is_some() {
+        return provider_stream_messages(state, body).await;
+    }
+
     {
         let mut privacy = state.privacy.lock().await;
         privacy
@@ -388,14 +474,320 @@ async fn stream_messages(state: AppState, mut body: Value) -> Result<MessagesRes
     )))
 }
 
+async fn provider_stream_messages(state: AppState, mut body: Value) -> Result<MessagesResponse> {
+    let catalog = state
+        .provider_catalog
+        .as_ref()
+        .ok_or_else(|| Error::Config("provider catalog missing".to_string()))?;
+    let model_id = body
+        .get("model")
+        .and_then(Value::as_str)
+        .ok_or_else(|| Error::Privacy("model is required".to_string()))?
+        .to_string();
+    let resolved = catalog.resolve_model(&model_id).map_err(Error::Config)?;
+    {
+        let mut privacy = state.privacy.lock().await;
+        crate::document_blocks::expand_document_blocks(
+            &mut body,
+            &state.file_registry,
+            resolved.privacy_mode,
+            state.config.file_max_bytes,
+            &mut privacy,
+        )
+        .await?;
+    }
+    {
+        let mut privacy = state.privacy.lock().await;
+        privacy.transform_request_for_mode(
+            &mut body,
+            resolved.privacy_mode,
+            state.config.streaming.is_enabled(),
+        )?;
+    }
+    let request = crate::chat::ChatRequest::from_anthropic(&body, &resolved.upstream_model)?;
+    let upstream = crate::openai_compat::stream(&state.client, &resolved, &request).await?;
+    let apply_privacy = resolved.privacy_mode == crate::privacy_mode::PrivacyMode::Pseudonymized;
+    let scan_fresh = apply_privacy
+        && matches!(
+            state.config.stream_privacy,
+            crate::config::StreamPrivacyMode::BufferedScan
+        );
+    let max_chars = state.config.stream_max_buffer_chars;
+    let privacy = Arc::clone(&state.privacy);
+    let stream = async_stream::stream! {
+        let mut raw = String::new();
+        let mut text_buffer = crate::stream::StreamBuffer::new(max_chars);
+        let mut last_text_frame = None;
+        let mut tool_json_buffer = String::new();
+        futures_util::pin_mut!(upstream);
+
+        while let Some(chunk) = upstream.next().await {
+            let Ok(bytes) = chunk else {
+                yield Ok(stream_error_event("upstream_error", "provider stream upstream error"));
+                return;
+            };
+            raw.push_str(&String::from_utf8_lossy(&bytes));
+
+            while let Some((frame_end, delimiter_len)) = next_sse_frame_boundary(&raw) {
+                let frame_raw = raw[..frame_end + delimiter_len].to_string();
+                raw = raw[frame_end + delimiter_len..].to_string();
+
+                for line in frame_raw.lines().filter_map(|line| line.strip_prefix("data:")) {
+                    let data = line.trim();
+                    if data == "[DONE]" {
+                        if apply_privacy {
+                            if let Some(flush) = flush_stream_text(
+                                &privacy,
+                                &mut text_buffer,
+                                &last_text_frame,
+                                scan_fresh,
+                                true,
+                            ).await {
+                                yield Ok(flush.event);
+                            }
+                        }
+                        yield Ok(passthrough_event(crate::stream::SseFrame {
+                            event: Some("message_stop".to_string()),
+                            data: json!({"type": "message_stop"}),
+                        }));
+                        return;
+                    }
+
+                    let Ok(value) = serde_json::from_str::<Value>(data) else {
+                        yield Ok(stream_error_event("stream_parse_error", "malformed provider SSE JSON"));
+                        return;
+                    };
+                    let Ok(mut frame) = crate::chat::anthropic_stream_frame_from_openai(&value, 0) else {
+                        yield Ok(stream_error_event("stream_parse_error", "unsupported provider stream chunk"));
+                        return;
+                    };
+
+                    if let Some(text) = frame.text_delta() {
+                        if !apply_privacy {
+                            yield Ok(passthrough_event(frame));
+                            continue;
+                        }
+                        last_text_frame = Some(frame.clone());
+                        if let Some(ready) = text_buffer.push(text) {
+                            match transform_stream_ready_text(&privacy, ready, scan_fresh).await {
+                                Ok(output) => {
+                                    frame.set_text_delta(&output);
+                                    yield Ok(passthrough_event(frame));
+                                }
+                                Err(_) => {
+                                    yield Ok(stream_error_event("privacy_error", "stream privacy transform failed"));
+                                    return;
+                                }
+                            }
+                        }
+                    } else if frame.delta_type() == Some("input_json_delta") {
+                        if !apply_privacy {
+                            yield Ok(passthrough_event(frame));
+                            continue;
+                        }
+                        let partial = frame
+                            .data
+                            .get("delta")
+                            .and_then(|delta| delta.get("partial_json"))
+                            .and_then(Value::as_str)
+                            .unwrap_or("")
+                            .to_string();
+                        tool_json_buffer.push_str(&partial);
+                        if tool_json_buffer.len() > max_chars {
+                            yield Ok(stream_error_event("privacy_error", "stream tool JSON buffer exceeded limit"));
+                            return;
+                        }
+                        if serde_json::from_str::<Value>(&tool_json_buffer).is_ok() {
+                            match transform_stream_ready_text(
+                                &privacy,
+                                std::mem::take(&mut tool_json_buffer),
+                                scan_fresh,
+                            ).await {
+                                Ok(output) => {
+                                    if let Some(delta) = frame
+                                        .data
+                                        .get_mut("delta")
+                                        .and_then(Value::as_object_mut)
+                                    {
+                                        delta.insert("partial_json".to_string(), Value::String(output));
+                                    }
+                                    yield Ok(passthrough_event(frame));
+                                }
+                                Err(_) => {
+                                    yield Ok(stream_error_event("privacy_error", "stream privacy transform failed"));
+                                    return;
+                                }
+                            }
+                        }
+                    } else {
+                        if apply_privacy {
+                            if let Some(flush) = flush_stream_text(
+                                &privacy,
+                                &mut text_buffer,
+                                &last_text_frame,
+                                scan_fresh,
+                                true,
+                            ).await {
+                                let fatal = flush.fatal;
+                                yield Ok(flush.event);
+                                if fatal {
+                                    return;
+                                }
+                            }
+                        }
+                        yield Ok(passthrough_event(frame));
+                    }
+                }
+            }
+        }
+
+        if apply_privacy {
+            if let Some(flush) = flush_stream_text(
+                &privacy,
+                &mut text_buffer,
+                &last_text_frame,
+                scan_fresh,
+                true,
+            ).await {
+                yield Ok(flush.event);
+            }
+        }
+    };
+
+    Ok(MessagesResponse::Stream(Sse::new(
+        Box::pin(stream) as SseResultStream
+    )))
+}
+
 async fn models(State(state): State<AppState>) -> Result<Json<Value>> {
+    if let Some(catalog) = &state.provider_catalog {
+        return Ok(Json(crate::model_catalog::models_response(catalog)));
+    }
     upstream::forward_models(&state.client, &state.config.upstream_anthropic_base)
         .await
         .map(Json)
 }
 
-async fn files_unsupported() -> Error {
-    Error::UnsupportedFeature("native Files API is deferred to v0.5".to_string())
+async fn list_files_unsupported() -> Error {
+    Error::UnsupportedFeature("file listing is not exposed by anno gateway".to_string())
+}
+
+async fn upload_file(
+    State(state): State<AppState>,
+    mut multipart: Multipart,
+) -> Result<Json<Value>> {
+    let mut file_name = None;
+    let mut content_type = "application/octet-stream".to_string();
+    let mut bytes = Vec::new();
+
+    while let Some(field) = multipart
+        .next_field()
+        .await
+        .map_err(|e| Error::Privacy(format!("read multipart field: {e}")))?
+    {
+        if field.name() != Some("file") {
+            continue;
+        }
+        file_name = field.file_name().map(ToString::to_string);
+        content_type = field
+            .content_type()
+            .map(ToString::to_string)
+            .unwrap_or_else(|| "application/octet-stream".to_string());
+        bytes = field
+            .bytes()
+            .await
+            .map_err(|e| Error::Privacy(format!("read uploaded file bytes: {e}")))?
+            .to_vec();
+        break;
+    }
+
+    if bytes.is_empty() {
+        return Err(Error::UnsupportedFeature(
+            "multipart upload must include one file field".to_string(),
+        ));
+    }
+    if bytes.len() > state.config.file_max_bytes {
+        return Err(Error::UnsupportedFeature(format!(
+            "uploaded file exceeds {} bytes",
+            state.config.file_max_bytes
+        )));
+    }
+
+    let filename = file_name.unwrap_or_else(|| "uploaded-document".to_string());
+    let extracted =
+        crate::document_extract::extract_uploaded_document(&filename, &content_type, bytes.clone())
+            .await?;
+    let pseudonymized = {
+        let mut privacy = state.privacy.lock().await;
+        privacy.pseudonymize_plain_text(&extracted.text)?
+    };
+    let stored = state
+        .file_registry
+        .put_text_derivatives(
+            &extracted.filename,
+            &extracted.detected_content_type,
+            &bytes,
+            &extracted.text,
+            &pseudonymized.text,
+        )
+        .await?;
+
+    state.audit.record(crate::audit::AuditEvent {
+        request_id: "file-upload".to_string(),
+        provider_profile: state.config.provider_profile.clone(),
+        provider_id: "local-file-registry".to_string(),
+        model_id: "none".to_string(),
+        upstream_model: "none".to_string(),
+        privacy_mode: "file-upload".to_string(),
+        entity_count: pseudonymized.entities,
+        fresh_pii_redacted: 0,
+    });
+
+    Ok(Json(file_metadata_json(&stored)))
+}
+
+async fn get_file_metadata(
+    State(state): State<AppState>,
+    Path(id): Path<String>,
+) -> Result<Json<Value>> {
+    let stored = state.file_registry.get(&id).await?;
+    Ok(Json(file_metadata_json(&stored)))
+}
+
+async fn delete_file(State(state): State<AppState>, Path(id): Path<String>) -> Result<Json<Value>> {
+    let deleted = state.file_registry.delete(&id).await?;
+    Ok(Json(json!({
+        "id": id,
+        "object": "file.deleted",
+        "deleted": deleted
+    })))
+}
+
+async fn get_file_content(
+    State(state): State<AppState>,
+    Path(id): Path<String>,
+) -> Result<impl IntoResponse> {
+    let text = state.file_registry.read_pseudonymized_text(&id).await?;
+    Ok((
+        [(
+            axum::http::header::CONTENT_TYPE,
+            "text/plain; charset=utf-8",
+        )],
+        text,
+    ))
+}
+
+fn file_metadata_json(stored: &crate::file_registry::StoredFile) -> Value {
+    json!({
+        "id": stored.id.as_str(),
+        "object": "file",
+        "filename": stored.filename,
+        "bytes": stored.size_bytes,
+        "created_at": stored.created_at_unix,
+        "purpose": "assistants",
+        "content_type": stored.content_type,
+        "sha256": stored.sha256_hex
+    })
 }
 
 /// Start the server. Runs until SIGINT (Ctrl-C) or, on Unix, SIGTERM
@@ -570,6 +962,66 @@ mod tests {
         }))
     }
 
+    async fn mock_openai_chat(
+        State(state): State<MockState>,
+        Json(body): Json<Value>,
+    ) -> Json<Value> {
+        *state.captured.lock().await = Some(body);
+        Json(json!({
+            "choices": [{
+                "message": {"role": "assistant", "content": "Bonjour PERSON_1"}
+            }]
+        }))
+    }
+
+    async fn mock_openai_stream_chat(
+        State(state): State<MockState>,
+        Json(body): Json<Value>,
+    ) -> axum::response::Sse<
+        impl futures_util::Stream<
+            Item = std::result::Result<axum::response::sse::Event, std::convert::Infallible>,
+        >,
+    > {
+        *state.captured.lock().await = Some(body);
+        let stream = futures_util::stream::iter(vec![
+            Ok(axum::response::sse::Event::default().data(
+                json!({
+                    "choices": [{"delta": {"content": "Bonjour PERSON_1."}}]
+                })
+                .to_string(),
+            )),
+            Ok(axum::response::sse::Event::default().data("[DONE]")),
+        ]);
+        axum::response::Sse::new(stream)
+    }
+
+    fn provider_catalog_file(
+        tmp: &tempfile::TempDir,
+        base_url: &str,
+        dpa: bool,
+    ) -> std::path::PathBuf {
+        let path = tmp.path().join("providers.toml");
+        std::fs::write(
+            &path,
+            format!(
+                r#"
+allow_cleartext_dpa = true
+
+[[providers]]
+id = "mistral"
+kind = "openai_compatible"
+base_url = "{base_url}"
+api_key_env = ""
+dpa_verified = {dpa}
+allowed_privacy_modes = ["pseudonymized", "cleartext_dpa"]
+models = [{{ id = "mistral-large-latest", upstream = "mistral-large-latest" }}]
+"#
+            ),
+        )
+        .expect("write provider catalog");
+        path
+    }
+
     async fn mock_stream_messages(
         State(state): State<MockState>,
         Json(body): Json<Value>,
@@ -737,6 +1189,26 @@ mod tests {
         addr
     }
 
+    async fn upload_text_file(addr: SocketAddr, filename: &str, text: &str) -> String {
+        let form = reqwest::multipart::Form::new().part(
+            "file",
+            reqwest::multipart::Part::bytes(text.as_bytes().to_vec())
+                .file_name(filename.to_string())
+                .mime_str("text/plain")
+                .unwrap(),
+        );
+        let uploaded: serde_json::Value = reqwest::Client::new()
+            .post(format!("http://{addr}/v1/files"))
+            .multipart(form)
+            .send()
+            .await
+            .unwrap()
+            .json()
+            .await
+            .unwrap();
+        uploaded["id"].as_str().unwrap().to_string()
+    }
+
     #[tokio::test]
     async fn messages_route_never_sends_cleartext_to_upstream_and_rehydrates() {
         let captured = Arc::new(Mutex::new(None));
@@ -775,6 +1247,207 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn provider_router_pseudonymizes_before_openai_upstream() {
+        let tmp = tempfile::TempDir::new().unwrap();
+        let captured = Arc::new(Mutex::new(None));
+        let upstream = Router::new()
+            .route("/chat/completions", post(mock_openai_chat))
+            .with_state(MockState {
+                captured: Arc::clone(&captured),
+            });
+        let upstream_addr = spawn(upstream).await;
+        let catalog_path = provider_catalog_file(&tmp, &format!("http://{upstream_addr}"), true);
+
+        let config = GatewayConfig {
+            provider_catalog_path: Some(catalog_path),
+            ..GatewayConfig::default()
+        };
+        let gateway_addr = spawn(router(AppState::new(config))).await;
+
+        let response: Value = reqwest::Client::new()
+            .post(format!("http://{gateway_addr}/v1/messages"))
+            .json(&json!({
+                "model": "anno/mistral/mistral-large-latest:pseudonymized",
+                "messages": [{"role": "user", "content": "Bonjour Marie Dupont"}]
+            }))
+            .send()
+            .await
+            .unwrap()
+            .json()
+            .await
+            .unwrap();
+
+        let upstream_body = captured.lock().await.clone().expect("upstream called");
+        let upstream_text = serde_json::to_string(&upstream_body).unwrap();
+        assert!(!upstream_text.contains("Marie Dupont"));
+        assert!(upstream_text.contains("PERSON_"));
+        assert_eq!(response["content"][0]["text"], "Bonjour Marie Dupont");
+    }
+
+    #[tokio::test]
+    async fn provider_router_cleartext_dpa_sends_cleartext_to_verified_provider() {
+        let tmp = tempfile::TempDir::new().unwrap();
+        let captured = Arc::new(Mutex::new(None));
+        let upstream = Router::new()
+            .route("/chat/completions", post(mock_openai_chat))
+            .with_state(MockState {
+                captured: Arc::clone(&captured),
+            });
+        let upstream_addr = spawn(upstream).await;
+        let catalog_path = provider_catalog_file(&tmp, &format!("http://{upstream_addr}"), true);
+
+        let config = GatewayConfig {
+            provider_catalog_path: Some(catalog_path),
+            ..GatewayConfig::default()
+        };
+        let gateway_addr = spawn(router(AppState::new(config))).await;
+
+        let status = reqwest::Client::new()
+            .post(format!("http://{gateway_addr}/v1/messages"))
+            .json(&json!({
+                "model": "anno/mistral/mistral-large-latest:cleartext-dpa",
+                "messages": [{"role": "user", "content": "Bonjour Marie Dupont"}]
+            }))
+            .send()
+            .await
+            .unwrap()
+            .status();
+
+        assert_eq!(status, reqwest::StatusCode::OK);
+        let upstream_body = captured.lock().await.clone().expect("upstream called");
+        let upstream_text = serde_json::to_string(&upstream_body).unwrap();
+        assert!(upstream_text.contains("Marie Dupont"));
+    }
+
+    #[tokio::test]
+    async fn provider_router_file_document_pseudonymized_sends_no_cleartext() {
+        let tmp = tempfile::TempDir::new().unwrap();
+        let captured = Arc::new(Mutex::new(None));
+        let upstream = Router::new()
+            .route("/chat/completions", post(mock_openai_chat))
+            .with_state(MockState {
+                captured: Arc::clone(&captured),
+            });
+        let upstream_addr = spawn(upstream).await;
+        let catalog_path = provider_catalog_file(&tmp, &format!("http://{upstream_addr}"), true);
+        let config = GatewayConfig {
+            provider_catalog_path: Some(catalog_path),
+            file_store_dir: tmp.path().join("files"),
+            ..GatewayConfig::default()
+        };
+        let gateway_addr = spawn(router(AppState::new(config))).await;
+
+        let file_id = upload_text_file(gateway_addr, "notes.txt", "Bonjour Marie Dupont").await;
+
+        let response: serde_json::Value = reqwest::Client::new()
+            .post(format!("http://{gateway_addr}/v1/messages"))
+            .json(&json!({
+                "model": "anno/mistral/mistral-large-latest:pseudonymized",
+                "messages": [{
+                    "role": "user",
+                    "content": [{
+                        "type": "document",
+                        "source": {"type": "file", "file_id": file_id},
+                        "title": "notes.txt"
+                    }]
+                }]
+            }))
+            .send()
+            .await
+            .unwrap()
+            .json()
+            .await
+            .unwrap();
+
+        let upstream_body = captured.lock().await.clone().expect("upstream called");
+        let upstream_text = serde_json::to_string(&upstream_body).unwrap();
+        assert!(!upstream_text.contains("Marie Dupont"));
+        assert!(upstream_text.contains("PERSON_"));
+        assert_eq!(response["content"][0]["text"], "Bonjour Marie Dupont");
+    }
+
+    #[tokio::test]
+    async fn provider_router_file_document_cleartext_dpa_sends_cleartext_to_verified_provider() {
+        let tmp = tempfile::TempDir::new().unwrap();
+        let captured = Arc::new(Mutex::new(None));
+        let upstream = Router::new()
+            .route("/chat/completions", post(mock_openai_chat))
+            .with_state(MockState {
+                captured: Arc::clone(&captured),
+            });
+        let upstream_addr = spawn(upstream).await;
+        let catalog_path = provider_catalog_file(&tmp, &format!("http://{upstream_addr}"), true);
+        let config = GatewayConfig {
+            provider_catalog_path: Some(catalog_path),
+            file_store_dir: tmp.path().join("files"),
+            ..GatewayConfig::default()
+        };
+        let gateway_addr = spawn(router(AppState::new(config))).await;
+
+        let file_id = upload_text_file(gateway_addr, "notes.txt", "Bonjour Marie Dupont").await;
+
+        let status = reqwest::Client::new()
+            .post(format!("http://{gateway_addr}/v1/messages"))
+            .json(&json!({
+                "model": "anno/mistral/mistral-large-latest:cleartext-dpa",
+                "messages": [{
+                    "role": "user",
+                    "content": [{
+                        "type": "document",
+                        "source": {"type": "file", "file_id": file_id},
+                        "title": "notes.txt"
+                    }]
+                }]
+            }))
+            .send()
+            .await
+            .unwrap()
+            .status();
+
+        assert_eq!(status, reqwest::StatusCode::OK);
+        let upstream_body = captured.lock().await.clone().expect("upstream called");
+        let upstream_text = serde_json::to_string(&upstream_body).unwrap();
+        assert!(upstream_text.contains("Marie Dupont"));
+    }
+
+    #[tokio::test]
+    async fn provider_router_stream_rehydrates_text() {
+        let tmp = tempfile::TempDir::new().unwrap();
+        let captured = Arc::new(Mutex::new(None));
+        let upstream = Router::new()
+            .route("/chat/completions", post(mock_openai_stream_chat))
+            .with_state(MockState {
+                captured: Arc::clone(&captured),
+            });
+        let upstream_addr = spawn(upstream).await;
+        let catalog_path = provider_catalog_file(&tmp, &format!("http://{upstream_addr}"), true);
+
+        let config = GatewayConfig {
+            provider_catalog_path: Some(catalog_path),
+            streaming: crate::config::StreamingMode::Enabled,
+            ..GatewayConfig::default()
+        };
+        let gateway_addr = spawn(router(AppState::new(config))).await;
+
+        let body = reqwest::Client::new()
+            .post(format!("http://{gateway_addr}/v1/messages"))
+            .json(&json!({
+                "model": "anno/mistral/mistral-large-latest:pseudonymized",
+                "stream": true,
+                "messages": [{"role": "user", "content": "Bonjour Marie Dupont"}]
+            }))
+            .send()
+            .await
+            .unwrap()
+            .text()
+            .await
+            .unwrap();
+
+        assert!(body.contains("Marie Dupont"));
+        assert!(!body.contains("PERSON_"));
+    }
+
+    #[tokio::test]
     async fn stream_true_fails_closed_when_disabled() {
         let config = GatewayConfig::default();
         let gateway_addr = spawn(router(AppState::new(config))).await;
@@ -792,6 +1465,49 @@ mod tests {
             .status();
 
         assert_eq!(status, reqwest::StatusCode::BAD_REQUEST);
+    }
+
+    #[tokio::test]
+    async fn models_route_uses_provider_catalog_when_configured() {
+        let tmp = tempfile::tempdir().expect("tempdir");
+        let catalog_path = tmp.path().join("providers.toml");
+        std::fs::write(
+            &catalog_path,
+            r#"
+allow_cleartext_dpa = true
+[[providers]]
+id = "mistral"
+kind = "openai_compatible"
+base_url = "https://api.mistral.ai/v1"
+api_key_env = "MISTRAL_API_KEY"
+dpa_verified = true
+allowed_privacy_modes = ["pseudonymized", "cleartext_dpa"]
+models = [{ id = "mistral-large-latest", upstream = "mistral-large-latest" }]
+"#,
+        )
+        .expect("write catalog");
+
+        let config = GatewayConfig {
+            provider_catalog_path: Some(catalog_path),
+            ..GatewayConfig::default()
+        };
+        let gateway_addr = spawn(router(AppState::new(config))).await;
+
+        let response: Value = reqwest::Client::new()
+            .get(format!("http://{gateway_addr}/v1/models"))
+            .send()
+            .await
+            .unwrap()
+            .json()
+            .await
+            .unwrap();
+
+        assert_eq!(response["type"], "list");
+        assert_eq!(response["data"].as_array().expect("data").len(), 2);
+        assert_eq!(
+            response["data"][0]["id"],
+            "anno/mistral/mistral-large-latest:cleartext-dpa"
+        );
     }
 
     #[tokio::test]
@@ -1094,17 +1810,105 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn files_api_fails_closed() {
-        let config = GatewayConfig::default();
+    async fn files_api_uploads_text_and_returns_metadata_without_content() {
+        let tmp = tempfile::TempDir::new().unwrap();
+        let config = GatewayConfig {
+            file_store_dir: tmp.path().join("files"),
+            ..GatewayConfig::default()
+        };
         let gateway_addr = spawn(router(AppState::new(config))).await;
-        let status = reqwest::Client::new()
+
+        let form = reqwest::multipart::Form::new().part(
+            "file",
+            reqwest::multipart::Part::bytes("Bonjour Marie Dupont".as_bytes().to_vec())
+                .file_name("notes.txt")
+                .mime_str("text/plain")
+                .unwrap(),
+        );
+        let response: serde_json::Value = reqwest::Client::new()
             .post(format!("http://{gateway_addr}/v1/files"))
+            .multipart(form)
             .send()
             .await
             .unwrap()
-            .status();
+            .json()
+            .await
+            .unwrap();
 
-        assert_eq!(status, reqwest::StatusCode::BAD_REQUEST);
+        assert!(response["id"].as_str().unwrap().starts_with("anno_file_"));
+        assert_eq!(response["object"], "file");
+        assert_eq!(response["filename"], "notes.txt");
+        assert!(response.get("text").is_none());
+    }
+
+    #[tokio::test]
+    async fn files_api_content_returns_pseudonymized_text_only() {
+        let tmp = tempfile::TempDir::new().unwrap();
+        let config = GatewayConfig {
+            file_store_dir: tmp.path().join("files"),
+            ..GatewayConfig::default()
+        };
+        let gateway_addr = spawn(router(AppState::new(config))).await;
+        let form = reqwest::multipart::Form::new().part(
+            "file",
+            reqwest::multipart::Part::bytes("Bonjour Marie Dupont".as_bytes().to_vec())
+                .file_name("notes.txt")
+                .mime_str("text/plain")
+                .unwrap(),
+        );
+        let uploaded: serde_json::Value = reqwest::Client::new()
+            .post(format!("http://{gateway_addr}/v1/files"))
+            .multipart(form)
+            .send()
+            .await
+            .unwrap()
+            .json()
+            .await
+            .unwrap();
+        let id = uploaded["id"].as_str().unwrap();
+
+        let content = reqwest::Client::new()
+            .get(format!("http://{gateway_addr}/v1/files/{id}/content"))
+            .send()
+            .await
+            .unwrap()
+            .text()
+            .await
+            .unwrap();
+
+        assert!(content.contains("PERSON_"));
+        assert!(!content.contains("Marie Dupont"));
+    }
+
+    #[tokio::test]
+    async fn files_api_allows_configured_upload_above_default_body_limit() {
+        let tmp = tempfile::TempDir::new().unwrap();
+        let bytes = vec![b'a'; 3 * 1024 * 1024];
+        let config = GatewayConfig {
+            file_store_dir: tmp.path().join("files"),
+            file_max_bytes: 4 * 1024 * 1024,
+            ..GatewayConfig::default()
+        };
+        let gateway_addr = spawn(router(AppState::new(config))).await;
+        let form = reqwest::multipart::Form::new().part(
+            "file",
+            reqwest::multipart::Part::bytes(bytes.clone())
+                .file_name("large.txt")
+                .mime_str("text/plain")
+                .unwrap(),
+        );
+
+        let response: serde_json::Value = reqwest::Client::new()
+            .post(format!("http://{gateway_addr}/v1/files"))
+            .multipart(form)
+            .send()
+            .await
+            .unwrap()
+            .json()
+            .await
+            .unwrap();
+
+        assert_eq!(response["bytes"], bytes.len());
     }
 
     #[tokio::test]

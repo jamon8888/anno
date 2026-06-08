@@ -124,6 +124,41 @@ impl KnowledgeService {
         Ok(0)
     }
 
+    /// Validate local-folder paths selected for a sync before models or files are loaded.
+    ///
+    /// # Errors
+    /// Returns a string error when listing sources/scopes fails or when a selected
+    /// provider path is outside the caller's filesystem policy.
+    pub fn validate_sync_source_paths<F>(
+        &self,
+        source_id: Option<&str>,
+        mut validate_path: F,
+    ) -> Result<(), String>
+    where
+        F: FnMut(&str) -> Result<(), String>,
+    {
+        let sources = self
+            .store
+            .list_sources()
+            .map_err(|e| format!("list_sources: {e}"))?;
+        for source in &sources {
+            if let Some(want) = source_id {
+                if source.source_id.as_string() != want {
+                    continue;
+                }
+            }
+            let scopes = self
+                .store
+                .enabled_scopes_for_source(&source.source_id)
+                .map_err(|e| format!("scopes: {e}"))?;
+            for scope in &scopes {
+                validate_path(&scope.provider_key)
+                    .map_err(|e| format!("source {}: {e}", source.source_id.as_string()))?;
+            }
+        }
+        Ok(())
+    }
+
     /// Run a bounded sync over all enabled scopes of a source (or all sources).
     /// Loads the local NER model on demand for pseudonymization.
     ///

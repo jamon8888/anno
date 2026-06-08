@@ -61,6 +61,16 @@ pub struct GatewayConfig {
     pub reject_images: bool,
     /// Provider profile label for audit/routing.
     pub provider_profile: String,
+    /// Optional provider catalog TOML path. If absent, legacy upstream proxy mode is used.
+    pub provider_catalog_path: Option<std::path::PathBuf>,
+    /// Local directory used for uploaded file metadata and text derivatives.
+    pub file_store_dir: std::path::PathBuf,
+    /// Maximum accepted upload size in bytes.
+    pub file_max_bytes: usize,
+    /// Whether raw uploaded bytes are retained after local text extraction.
+    pub file_retain_raw: bool,
+    /// Whether cleartext extracted text is retained for DPA/local cleartext modes.
+    pub file_retain_cleartext: bool,
     /// Optional local encrypted vault path. If absent, the gateway uses an
     /// ephemeral vault.
     pub vault_path: Option<String>,
@@ -93,6 +103,11 @@ impl Default for GatewayConfig {
             auto_rehydrate: true,
             reject_images: true,
             provider_profile: "global_anonymized".to_string(),
+            provider_catalog_path: None,
+            file_store_dir: std::path::PathBuf::from(".anno/privacy-gateway/files"),
+            file_max_bytes: 25 * 1024 * 1024,
+            file_retain_raw: false,
+            file_retain_cleartext: true,
             vault_path: None,
             vault_key_hex: None,
             streaming: StreamingMode::Disabled,
@@ -121,6 +136,27 @@ impl GatewayConfig {
         }
         if let Ok(profile) = std::env::var("ANNO_GATEWAY_PROVIDER_PROFILE") {
             cfg.provider_profile = profile;
+        }
+        if let Ok(path) = std::env::var("ANNO_GATEWAY_PROVIDER_CATALOG") {
+            let path = path.trim();
+            if !path.is_empty() {
+                cfg.provider_catalog_path = Some(std::path::PathBuf::from(path));
+            }
+        }
+        if let Ok(path) = std::env::var("ANNO_GATEWAY_FILE_STORE_DIR") {
+            cfg.file_store_dir = std::path::PathBuf::from(path);
+        }
+        if let Ok(value) = std::env::var("ANNO_GATEWAY_FILE_MAX_BYTES") {
+            if let Ok(bytes) = value.parse::<usize>() {
+                cfg.file_max_bytes = bytes;
+            }
+        }
+        if let Ok(value) = std::env::var("ANNO_GATEWAY_FILE_RETAIN_RAW") {
+            cfg.file_retain_raw = matches!(value.as_str(), "1" | "true" | "TRUE" | "yes" | "YES");
+        }
+        if let Ok(value) = std::env::var("ANNO_GATEWAY_FILE_RETAIN_CLEARTEXT") {
+            cfg.file_retain_cleartext =
+                !matches!(value.as_str(), "0" | "false" | "FALSE" | "no" | "NO");
         }
         if let Ok(path) = std::env::var("ANNO_GATEWAY_VAULT_PATH") {
             cfg.vault_path = Some(path);
@@ -198,5 +234,63 @@ mod tests {
         assert_eq!(cfg.stream_privacy, StreamPrivacyMode::BufferedScan);
         assert_eq!(cfg.stream_max_buffer_chars, 4096);
         assert_eq!(cfg.stream_max_buffer_ms, 750);
+    }
+
+    #[test]
+    fn provider_catalog_path_loads_from_env() {
+        unsafe {
+            std::env::set_var(
+                "ANNO_GATEWAY_PROVIDER_CATALOG",
+                "C:\\ProgramData\\Hacienda\\providers.toml",
+            );
+        }
+        let cfg = GatewayConfig::from_env();
+        unsafe {
+            std::env::remove_var("ANNO_GATEWAY_PROVIDER_CATALOG");
+        }
+
+        assert_eq!(
+            cfg.provider_catalog_path.as_deref(),
+            Some(std::path::Path::new(
+                "C:\\ProgramData\\Hacienda\\providers.toml"
+            ))
+        );
+    }
+
+    #[test]
+    fn file_config_default_is_local_and_bounded() {
+        let cfg = GatewayConfig::default();
+
+        assert_eq!(cfg.file_max_bytes, 25 * 1024 * 1024);
+        assert!(!cfg.file_retain_raw);
+        assert!(cfg.file_retain_cleartext);
+        assert!(cfg.file_store_dir.ends_with("files"));
+    }
+
+    #[test]
+    fn file_config_env_parses_values() {
+        unsafe {
+            std::env::set_var("ANNO_GATEWAY_FILE_STORE_DIR", "target/test-file-store");
+            std::env::set_var("ANNO_GATEWAY_FILE_MAX_BYTES", "4096");
+            std::env::set_var("ANNO_GATEWAY_FILE_RETAIN_RAW", "true");
+            std::env::set_var("ANNO_GATEWAY_FILE_RETAIN_CLEARTEXT", "false");
+        }
+
+        let cfg = GatewayConfig::from_env();
+
+        unsafe {
+            std::env::remove_var("ANNO_GATEWAY_FILE_STORE_DIR");
+            std::env::remove_var("ANNO_GATEWAY_FILE_MAX_BYTES");
+            std::env::remove_var("ANNO_GATEWAY_FILE_RETAIN_RAW");
+            std::env::remove_var("ANNO_GATEWAY_FILE_RETAIN_CLEARTEXT");
+        }
+
+        assert_eq!(
+            cfg.file_store_dir,
+            std::path::PathBuf::from("target/test-file-store")
+        );
+        assert_eq!(cfg.file_max_bytes, 4096);
+        assert!(cfg.file_retain_raw);
+        assert!(!cfg.file_retain_cleartext);
     }
 }

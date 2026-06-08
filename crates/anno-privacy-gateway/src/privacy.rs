@@ -30,6 +30,15 @@ pub struct StreamTextReport {
     pub privacy: PrivacyReport,
 }
 
+/// Text output and counts emitted by a plain text transform.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct PlainTextPrivacyReport {
+    /// Pseudonymized text.
+    pub text: String,
+    /// Number of entities replaced.
+    pub entities: usize,
+}
+
 /// Stateful privacy engine. The vault owns cleartext mappings and never leaves
 /// this boundary.
 pub struct PrivacyEngine {
@@ -96,6 +105,50 @@ impl PrivacyEngine {
     /// Pseudonymize all v0.3-supported request text fields in place.
     pub fn pseudonymize_request(&mut self, request: &mut Value) -> Result<PrivacyReport> {
         self.pseudonymize_request_with_streaming(request, false)
+    }
+
+    /// Pseudonymize one cleartext string and return the transformed derivative.
+    pub fn pseudonymize_plain_text(&mut self, text: &str) -> Result<PlainTextPrivacyReport> {
+        let mut value = Value::String(text.to_string());
+        let mut report = PrivacyReport::default();
+        self.transform_content_value(&mut value, &mut report)?;
+        let text = value
+            .as_str()
+            .ok_or_else(|| Error::Privacy("plain text transform returned non-string".to_string()))?
+            .to_string();
+        Ok(PlainTextPrivacyReport {
+            text,
+            entities: report.entities,
+        })
+    }
+
+    /// Transform a request according to the selected privacy mode.
+    pub fn transform_request_for_mode(
+        &mut self,
+        request: &mut Value,
+        mode: crate::privacy_mode::PrivacyMode,
+        allow_streaming: bool,
+    ) -> Result<PrivacyReport> {
+        match mode {
+            crate::privacy_mode::PrivacyMode::Pseudonymized => {
+                self.pseudonymize_request_with_streaming(request, allow_streaming)
+            }
+            crate::privacy_mode::PrivacyMode::CleartextDpa
+            | crate::privacy_mode::PrivacyMode::CleartextLocal => {
+                if request
+                    .get("stream")
+                    .and_then(Value::as_bool)
+                    .unwrap_or(false)
+                    && !allow_streaming
+                {
+                    return Err(Error::UnsupportedFeature(
+                        "stream=true is disabled; set ANNO_GATEWAY_STREAMING=enabled".to_string(),
+                    ));
+                }
+                reject_blocks(request)?;
+                Ok(PrivacyReport::default())
+            }
+        }
     }
 
     /// Pseudonymize request text, optionally allowing `stream=true`.
@@ -449,6 +502,48 @@ mod tests {
     use serde_json::json;
 
     #[test]
+    fn cleartext_dpa_validates_blocks_without_pseudonymizing() {
+        let mut engine = PrivacyEngine::default();
+        let mut request = json!({
+            "messages": [{"role": "user", "content": "Bonjour Marie Dupont"}]
+        });
+
+        let report = engine
+            .transform_request_for_mode(
+                &mut request,
+                crate::privacy_mode::PrivacyMode::CleartextDpa,
+                false,
+            )
+            .expect("cleartext allowed");
+
+        assert_eq!(report.pseudonymized_values, 0);
+        assert!(serde_json::to_string(&request)
+            .unwrap()
+            .contains("Marie Dupont"));
+    }
+
+    #[test]
+    fn pseudonymized_mode_pseudonymizes() {
+        let mut engine = PrivacyEngine::default();
+        let mut request = json!({
+            "messages": [{"role": "user", "content": "Bonjour Marie Dupont"}]
+        });
+
+        let report = engine
+            .transform_request_for_mode(
+                &mut request,
+                crate::privacy_mode::PrivacyMode::Pseudonymized,
+                false,
+            )
+            .expect("pseudonymized");
+
+        assert!(report.pseudonymized_values > 0);
+        assert!(!serde_json::to_string(&request)
+            .unwrap()
+            .contains("Marie Dupont"));
+    }
+
+    #[test]
     fn rejects_streaming() {
         let mut engine = PrivacyEngine::default();
         let mut request = json!({
@@ -628,6 +723,17 @@ mod tests {
 
         assert!(report.output.contains("Jean Martin"));
         assert_eq!(report.privacy.fresh_pii_redacted, 0);
+    }
+
+    #[test]
+    fn pseudonymizes_plain_text_for_file_derivative() {
+        let mut engine = PrivacyEngine::from_config(&GatewayConfig::default()).unwrap();
+        let report = engine
+            .pseudonymize_plain_text("Bonjour Marie Dupont")
+            .expect("plain text");
+
+        assert!(report.text.contains("PERSON_"));
+        assert_eq!(report.entities, 1);
     }
 
     #[test]

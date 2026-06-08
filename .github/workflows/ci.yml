@@ -412,6 +412,28 @@ jobs:
         run: cargo build --workspace --features "candle,eval,discourse"
       - name: Test
         run: cargo test --workspace --lib --features "candle,eval,discourse"
+  # ==========================================================================
+  # OCR + PaddleOCR feature compilation check
+  # ==========================================================================
+  check-ocr-paddle:
+    name: Check (embedded-ocr + ocr-paddle)
+    runs-on: ubuntu-latest
+    if: github.event_name != 'pull_request' || contains(github.event.pull_request.labels.*.name, 'full-ci')
+    steps:
+      - uses: actions/checkout@v6
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: arduino/setup-protoc@v3
+        with:
+          repo-token: ${{ secrets.GITHUB_TOKEN }}
+      - name: Set up sccache
+        uses: mozilla-actions/sccache-action@v0.0.10
+        with:
+          version: "v0.15.0"
+      - uses: Swatinem/rust-cache@v2.8.2
+      - name: Check OCR + PaddleOCR features compile
+        run: cargo check -p anno-rag --features "embedded-ocr,ocr-paddle"
+      - name: Check anno-rag-bin with OCR features
+        run: cargo check -p anno-rag-bin --features "embedded-ocr,ocr-paddle"
   test-production:
     name: Test (production features)
     runs-on: ubuntu-latest

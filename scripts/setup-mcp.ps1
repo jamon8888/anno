@@ -18,11 +18,28 @@ param(
 
     [switch]$DryRun,
 
-    [switch]$Force
+    [switch]$Force,
+
+    [Parameter(ValueFromRemainingArguments = $true)]
+    [string[]]$RemainingArgs = @()
 )
 
 Set-StrictMode -Version Latest
 $ErrorActionPreference = "Stop"
+
+$AllowedRoots = @()
+for ($i = 0; $i -lt $RemainingArgs.Count; $i++) {
+    $arg = $RemainingArgs[$i]
+    if ($arg -in @("-AllowedRoot", "-allowed-root", "--allowed-root")) {
+        if (($i + 1) -ge $RemainingArgs.Count -or $RemainingArgs[$i + 1].StartsWith("-")) {
+            throw "$arg requires a value"
+        }
+        $AllowedRoots += $RemainingArgs[$i + 1]
+        $i++
+        continue
+    }
+    throw "unknown argument: $arg"
+}
 
 function Get-ReleaseTag {
     param([string]$RequestedTag)
@@ -94,6 +111,9 @@ if ($Source -eq "path") {
 }
 
 $setupArgs = @("setup-mcp", "--target", $Target, "--binary", $ResolvedBinary, "--models-dir", $ModelsDir)
+foreach ($root in $AllowedRoots) {
+    $setupArgs += @("--allowed-root", $root)
+}
 if ($SkipModels) {
     $setupArgs += "--skip-models"
 }

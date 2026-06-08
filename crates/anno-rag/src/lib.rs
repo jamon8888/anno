@@ -38,8 +38,6 @@ pub mod knowledge_privacy;
 pub mod layers;
 pub mod legal;
 pub mod memory;
-#[cfg(test)]
-pub(crate) mod ocr;
 pub mod pii_eval;
 pub mod pipeline;
 pub mod privacy_artifacts;

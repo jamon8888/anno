@@ -20,6 +20,7 @@ mod legal_maintenance;
 pub mod model_inventory;
 pub mod tabular;
 
+use crate::allowed_roots::AllowedRoots;
 use crate::indexer::SyncSummary;
 use anno_rag::config::{AnnoRagConfig, MemoryNerMode};
 use anno_rag::pipeline::Pipeline;
@@ -42,6 +43,7 @@ pub struct AnnoRagServer {
     legal_maintenance: Arc<OnceCell<Arc<crate::legal_maintenance::LegalMaintenanceService>>>,
     cfg: Arc<AnnoRagConfig>,
     key: [u8; 32],
+    allowed_roots: AllowedRoots,
     tabular_storage: Arc<OnceCell<Arc<anno_rag_tabular::storage::StorageHandle>>>,
     extraction_status: Arc<RwLock<HashMap<anno_rag_tabular::ReviewId, ReviewExtractionStatus>>>,
     #[allow(dead_code)] // populated + consumed by the rmcp #[tool_router] macro
@@ -205,9 +207,47 @@ impl AnnoRagServer {
             })
             .collect())
     }
+
+    fn validate_existing_mcp_path(
+        &self,
+        label: &str,
+        path: impl AsRef<std::path::Path>,
+    ) -> Result<std::path::PathBuf, String> {
+        self.allowed_roots.validate_existing_path(label, path)
+    }
+
+    fn validate_existing_or_removed_mcp_path(
+        &self,
+        label: &str,
+        path: impl AsRef<std::path::Path>,
+    ) -> Result<std::path::PathBuf, String> {
+        self.allowed_roots
+            .validate_existing_or_removed_path(label, path)
+    }
+
+    fn validate_output_mcp_path(
+        &self,
+        label: &str,
+        path: impl AsRef<std::path::Path>,
+    ) -> Result<std::path::PathBuf, String> {
+        self.allowed_roots.validate_output_path(label, path)
+    }
+
+    #[cfg(test)]
+    fn with_allowed_roots_for_test(mut self, allowed_roots: AllowedRoots) -> Self {
+        self.allowed_roots = allowed_roots;
+        self
+    }
 }
 
 // ---- Constructors ----
+
+fn allowed_roots_from_env() -> AllowedRoots {
+    AllowedRoots::from_env().unwrap_or_else(|error| {
+        tracing::warn!(%error, "invalid ANNO_RAG_ALLOWED_ROOTS; denying MCP path access");
+        AllowedRoots::deny_all()
+    })
+}
 
 impl AnnoRagServer {
     /// Construct with a pre-built pipeline (eager path). Used by serve_stdio and tests.
@@ -223,6 +263,7 @@ impl AnnoRagServer {
             legal_maintenance: Arc::new(OnceCell::new()),
             cfg: Arc::new(cfg),
             key: [0u8; 32],
+            allowed_roots: allowed_roots_from_env(),
             tabular_storage: Arc::new(OnceCell::new()),
             extraction_status: Arc::new(RwLock::new(HashMap::new())),
             tool_router: Self::tool_router(),
@@ -239,6 +280,7 @@ impl AnnoRagServer {
             legal_maintenance: Arc::new(OnceCell::new()),
             cfg: Arc::new(cfg),
             key,
+            allowed_roots: allowed_roots_from_env(),
             tabular_storage: Arc::new(OnceCell::new()),
             extraction_status: Arc::new(RwLock::new(HashMap::new())),
             tool_router: Self::tool_router(),
@@ -1574,9 +1616,10 @@ impl AnnoRagServer {
         &self,
         p: PrivacyPrepareFolderParams,
     ) -> Result<serde_json::Value, String> {
+        let source_root = self.validate_existing_mcp_path("source_root", &p.source_root)?;
         let pipeline = self.pipeline().await.map_err(|e| e.to_string())?;
         let summary = pipeline
-            .privacy_prepare_folder(std::path::Path::new(&p.source_root), p.recursive)
+            .privacy_prepare_folder(&source_root, p.recursive)
             .await
             .map_err(|e| e.to_string())?;
         serde_json::to_value(summary).map_err(|e| e.to_string())
@@ -1586,9 +1629,10 @@ impl AnnoRagServer {
         &self,
         p: PrivacyFinalizeFolderParams,
     ) -> Result<serde_json::Value, String> {
+        let workspace = self.validate_existing_mcp_path("workspace", &p.workspace)?;
         let pipeline = self.pipeline().await.map_err(|e| e.to_string())?;
         let summary = pipeline
-            .privacy_finalize_folder(std::path::Path::new(&p.workspace))
+            .privacy_finalize_folder(&workspace)
             .await
             .map_err(|e| e.to_string())?;
         serde_json::to_value(summary).map_err(|e| e.to_string())
@@ -1603,7 +1647,8 @@ impl AnnoRagServer {
                 "privacy_status"
             ],
             "privacy_boundary": "local",
-            "returns_document_content": false
+            "returns_document_content": false,
+            "allowed_roots": self.allowed_roots.summary()
         })
     }
 
@@ -1612,8 +1657,9 @@ impl AnnoRagServer {
         p: LegalIngestParams,
         corpus_id: Option<anno_corpus_core::CorpusId>,
     ) -> Result<serde_json::Value, String> {
+        let folder = self.validate_existing_mcp_path("folder", &p.folder)?;
+        let folder_string = folder.display().to_string();
         let pipeline = self.pipeline().await.map_err(|e| e.to_string())?;
-        let folder = std::path::Path::new(&p.folder);
         let out = corpus_id
             .map(|corpus_id| corpus_legal_output_dir(self.cfg.as_ref(), corpus_id))
             .unwrap_or_else(|| folder.join("anon"));
@@ -1621,18 +1667,18 @@ impl AnnoRagServer {
         let ingest_result = if let Some(corpus_id) = corpus_id {
             pipeline
                 .ingest_folder_scoped_summary(
-                    folder,
+                    &folder,
                     p.recursive,
                     &out,
                     anno_rag::pipeline::LegalIngestScope {
                         corpus_id,
-                        root: folder.to_path_buf(),
+                        root: folder.clone(),
                     },
                 )
                 .await
         } else {
             pipeline
-                .ingest_folder(folder, p.recursive, &out)
+                .ingest_folder(&folder, p.recursive, &out)
                 .await
                 .map(|ingested| anno_rag::pipeline::LegalIngestSummary {
                     ingested,
@@ -1644,7 +1690,7 @@ impl AnnoRagServer {
             Ok(summary) => {
                 if let Some(corpus_id) = corpus_id {
                     let service = self.corpus().await.map_err(|e| e.to_string())?;
-                    let label = legal_folder_id(&p.folder);
+                    let label = legal_folder_id(&folder_string);
                     service
                         .store()
                         .add_binding(
@@ -2155,12 +2201,17 @@ impl AnnoRagServer {
     }
 
     async fn knowledge_add_local_folder_impl(&self, path: &str) -> Result<String, String> {
+        let path = self
+            .validate_existing_mcp_path("path", path)?
+            .display()
+            .to_string();
         let service = self.knowledge().await.map_err(|e| e.to_string())?;
-        service.add_local_folder(path).map_err(|e| e.to_string())
+        service.add_local_folder(&path).map_err(|e| e.to_string())
     }
 
     async fn knowledge_sync_impl(&self, p: KnowledgeSyncParams) -> Result<SyncSummary, String> {
         let service = self.knowledge().await.map_err(|e| e.to_string())?;
+        self.validate_knowledge_sync_paths(service, p.source_id.as_deref())?;
         let pipeline = self.pipeline().await.map_err(|e| e.to_string())?;
         service
             .sync(
@@ -2170,6 +2221,17 @@ impl AnnoRagServer {
                 crate::indexer::SyncOptions::default(),
             )
             .await
+    }
+
+    fn validate_knowledge_sync_paths(
+        &self,
+        service: &crate::knowledge::KnowledgeService,
+        source_id: Option<&str>,
+    ) -> Result<(), String> {
+        service.validate_sync_source_paths(source_id, |path| {
+            self.validate_existing_mcp_path("source_path", path)
+                .map(|_| ())
+        })
     }
 
     async fn sync_corpus_impl(
@@ -2205,7 +2267,6 @@ impl AnnoRagServer {
 
         if requested.knowledge_fast {
             let service = self.knowledge().await.map_err(|e| e.to_string())?;
-            let pipeline = self.pipeline().await.map_err(|e| e.to_string())?;
             let options = crate::indexer::SyncOptions {
                 max_files: p
                     .max_files
@@ -2213,6 +2274,13 @@ impl AnnoRagServer {
                 max_millis: p.max_millis,
             };
             for source_id in &selected_sources {
+                if let Err(error) =
+                    self.validate_knowledge_sync_paths(service, Some(source_id.as_str()))
+                {
+                    warnings.push(format!("knowledge source {source_id}: {error}"));
+                    continue;
+                }
+                let pipeline = self.pipeline().await.map_err(|e| e.to_string())?;
                 match service
                     .sync(
                         pipeline,
@@ -2336,6 +2404,21 @@ impl AnnoRagServer {
             })
             .to_string();
         }
+
+        let path = match self.validate_existing_mcp_path("path", &p.path) {
+            Ok(path) => path.display().to_string(),
+            Err(error) => {
+                return serde_json::json!({
+                    "ok": false,
+                    "error": error,
+                })
+                .to_string();
+            }
+        };
+        let p = IndexParams {
+            path,
+            profile: p.profile,
+        };
 
         let corpus = match self.corpus().await {
             Ok(service) => match service.register_index_root(&p.path, &p.profile) {
@@ -2474,13 +2557,29 @@ impl AnnoRagServer {
                 Err(e) => errors.push(format!("knowledge forget: {e}")),
             }
         } else {
-            match self.knowledge_forget_by_path(&p.target).await {
+            let target = match self.validate_existing_or_removed_mcp_path("target", &p.target) {
+                Ok(path) => path.display().to_string(),
+                Err(error) => {
+                    return serde_json::json!({
+                        "ok": false,
+                        "removed": {
+                            "knowledge_objects": 0u64,
+                            "legal_chunks": 0u64,
+                            "tabular_reviews": 0u64
+                        },
+                        "errors": [error],
+                    })
+                    .to_string();
+                }
+            };
+
+            match self.knowledge_forget_by_path(&target).await {
                 Ok(removed) => knowledge_removed = removed,
                 Err(e) => errors.push(format!("knowledge forget: {e}")),
             }
 
             match self.legal_maintenance().await {
-                Ok(service) => match service.forget_folder_path(&p.target).await {
+                Ok(service) => match service.forget_folder_path(&target).await {
                     Ok(removed) => legal_removed = removed,
                     Err(e) => errors.push(format!("legal forget: {e}")),
                 },
@@ -3671,7 +3770,7 @@ impl AnnoRagServer {
                     "Error: unknown intent `{other}`. \
                  Valid: party_dossier, obligations_owed_by, citation_chain, \
                  procedural_timeline, appeal_chain"
-                )
+                );
             }
         };
         let start = std::time::Instant::now();
@@ -3994,7 +4093,7 @@ impl AnnoRagServer {
             "reject" => anno_rag::pipeline::ValidationAction::Reject,
             "correct" => anno_rag::pipeline::ValidationAction::Correct,
             other => {
-                return format!("Error: unknown action '{other}'. Valid: confirm, reject, correct")
+                return format!("Error: unknown action '{other}'. Valid: confirm, reject, correct");
             }
         };
         match pipeline
@@ -4273,7 +4372,7 @@ impl AnnoRagServer {
                 return format!(
                     "Error: row {} not found in review {}",
                     row_id.0, review_id.0
-                )
+                );
             }
             _ => {}
         }
@@ -4367,9 +4466,12 @@ impl AnnoRagServer {
                     Some(s) => s.clone(),
                     None => return "Error: output_path required for xlsx format".into(),
                 };
-                let path = std::path::PathBuf::from(&path_str);
-                // Require an absolute path to prevent path-traversal writes
-                // relative to an unpredictable working directory.
+                let path = match self.validate_output_mcp_path("output_path", &path_str) {
+                    Ok(path) => path,
+                    Err(error) => return format!("Error: {error}"),
+                };
+                // Preserve the existing absolute-path requirement when
+                // ANNO_RAG_ALLOWED_ROOTS is not configured.
                 if !path.is_absolute() {
                     return "Error: output_path must be an absolute path (e.g. /tmp/review.xlsx)"
                         .into();
@@ -4773,6 +4875,183 @@ async fn shutdown_signal_mcp() {
 }
 
 #[cfg(test)]
+mod allowed_roots_server_tests {
+    use super::*;
+    use crate::allowed_roots::AllowedRoots;
+
+    fn server_with_allowed_root(root: &std::path::Path) -> (AnnoRagServer, tempfile::TempDir) {
+        let data_dir = tempfile::tempdir().expect("data dir");
+        let cfg = AnnoRagConfig {
+            data_dir: data_dir.path().to_path_buf(),
+            ..Default::default()
+        };
+        let raw = root.to_string_lossy().to_string();
+        let policy = AllowedRoots::parse(Some(&raw)).expect("allowed roots");
+        (
+            AnnoRagServer::new_lazy(cfg, [0u8; 32]).with_allowed_roots_for_test(policy),
+            data_dir,
+        )
+    }
+
+    #[tokio::test]
+    async fn rejects_mcp_paths_outside_allowed_roots() {
+        let tmp = tempfile::tempdir().expect("tempdir");
+        let allowed = tmp.path().join("allowed");
+        let outside = tmp.path().join("outside");
+        std::fs::create_dir_all(&allowed).expect("allowed dir");
+        std::fs::create_dir_all(&outside).expect("outside dir");
+        let (server, _data_dir) = server_with_allowed_root(&allowed);
+
+        let err = server
+            .privacy_prepare_folder_impl(PrivacyPrepareFolderParams {
+                source_root: outside.to_string_lossy().to_string(),
+                recursive: true,
+            })
+            .await
+            .expect_err("outside root rejected");
+
+        assert!(err.contains("outside ANNO_RAG_ALLOWED_ROOTS"));
+    }
+
+    #[tokio::test]
+    async fn privacy_status_reports_allowed_roots() {
+        let tmp = tempfile::tempdir().expect("tempdir");
+        let allowed = tmp.path().join("allowed");
+        std::fs::create_dir_all(&allowed).expect("allowed dir");
+        let (server, _data_dir) = server_with_allowed_root(&allowed);
+
+        let status = server.privacy_status_impl().await;
+
+        assert_eq!(status["ok"], true);
+        assert_eq!(status["allowed_roots"]["enforced"], true);
+        assert_eq!(status["allowed_roots"]["root_count"], 1);
+        assert!(status["allowed_roots"].get("roots").is_none());
+    }
+
+    #[tokio::test]
+    async fn index_rejects_outside_path_before_registering_corpus() {
+        let tmp = tempfile::tempdir().expect("tempdir");
+        let allowed = tmp.path().join("allowed");
+        let outside = tmp.path().join("outside");
+        std::fs::create_dir_all(&allowed).expect("allowed dir");
+        std::fs::create_dir_all(&outside).expect("outside dir");
+        let (server, _data_dir) = server_with_allowed_root(&allowed);
+
+        let body = server
+            .index_impl_routing(IndexParams {
+                path: outside.to_string_lossy().to_string(),
+                profile: "general".to_string(),
+            })
+            .await;
+        let value: serde_json::Value = serde_json::from_str(&body).expect("json");
+
+        assert_eq!(value["ok"], false);
+        assert!(value["error"]
+            .as_str()
+            .expect("error")
+            .contains("outside ANNO_RAG_ALLOWED_ROOTS"));
+    }
+
+    #[tokio::test]
+    async fn forget_allows_removed_target_under_allowed_root() {
+        let tmp = tempfile::tempdir().expect("tempdir");
+        let allowed = tmp.path().join("allowed");
+        std::fs::create_dir_all(&allowed).expect("allowed dir");
+        let (server, _data_dir) = server_with_allowed_root(&allowed);
+
+        let body = server
+            .forget_impl_routing(ForgetParams {
+                target: allowed.join("removed-folder").display().to_string(),
+            })
+            .await;
+        let value: serde_json::Value = serde_json::from_str(&body).expect("json");
+
+        assert_eq!(value["ok"], true);
+        assert_eq!(value["removed"]["knowledge_objects"], 0);
+        assert_eq!(value["removed"]["legal_chunks"], 0);
+    }
+
+    #[tokio::test]
+    async fn knowledge_sync_rejects_persisted_source_outside_allowed_roots_before_pipeline() {
+        let tmp = tempfile::tempdir().expect("tempdir");
+        let allowed = tmp.path().join("allowed");
+        let outside = tmp.path().join("outside");
+        std::fs::create_dir_all(&allowed).expect("allowed dir");
+        std::fs::create_dir_all(&outside).expect("outside dir");
+        let (server, _data_dir) = server_with_allowed_root(&allowed);
+        let source_id = server
+            .knowledge()
+            .await
+            .expect("knowledge")
+            .add_local_folder(&outside.to_string_lossy())
+            .expect("register outside source");
+
+        let err = server
+            .knowledge_sync_impl(KnowledgeSyncParams {
+                source_id: Some(source_id),
+            })
+            .await
+            .expect_err("outside source rejected");
+
+        assert!(err.contains("outside ANNO_RAG_ALLOWED_ROOTS"));
+        assert!(server.pipeline_arc().is_none());
+    }
+
+    #[tokio::test]
+    async fn sync_corpus_skips_persisted_source_outside_allowed_roots_before_pipeline() {
+        let tmp = tempfile::tempdir().expect("tempdir");
+        let allowed = tmp.path().join("allowed");
+        let outside = tmp.path().join("outside");
+        std::fs::create_dir_all(&allowed).expect("allowed dir");
+        std::fs::create_dir_all(&outside).expect("outside dir");
+        let (server, _data_dir) = server_with_allowed_root(&allowed);
+        let outside_string = outside.to_string_lossy().to_string();
+        let source_id = server
+            .knowledge()
+            .await
+            .expect("knowledge")
+            .add_local_folder(&outside_string)
+            .expect("register outside source");
+        let corpus = server
+            .corpus()
+            .await
+            .expect("corpus")
+            .register_index_root(&outside_string, "general")
+            .expect("register corpus");
+        server
+            .corpus()
+            .await
+            .expect("corpus")
+            .store()
+            .add_binding(
+                corpus.corpus_id,
+                anno_corpus_core::CorpusBindingKind::KnowledgeSource,
+                &source_id,
+                &serde_json::json!({"profile": "general"}),
+            )
+            .expect("bind source");
+
+        let result = server
+            .sync_corpus_impl(crate::corpus_sync::SyncCorpusParams {
+                corpus_id: corpus.corpus_id.as_string(),
+                sources: None,
+                outputs: vec!["knowledge_fast".to_string()],
+                max_files: None,
+                max_millis: None,
+            })
+            .await
+            .expect("sync corpus");
+
+        assert_eq!(result.freshness, "maybe_stale");
+        assert!(result
+            .warnings
+            .iter()
+            .any(|warning| warning.contains("outside ANNO_RAG_ALLOWED_ROOTS")));
+        assert!(server.pipeline_arc().is_none());
+    }
+}
+
+#[cfg(test)]
 mod tabular_status_tests {
     use super::*;
     use anno_rag::config::AnnoRagConfig;
@@ -5089,14 +5368,11 @@ mod lazy_tests {
 
         assert_eq!(v["mode_used"], "semantic");
         assert_eq!(v["scope_modes"]["legal"], "semantic");
-        assert!(v["warnings"]
-            .as_array()
-            .expect("warnings")
-            .iter()
-            .all(|w| !w
-                .as_str()
+        assert!(v["warnings"].as_array().expect("warnings").iter().all(|w| {
+            !w.as_str()
                 .unwrap_or("")
-                .contains("legal scope skipped in fast mode")));
+                .contains("legal scope skipped in fast mode")
+        }));
     }
 
     #[tokio::test]
@@ -5362,10 +5638,11 @@ mod lazy_tests {
         assert_eq!(v["mode_used"], "semantic");
         assert_eq!(v["scope_used"], "knowledge");
         let warnings = v["warnings"].as_array().expect("warnings array");
-        assert!(warnings.iter().any(|w| w
-            .as_str()
-            .unwrap_or("")
-            .contains("knowledge scope skipped in semantic mode")));
+        assert!(warnings.iter().any(|w| {
+            w.as_str()
+                .unwrap_or("")
+                .contains("knowledge scope skipped in semantic mode")
+        }));
     }
 
     #[tokio::test]

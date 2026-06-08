@@ -9,8 +9,6 @@ description  = "Local GDPR-compliant document anonymizer + RAG service (French l
 [features]
 default = ["heuristic-fr"]
 heuristic-fr = ["anno/heuristic-fr"]
-# Legacy flag for the fork-to-system-tesseract runtime path.
-ocr = []
 # Apple Silicon Metal acceleration for Candle-backed embedder/detector paths.
 gpu-metal = ["anno/gliner2-fastino-candle-metal", "anno/metal"]
 # Windows/Linux NVIDIA CUDA acceleration for ONNX-backed detector paths.
@@ -23,6 +21,10 @@ rerank = ["dep:ort", "dep:ndarray", "dep:is-terminal"]
 # `ocr_mode = off`; callers must opt in with `ocr_mode = auto_embedded`
 # or the compatibility `--enable-ocr` CLI flag.
 embedded-ocr = ["kreuzberg/ocr"]
+# Adds PaddleOCR as an automatic quality-based fallback behind Tesseract.
+# Requires `embedded-ocr`. kreuzberg's `effective_pipeline()` auto-constructs
+# a [tesseract@100, paddleocr@50] pipeline when this feature is active.
+ocr-paddle = ["kreuzberg/paddle-ocr", "kreuzberg/ocr"]
 
 [dependencies]
 anno            = { path = "../anno", features = ["gliner2-fastino"] }

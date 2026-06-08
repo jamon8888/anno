@@ -48,6 +48,10 @@ fn default_advanced_pdf_native() -> AdvancedPdfNativeMode {
     AdvancedPdfNativeMode::Off
 }
 
+fn default_ocr_cache_enabled() -> bool {
+    true
+}
+
 fn default_pdf_hierarchy_clusters() -> usize {
     6
 }
@@ -133,6 +137,18 @@ pub struct AnnoRagConfig {
     /// additional scanned PDFs/pages are deferred instead of being OCR'd.
     #[serde(default)]
     pub ocr_batch_budget_secs: Option<u64>,
+
+    /// Whether kreuzberg's extraction cache is enabled for OCR calls.
+    /// Default: `true`. Set to `false` for deterministic test behavior
+    /// or debugging cache issues.
+    #[serde(default = "default_ocr_cache_enabled")]
+    pub ocr_cache_enabled: bool,
+
+    /// Override the primary OCR backend passed to kreuzberg. Default: `None`
+    /// (kreuzberg uses `"tesseract"`). Set to `"paddleocr"` to use PaddleOCR
+    /// as primary instead of fallback.
+    #[serde(default)]
+    pub ocr_backend: Option<String>,
 
     /// Native text-layer PDF extraction profile. Default: `off`.
     #[serde(default = "default_advanced_pdf_native")]
@@ -341,6 +357,8 @@ impl Default for AnnoRagConfig {
             enable_ocr: false,
             tesseract_path: None,
             ocr_batch_budget_secs: None,
+            ocr_cache_enabled: default_ocr_cache_enabled(),
+            ocr_backend: None,
             advanced_pdf_native: default_advanced_pdf_native(),
             pdf_keep_headers: false,
             pdf_keep_footers: false,
@@ -369,12 +387,32 @@ impl Default for AnnoRagConfig {
 
 impl AnnoRagConfig {
     /// Runtime OCR mode after applying legacy compatibility flags.
+    ///
+    /// When `enable_ocr` is true and `ocr_mode` is `Off`, maps to
+    /// `AutoEmbedded` for backward compatibility. Logs a deprecation
+    /// warning so users migrate to `ocr_mode: auto_embedded`.
     #[must_use]
     pub fn effective_ocr_mode(&self) -> OcrMode {
         if self.enable_ocr && self.ocr_mode == OcrMode::Off {
+            tracing::warn!(
+                "config field 'enable_ocr' is deprecated; \
+                 use 'ocr_mode: auto_embedded' instead"
+            );
             OcrMode::AutoEmbedded
         } else {
             self.ocr_mode
+        }
+    }
+
+    /// Log warnings for deprecated configuration fields.
+    ///
+    /// Call once at startup after loading config.
+    pub fn warn_deprecated_fields(&self) {
+        if self.tesseract_path.is_some() {
+            tracing::warn!(
+                "config field 'tesseract_path' is deprecated and ignored; \
+                 embedded OCR manages its own Tesseract binary"
+            );
         }
     }
 
@@ -466,6 +504,8 @@ mod tests {
         assert!(c.embedder_dtype.is_none());
         assert_eq!(c.memory_collection_name, "memories");
         assert_eq!(c.memory_embedding_dim, 384);
+        assert!(c.ocr_cache_enabled);
+        assert!(c.ocr_backend.is_none());
     }
 
     #[test]
@@ -483,6 +523,8 @@ mod tests {
         assert_eq!(c.memory_collection_name, "memories");
         assert_eq!(c.memory_embedding_dim, 384);
         assert_eq!(c.memory_ner_mode, MemoryNerMode::Async);
+        assert!(c.ocr_cache_enabled);
+        assert!(c.ocr_backend.is_none());
     }
 
     #[test]
@@ -663,5 +705,68 @@ mod tests {
         assert_eq!(c.rerank_onnx_file, "onnx/model_int8.onnx");
         assert_eq!(c.rerank_pool_size, 30);
         assert_eq!(c.rerank_batch_size, 8);
+    }
+
+    #[test]
+    fn deprecated_fields_still_parse_and_map() {
+        let json = r#"{
+            "data_dir": "/tmp",
+            "embed_model": "intfloat/multilingual-e5-small",
+            "embed_dim": 384,
+            "default_top_k": 10,
+            "chunk_max_chars": 2048,
+            "chunk_overlap": 256,
+            "enable_ocr": true,
+            "tesseract_path": "/usr/bin/tesseract"
+        }"#;
+        let c: AnnoRagConfig = serde_json::from_str(json).expect("legacy config must parse");
+        assert!(c.enable_ocr);
+        assert_eq!(
+            c.tesseract_path,
+            Some(std::path::PathBuf::from("/usr/bin/tesseract"))
+        );
+        assert_eq!(c.effective_ocr_mode(), OcrMode::AutoEmbedded);
+    }
+
+    #[test]
+    fn ocr_cache_enabled_defaults_to_true() {
+        let c = AnnoRagConfig::default();
+        assert!(c.ocr_cache_enabled);
+    }
+
+    #[test]
+    fn ocr_cache_enabled_parses_from_json() {
+        let json = r#"{
+            "data_dir": "/tmp",
+            "embed_model": "intfloat/multilingual-e5-small",
+            "embed_dim": 384,
+            "default_top_k": 10,
+            "chunk_max_chars": 2048,
+            "chunk_overlap": 256,
+            "ocr_cache_enabled": false
+        }"#;
+        let c: AnnoRagConfig = serde_json::from_str(json).expect("parses");
+        assert!(!c.ocr_cache_enabled);
+    }
+
+    #[test]
+    fn ocr_backend_defaults_to_none() {
+        let c = AnnoRagConfig::default();
+        assert!(c.ocr_backend.is_none());
+    }
+
+    #[test]
+    fn ocr_backend_parses_from_json() {
+        let json = r#"{
+            "data_dir": "/tmp",
+            "embed_model": "intfloat/multilingual-e5-small",
+            "embed_dim": 384,
+            "default_top_k": 10,
+            "chunk_max_chars": 2048,
+            "chunk_overlap": 256,
+            "ocr_backend": "paddleocr"
+        }"#;
+        let c: AnnoRagConfig = serde_json::from_str(json).expect("parses");
+        assert_eq!(c.ocr_backend.as_deref(), Some("paddleocr"));
     }
 }

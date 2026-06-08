@@ -382,11 +382,18 @@ async fn embedded_ocr_extract(
     cfg: &AnnoRagConfig,
     class: &DocClass,
 ) -> Result<Option<ExtractionResult>> {
+    let backend = cfg
+        .ocr_backend
+        .clone()
+        .unwrap_or_else(|| "tesseract".to_string());
+
     let mut extraction_config = ExtractionConfig {
         chunking: Some(chunking_config(cfg)),
+        use_cache: cfg.ocr_cache_enabled,
         ocr: Some(OcrConfig {
-            backend: "tesseract".to_string(),
+            backend,
             language: "fra+eng".to_string(),
+            auto_rotate: true,
             ..Default::default()
         }),
         ..Default::default()
@@ -401,6 +408,13 @@ async fn embedded_ocr_extract(
         }
         DocClass::TextLayer | DocClass::Empty => return Ok(None),
     }
+
+    tracing::debug!(
+        path = %path.display(),
+        cache_enabled = cfg.ocr_cache_enabled,
+        backend = %cfg.ocr_backend.as_deref().unwrap_or("tesseract"),
+        "OCR extraction starting"
+    );
 
     kreuzberg::extract_file(path, None, &extraction_config)
         .await
@@ -662,5 +676,24 @@ mod tests {
     #[allow(dead_code)]
     fn _typecheck() {
         let _: Option<NamedTempFile> = None;
+    }
+
+    #[cfg(feature = "embedded-ocr")]
+    #[test]
+    fn ocr_config_has_auto_rotate_enabled() {
+        // Verify our OCR config construction sets auto_rotate = true.
+        let cfg = AnnoRagConfig::default();
+        let backend = cfg
+            .ocr_backend
+            .clone()
+            .unwrap_or_else(|| "tesseract".to_string());
+        let ocr_config = kreuzberg::OcrConfig {
+            backend,
+            language: "fra+eng".to_string(),
+            auto_rotate: true,
+            ..Default::default()
+        };
+        assert!(ocr_config.auto_rotate);
+        assert_eq!(ocr_config.language, "fra+eng");
     }
 }

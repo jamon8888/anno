@@ -7,6 +7,7 @@ tag="latest"
 binary=""
 install_dir="${HOME}/Tools/hacienda"
 models_dir="${HOME}/.anno-rag/models"
+allowed_roots=()
 skip_models=0
 dry_run=0
 force=0
@@ -15,7 +16,8 @@ usage() {
   cat >&2 <<'EOF'
 Usage: setup-mcp.sh [--target desktop|claude-code|all|manual] [--source release|local-build|path]
                     [--tag TAG|latest] [--binary PATH] [--install-dir DIR]
-                    [--models-dir DIR] [--skip-models] [--dry-run] [--force]
+                    [--models-dir DIR] [--allowed-root DIR]
+                    [--skip-models] [--dry-run] [--force]
 EOF
 }
 
@@ -59,6 +61,11 @@ while [[ $# -gt 0 ]]; do
     --models-dir)
       require_value "$1" "${2:-}"
       models_dir="$2"
+      shift 2
+      ;;
+    --allowed-root)
+      require_value "$1" "${2:-}"
+      allowed_roots+=("$2")
       shift 2
       ;;
     --skip-models)
@@ -180,6 +187,9 @@ else
 fi
 
 args=(setup-mcp --target "${target}" --binary "${resolved_binary}" --models-dir "${models_dir}")
+for root in "${allowed_roots[@]}"; do
+  args+=(--allowed-root "${root}")
+done
 if [[ "${skip_models}" == "1" ]]; then
   args+=(--skip-models)
 fi

@@ -17,6 +17,7 @@ use anno_rag::{
 };
 use clap::{Parser, Subcommand};
 use std::path::PathBuf;
+use tracing;
 
 #[derive(Parser)]
 #[command(
@@ -42,10 +43,12 @@ enum Cmd {
         /// Where to write pseudonymized copies. Defaults to ~/.anno-rag/outputs.
         #[arg(short, long)]
         output: Option<PathBuf>,
-        /// Enable embedded OCR for scanned PDFs/pages when this binary was
-        /// built with the `embedded-ocr` feature.
+        /// [DEPRECATED] Use --ocr-mode auto_embedded instead.
         #[arg(long, default_value_t = false)]
         enable_ocr: bool,
+        /// OCR mode: 'off' (default) or 'auto_embedded'.
+        #[arg(long, value_parser = parse_ocr_mode)]
+        ocr_mode: Option<OcrMode>,
         /// Enable structured native PDF extraction for text-layer PDFs.
         #[arg(long, default_value_t = false)]
         advanced_pdf_native: bool,
@@ -112,6 +115,17 @@ enum VaultCmd {
     Rotate,
 }
 
+fn parse_ocr_mode(s: &str) -> std::result::Result<OcrMode, String> {
+    match s {
+        "off" => Ok(OcrMode::Off),
+        "auto_embedded" => Ok(OcrMode::AutoEmbedded),
+        other => Err(format!(
+            "invalid OCR mode '{}'; expected 'off' or 'auto_embedded'",
+            other
+        )),
+    }
+}
+
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
     tracing_subscriber::fmt()
@@ -136,6 +150,7 @@ async fn main() -> anyhow::Result<()> {
     }
     if let Cmd::Ingest {
         enable_ocr,
+        ocr_mode,
         advanced_pdf_native,
         pdf_keep_headers,
         pdf_keep_footers,
@@ -145,7 +160,10 @@ async fn main() -> anyhow::Result<()> {
         ..
     } = &cli.cmd
     {
-        if *enable_ocr {
+        if let Some(mode) = ocr_mode {
+            cfg.ocr_mode = *mode;
+        } else if *enable_ocr {
+            tracing::warn!("--enable-ocr is deprecated; use --ocr-mode auto_embedded instead");
             cfg.ocr_mode = OcrMode::AutoEmbedded;
         }
         if *advanced_pdf_native {
@@ -157,6 +175,8 @@ async fn main() -> anyhow::Result<()> {
         cfg.pdf_hierarchy_clusters = *pdf_hierarchy_clusters;
         cfg.pdf_allow_single_column_tables = *pdf_allow_single_column_tables;
     }
+
+    cfg.warn_deprecated_fields();
 
     if let Cmd::DiagnoseGpu = &cli.cmd {
         let diagnostics = anno_rag::accelerator::diagnostics(cfg.accelerator)?;
@@ -248,6 +268,7 @@ async fn main() -> anyhow::Result<()> {
             recursive,
             output,
             enable_ocr: _,
+            ocr_mode: _,
             advanced_pdf_native: _,
             pdf_keep_headers: _,
             pdf_keep_footers: _,

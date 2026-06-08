@@ -97,6 +97,83 @@ Use an absolute path to the extracted release binary:
 
 Restart Claude Desktop or Cowork after changing the config.
 
+## Filesystem Root Allowlist
+
+For Cowork or managed Desktop deployments, set `ANNO_RAG_ALLOWED_ROOTS` in the
+MCP server environment. The value is a semicolon-separated list of absolute
+directories that Anno tools may read from or write into.
+
+Windows example:
+
+```json
+{
+  "mcpServers": {
+    "anno-rag": {
+      "command": "C:\\Users\\you\\Tools\\hacienda-v0.11.0-rc.11\\anno-rag.exe",
+      "args": ["mcp"],
+      "env": {
+        "ANNO_MODELS_DIR": "C:\\Users\\you\\.anno-rag\\models",
+        "ANNO_RAG_ALLOWED_ROOTS": "C:\\Clients;D:\\Dossiers"
+      }
+    }
+  }
+}
+```
+
+macOS example:
+
+```json
+{
+  "mcpServers": {
+    "anno-rag": {
+      "command": "/Users/you/Tools/hacienda-v0.11.0-rc.11/anno-rag",
+      "args": ["mcp"],
+      "env": {
+        "ANNO_MODELS_DIR": "/Users/you/.anno-rag/models",
+        "ANNO_RAG_ALLOWED_ROOTS": "/Users/you/Clients;/Volumes/Dossiers"
+      }
+    }
+  }
+}
+```
+
+When this variable is set, Anno rejects path-taking MCP calls outside the
+configured roots before loading models or touching the filesystem target. When
+it is not set, Anno keeps the current permissive local behavior for existing
+single-user installs.
+
+The setup wrappers can write the same environment value:
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File scripts\setup-mcp.ps1 -Target all -AllowedRoot C:\Clients -AllowedRoot D:\Dossiers
+```
+
+```bash
+./scripts/setup-mcp.sh --target all --allowed-root "$HOME/Clients" --allowed-root "/Volumes/Dossiers"
+```
+
+## Cowork 3P Managed MCP Notes
+
+For Cowork on 3P, use the organization's managed configuration to launch the
+same local stdio server:
+
+```json
+{
+  "name": "anno-rag",
+  "transport": "stdio",
+  "command": "C:\\Program Files\\Hacienda\\anno-rag.exe",
+  "args": ["mcp"],
+  "env": {
+    "ANNO_MODELS_DIR": "C:\\ProgramData\\Hacienda\\models",
+    "ANNO_RAG_ALLOWED_ROOTS": "C:\\Clients;D:\\Dossiers"
+  }
+}
+```
+
+Cowork workspace folder restrictions are still useful, but Anno enforces the
+same roots inside the MCP server because tool arguments are model-controlled
+inputs.
+
 ## Claude Code Config
 
 Claude Code should be configured with the CLI instead of editing its config
