@@ -9,8 +9,6 @@ description  = "Local GDPR-compliant document anonymizer + RAG service (French l
 [features]
 default = ["heuristic-fr"]
 heuristic-fr = ["anno/heuristic-fr"]
-# Legacy flag for the fork-to-system-tesseract runtime path.
-ocr = []
 # Apple Silicon Metal acceleration for Candle-backed embedder/detector paths.
 gpu-metal = ["anno/gliner2-fastino-candle-metal", "anno/metal"]
 # Windows/Linux NVIDIA CUDA acceleration for ONNX-backed detector paths.
