@@ -384,6 +384,7 @@ async fn embedded_ocr_extract(
 ) -> Result<Option<ExtractionResult>> {
     let mut extraction_config = ExtractionConfig {
         chunking: Some(chunking_config(cfg)),
+        use_cache: cfg.ocr_cache_enabled,
         ocr: Some(OcrConfig {
             backend: "tesseract".to_string(),
             language: "fra+eng".to_string(),
@@ -401,6 +402,12 @@ async fn embedded_ocr_extract(
         }
         DocClass::TextLayer | DocClass::Empty => return Ok(None),
     }
+
+    tracing::debug!(
+        path = %path.display(),
+        cache_enabled = cfg.ocr_cache_enabled,
+        "OCR extraction starting"
+    );
 
     kreuzberg::extract_file(path, None, &extraction_config)
         .await
