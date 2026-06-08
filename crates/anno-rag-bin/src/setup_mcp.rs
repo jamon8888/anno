@@ -1,7 +1,7 @@
 use anno_rag::AnnoRagConfig;
-use anyhow::{Context, anyhow};
+use anyhow::{anyhow, Context};
 use clap::{Args, ValueEnum};
-use serde_json::{Value, json};
+use serde_json::{json, Value};
 use std::io::Write;
 use std::path::{Path, PathBuf};
 

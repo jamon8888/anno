@@ -163,9 +163,7 @@ async fn main() -> anyhow::Result<()> {
         if let Some(mode) = ocr_mode {
             cfg.ocr_mode = *mode;
         } else if *enable_ocr {
-            tracing::warn!(
-                "--enable-ocr is deprecated; use --ocr-mode auto_embedded instead"
-            );
+            tracing::warn!("--enable-ocr is deprecated; use --ocr-mode auto_embedded instead");
             cfg.ocr_mode = OcrMode::AutoEmbedded;
         }
         if *advanced_pdf_native {

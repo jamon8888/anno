@@ -25,10 +25,9 @@ use crate::indexer::SyncSummary;
 use anno_rag::config::{AnnoRagConfig, MemoryNerMode};
 use anno_rag::pipeline::Pipeline;
 use rmcp::{
-    ServerHandler, ServiceExt,
     handler::server::{router::tool::ToolRouter, wrapper::Parameters},
     model::{Implementation, ServerCapabilities, ServerInfo},
-    schemars, tool, tool_handler, tool_router,
+    schemars, tool, tool_handler, tool_router, ServerHandler, ServiceExt,
 };
 use serde::{Deserialize, Serialize};
 use std::{collections::HashMap, sync::Arc};
@@ -4947,12 +4946,10 @@ mod allowed_roots_server_tests {
         let value: serde_json::Value = serde_json::from_str(&body).expect("json");
 
         assert_eq!(value["ok"], false);
-        assert!(
-            value["error"]
-                .as_str()
-                .expect("error")
-                .contains("outside ANNO_RAG_ALLOWED_ROOTS")
-        );
+        assert!(value["error"]
+            .as_str()
+            .expect("error")
+            .contains("outside ANNO_RAG_ALLOWED_ROOTS"));
     }
 
     #[tokio::test]
@@ -5046,12 +5043,10 @@ mod allowed_roots_server_tests {
             .expect("sync corpus");
 
         assert_eq!(result.freshness, "maybe_stale");
-        assert!(
-            result
-                .warnings
-                .iter()
-                .any(|warning| warning.contains("outside ANNO_RAG_ALLOWED_ROOTS"))
-        );
+        assert!(result
+            .warnings
+            .iter()
+            .any(|warning| warning.contains("outside ANNO_RAG_ALLOWED_ROOTS")));
         assert!(server.pipeline_arc().is_none());
     }
 }
@@ -5142,13 +5137,11 @@ mod tabular_status_tests {
         assert!(!duplicate.extraction_started);
         assert_eq!(duplicate.rows, 3);
         assert_eq!(duplicate.columns, 4);
-        assert!(
-            duplicate
-                .extraction_error
-                .as_deref()
-                .expect("duplicate error")
-                .contains("already running")
-        );
+        assert!(duplicate
+            .extraction_error
+            .as_deref()
+            .expect("duplicate error")
+            .contains("already running"));
     }
 
     #[test]
@@ -5525,12 +5518,10 @@ mod lazy_tests {
             .await;
         let parsed: serde_json::Value = serde_json::from_str(&out).expect("json");
         assert_eq!(parsed["ok"], false);
-        assert!(
-            parsed["error"]
-                .as_str()
-                .unwrap()
-                .contains("unknown corpus_id")
-        );
+        assert!(parsed["error"]
+            .as_str()
+            .unwrap()
+            .contains("unknown corpus_id"));
     }
 
     #[tokio::test]
@@ -5555,12 +5546,10 @@ mod lazy_tests {
         let v: serde_json::Value = serde_json::from_str(&out).expect("json");
 
         assert_eq!(v["ok"], false);
-        assert!(
-            v["error"]
-                .as_str()
-                .unwrap_or("")
-                .contains("legal scope requires semantic mode")
-        );
+        assert!(v["error"]
+            .as_str()
+            .unwrap_or("")
+            .contains("legal scope requires semantic mode"));
     }
 
     #[tokio::test]
@@ -5593,12 +5582,10 @@ mod lazy_tests {
         let v: serde_json::Value = serde_json::from_str(&out).expect("json");
 
         assert_eq!(v["ok"], false);
-        assert!(
-            v["error"]
-                .as_str()
-                .unwrap_or("")
-                .contains("corpus_id is required")
-        );
+        assert!(v["error"]
+            .as_str()
+            .unwrap_or("")
+            .contains("corpus_id is required"));
         assert!(!out.contains("c:/clients/a"));
         assert!(!out.contains("c:/clients/b"));
     }

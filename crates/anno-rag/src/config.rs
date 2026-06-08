@@ -710,7 +710,10 @@ mod tests {
         }"#;
         let c: AnnoRagConfig = serde_json::from_str(json).expect("legacy config must parse");
         assert!(c.enable_ocr);
-        assert_eq!(c.tesseract_path, Some(std::path::PathBuf::from("/usr/bin/tesseract")));
+        assert_eq!(
+            c.tesseract_path,
+            Some(std::path::PathBuf::from("/usr/bin/tesseract"))
+        );
         assert_eq!(c.effective_ocr_mode(), OcrMode::AutoEmbedded);
     }
 
