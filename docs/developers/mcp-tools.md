@@ -24,6 +24,28 @@ but it is not a complete inventory of every `review_*` method.
 | `anno_health` | Report version, build target, available tools, and vault state. | Side-effect-free; it does not validate or download model files. |
 | `download_models` | Download local embedder and NER models in the background. | Writes model files locally and returns status/path metadata. |
 
+## Filesystem Boundary
+
+`ANNO_RAG_ALLOWED_ROOTS` constrains MCP tools that accept local filesystem
+paths. The value is a semicolon-separated list of absolute directories. When it
+is set, these tools reject paths outside the configured roots before loading
+models or touching the requested target:
+
+- `index`
+- `knowledge_add_local_folder`
+- `legal_ingest`
+- `privacy_prepare_folder`
+- `privacy_finalize_folder`
+- explicit path mode in `forget`
+- `review_export` when writing `xlsx` to `output_path`
+
+All other non-path-taking tools are unaffected. This includes `anno_health`,
+`download_models`, `search`, `sync_corpus`, `sources`, `status`,
+`privacy_status`, `vault_stats`, `detect`, `rehydrate`, memory tools, and
+review tools that operate on review ids or return CSV/Markdown in the MCP
+response. These tools operate on text supplied directly in the request,
+registered corpus/source identifiers, review ids, or local aggregate state.
+
 ## Privacy Vault Tools
 
 | Tool | Purpose | Privacy behavior |
