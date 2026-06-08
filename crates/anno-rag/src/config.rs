@@ -369,12 +369,32 @@ impl Default for AnnoRagConfig {
 
 impl AnnoRagConfig {
     /// Runtime OCR mode after applying legacy compatibility flags.
+    ///
+    /// When `enable_ocr` is true and `ocr_mode` is `Off`, maps to
+    /// `AutoEmbedded` for backward compatibility. Logs a deprecation
+    /// warning so users migrate to `ocr_mode: auto_embedded`.
     #[must_use]
     pub fn effective_ocr_mode(&self) -> OcrMode {
         if self.enable_ocr && self.ocr_mode == OcrMode::Off {
+            tracing::warn!(
+                "config field 'enable_ocr' is deprecated; \
+                 use 'ocr_mode: auto_embedded' instead"
+            );
             OcrMode::AutoEmbedded
         } else {
             self.ocr_mode
+        }
+    }
+
+    /// Log warnings for deprecated configuration fields.
+    ///
+    /// Call once at startup after loading config.
+    pub fn warn_deprecated_fields(&self) {
+        if self.tesseract_path.is_some() {
+            tracing::warn!(
+                "config field 'tesseract_path' is deprecated and ignored; \
+                 embedded OCR manages its own Tesseract binary"
+            );
         }
     }
 
@@ -663,5 +683,23 @@ mod tests {
         assert_eq!(c.rerank_onnx_file, "onnx/model_int8.onnx");
         assert_eq!(c.rerank_pool_size, 30);
         assert_eq!(c.rerank_batch_size, 8);
+    }
+
+    #[test]
+    fn deprecated_fields_still_parse_and_map() {
+        let json = r#"{
+            "data_dir": "/tmp",
+            "embed_model": "intfloat/multilingual-e5-small",
+            "embed_dim": 384,
+            "default_top_k": 10,
+            "chunk_max_chars": 2048,
+            "chunk_overlap": 256,
+            "enable_ocr": true,
+            "tesseract_path": "/usr/bin/tesseract"
+        }"#;
+        let c: AnnoRagConfig = serde_json::from_str(json).expect("legacy config must parse");
+        assert!(c.enable_ocr);
+        assert_eq!(c.tesseract_path, Some(std::path::PathBuf::from("/usr/bin/tesseract")));
+        assert_eq!(c.effective_ocr_mode(), OcrMode::AutoEmbedded);
     }
 }
