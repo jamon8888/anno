@@ -422,6 +422,9 @@ jobs:
     steps:
       - uses: actions/checkout@v6
       - uses: dtolnay/rust-toolchain@stable
+      - uses: arduino/setup-protoc@v3
+        with:
+          repo-token: ${{ secrets.GITHUB_TOKEN }}
       - name: Set up sccache
         uses: mozilla-actions/sccache-action@v0.0.10
         with:
