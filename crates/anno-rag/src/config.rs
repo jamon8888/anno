@@ -48,6 +48,10 @@ fn default_advanced_pdf_native() -> AdvancedPdfNativeMode {
     AdvancedPdfNativeMode::Off
 }
 
+fn default_ocr_cache_enabled() -> bool {
+    true
+}
+
 fn default_pdf_hierarchy_clusters() -> usize {
     6
 }
@@ -133,6 +137,12 @@ pub struct AnnoRagConfig {
     /// additional scanned PDFs/pages are deferred instead of being OCR'd.
     #[serde(default)]
     pub ocr_batch_budget_secs: Option<u64>,
+
+    /// Whether kreuzberg's extraction cache is enabled for OCR calls.
+    /// Default: `true`. Set to `false` for deterministic test behavior
+    /// or debugging cache issues.
+    #[serde(default = "default_ocr_cache_enabled")]
+    pub ocr_cache_enabled: bool,
 
     /// Native text-layer PDF extraction profile. Default: `off`.
     #[serde(default = "default_advanced_pdf_native")]
@@ -341,6 +351,7 @@ impl Default for AnnoRagConfig {
             enable_ocr: false,
             tesseract_path: None,
             ocr_batch_budget_secs: None,
+            ocr_cache_enabled: default_ocr_cache_enabled(),
             advanced_pdf_native: default_advanced_pdf_native(),
             pdf_keep_headers: false,
             pdf_keep_footers: false,
@@ -701,5 +712,26 @@ mod tests {
         assert!(c.enable_ocr);
         assert_eq!(c.tesseract_path, Some(std::path::PathBuf::from("/usr/bin/tesseract")));
         assert_eq!(c.effective_ocr_mode(), OcrMode::AutoEmbedded);
+    }
+
+    #[test]
+    fn ocr_cache_enabled_defaults_to_true() {
+        let c = AnnoRagConfig::default();
+        assert!(c.ocr_cache_enabled);
+    }
+
+    #[test]
+    fn ocr_cache_enabled_parses_from_json() {
+        let json = r#"{
+            "data_dir": "/tmp",
+            "embed_model": "intfloat/multilingual-e5-small",
+            "embed_dim": 384,
+            "default_top_k": 10,
+            "chunk_max_chars": 2048,
+            "chunk_overlap": 256,
+            "ocr_cache_enabled": false
+        }"#;
+        let c: AnnoRagConfig = serde_json::from_str(json).expect("parses");
+        assert!(!c.ocr_cache_enabled);
     }
 }
