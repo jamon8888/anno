@@ -144,6 +144,12 @@ pub struct AnnoRagConfig {
     #[serde(default = "default_ocr_cache_enabled")]
     pub ocr_cache_enabled: bool,
 
+    /// Override the primary OCR backend passed to kreuzberg. Default: `None`
+    /// (kreuzberg uses `"tesseract"`). Set to `"paddleocr"` to use PaddleOCR
+    /// as primary instead of fallback.
+    #[serde(default)]
+    pub ocr_backend: Option<String>,
+
     /// Native text-layer PDF extraction profile. Default: `off`.
     #[serde(default = "default_advanced_pdf_native")]
     pub advanced_pdf_native: AdvancedPdfNativeMode,
@@ -352,6 +358,7 @@ impl Default for AnnoRagConfig {
             tesseract_path: None,
             ocr_batch_budget_secs: None,
             ocr_cache_enabled: default_ocr_cache_enabled(),
+            ocr_backend: None,
             advanced_pdf_native: default_advanced_pdf_native(),
             pdf_keep_headers: false,
             pdf_keep_footers: false,
@@ -736,5 +743,26 @@ mod tests {
         }"#;
         let c: AnnoRagConfig = serde_json::from_str(json).expect("parses");
         assert!(!c.ocr_cache_enabled);
+    }
+
+    #[test]
+    fn ocr_backend_defaults_to_none() {
+        let c = AnnoRagConfig::default();
+        assert!(c.ocr_backend.is_none());
+    }
+
+    #[test]
+    fn ocr_backend_parses_from_json() {
+        let json = r#"{
+            "data_dir": "/tmp",
+            "embed_model": "intfloat/multilingual-e5-small",
+            "embed_dim": 384,
+            "default_top_k": 10,
+            "chunk_max_chars": 2048,
+            "chunk_overlap": 256,
+            "ocr_backend": "paddleocr"
+        }"#;
+        let c: AnnoRagConfig = serde_json::from_str(json).expect("parses");
+        assert_eq!(c.ocr_backend.as_deref(), Some("paddleocr"));
     }
 }
