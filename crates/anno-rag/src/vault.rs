@@ -34,6 +34,7 @@ pub const DPAPI_FILE_NAME: &str = "vault-key.dpapi";
 #[serde(rename_all = "snake_case")]
 pub enum VaultKeyStatusSource {
     /// `ANNO_RAG_VAULT_PASSPHRASE` is configured.
+    #[serde(rename = "env_derived")]
     EnvPassphrase,
     /// OS keyring entry `anno-rag:vault-key`.
     Keyring,
