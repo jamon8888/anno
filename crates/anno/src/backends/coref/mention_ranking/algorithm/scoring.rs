@@ -3,8 +3,8 @@
 //! Contains `score_pair` and the salience lookup helper used during
 //! antecedent ranking.
 
+use super::features::is_type_incompatible;
 use super::*;
-use super::features::{is_type_incompatible};
 
 impl MentionRankingCoref {
     /// Get salience score for an entity (returns 0.0 if not found).

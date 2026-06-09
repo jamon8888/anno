@@ -1,4 +1,4 @@
-﻿//! MentionRankingCoref model: scoring, clustering, and coreference resolution.
+//! MentionRankingCoref model: scoring, clustering, and coreference resolution.
 
 mod features;
 mod scoring;
@@ -9,7 +9,7 @@ use super::types::*;
 use super::*;
 use crate::Animacy;
 
-use features::{animacy_from_pronoun, animacy_from_entity_type};
+use features::{animacy_from_entity_type, animacy_from_pronoun};
 
 /// Mention-ranking coreference resolver.
 pub struct MentionRankingCoref {
@@ -579,9 +579,22 @@ impl MentionRankingCoref {
                         let valid_followers: Vec<&str> = match self.config.language.as_str() {
                             "de" => vec![
                                 // German verbs
-                                "sind", "waren", "haben", "hatten", "werden", "wurden", "brauchen",
-                                "mÃ¼ssen", "kÃ¶nnen", "sollen", "wollen", // Conjunctions
-                                "und", "oder", "aber", "die", "welche",
+                                "sind",
+                                "waren",
+                                "haben",
+                                "hatten",
+                                "werden",
+                                "wurden",
+                                "brauchen",
+                                "mÃ¼ssen",
+                                "kÃ¶nnen",
+                                "sollen",
+                                "wollen", // Conjunctions
+                                "und",
+                                "oder",
+                                "aber",
+                                "die",
+                                "welche",
                             ],
                             "fr" => vec![
                                 // French verbs
