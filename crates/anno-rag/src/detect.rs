@@ -755,10 +755,17 @@ fn pattern_priority(s: &DetectionSource) -> u8 {
 }
 
 fn dedup_overlaps(entities: &mut Vec<DetectedEntity>) {
+    debug_assert!(
+        entities.windows(2).all(|w| w[0].start <= w[1].start),
+        "dedup_overlaps requires entities sorted by start"
+    );
     let mut out: Vec<DetectedEntity> = Vec::with_capacity(entities.len());
     for entity in entities.drain(..) {
-        if let Some(last) = out.last() {
+        if let Some(last) = out.last_mut() {
             if entity.start < last.end {
+                // Fusion: extend coverage to the max of both spans.
+                // For PII masking, over-masking is safer than under-masking.
+                last.end = last.end.max(entity.end);
                 continue;
             }
         }
@@ -1221,5 +1228,109 @@ mod tests {
         let (kept, counts) = crate::validators::apply_validators(entities, "", &[]);
         assert_eq!(kept.len(), 1);
         assert!(counts.is_empty());
+    }
+
+    #[test]
+    fn dedup_overlaps_no_overlap_unchanged() {
+        let mut entities = vec![
+            DetectedEntity {
+                original: "Jean".to_string(),
+                start: 0,
+                end: 4,
+                category: EntityCategory::Person,
+                confidence: 0.9,
+                source: DetectionSource::Ner,
+            },
+            DetectedEntity {
+                original: "Paris".to_string(),
+                start: 10,
+                end: 15,
+                category: EntityCategory::Location,
+                confidence: 0.85,
+                source: DetectionSource::Ner,
+            },
+        ];
+        dedup_overlaps(&mut entities);
+        assert_eq!(entities.len(), 2);
+        assert_eq!(entities[0].start, 0);
+        assert_eq!(entities[0].end, 4);
+        assert_eq!(entities[1].start, 10);
+        assert_eq!(entities[1].end, 15);
+    }
+
+    #[test]
+    fn dedup_overlaps_total_containment_absorbs_inner() {
+        let mut entities = vec![
+            DetectedEntity {
+                original: "Jean Dupont".to_string(),
+                start: 0,
+                end: 11,
+                category: EntityCategory::Person,
+                confidence: 0.9,
+                source: DetectionSource::Ner,
+            },
+            DetectedEntity {
+                original: "Dupont".to_string(),
+                start: 5,
+                end: 11,
+                category: EntityCategory::Person,
+                confidence: 0.8,
+                source: DetectionSource::Ner,
+            },
+        ];
+        dedup_overlaps(&mut entities);
+        assert_eq!(entities.len(), 1);
+        assert_eq!(entities[0].start, 0);
+        assert_eq!(entities[0].end, 11);
+    }
+
+    #[test]
+    fn dedup_overlaps_partial_overlap_fuses_spans() {
+        let mut entities = vec![
+            DetectedEntity {
+                original: "Jean Dupont".to_string(),
+                start: 0,
+                end: 11,
+                category: EntityCategory::Person,
+                confidence: 0.9,
+                source: DetectionSource::Ner,
+            },
+            DetectedEntity {
+                original: "Dupont SA".to_string(),
+                start: 5,
+                end: 14,
+                category: EntityCategory::Organization,
+                confidence: 0.85,
+                source: DetectionSource::Ner,
+            },
+        ];
+        dedup_overlaps(&mut entities);
+        assert_eq!(entities.len(), 1, "partial overlap must fuse into one span");
+        assert_eq!(entities[0].start, 0);
+        assert_eq!(entities[0].end, 14, "end must extend to cover both spans");
+    }
+
+    #[test]
+    fn dedup_overlaps_adjacent_spans_preserved() {
+        let mut entities = vec![
+            DetectedEntity {
+                original: "Jean".to_string(),
+                start: 0,
+                end: 4,
+                category: EntityCategory::Person,
+                confidence: 0.9,
+                source: DetectionSource::Ner,
+            },
+            DetectedEntity {
+                original: " Dupont".to_string(),
+                start: 4,
+                end: 11,
+                category: EntityCategory::Person,
+                confidence: 0.8,
+                source: DetectionSource::Ner,
+            },
+        ];
+        dedup_overlaps(&mut entities);
+        assert_eq!(entities.len(), 2, "adjacent (non-overlapping) spans must stay separate");
     }
 }
