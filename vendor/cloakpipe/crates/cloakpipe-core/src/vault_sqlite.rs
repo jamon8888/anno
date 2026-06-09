@@ -63,7 +63,10 @@ impl SqliteVault {
             reverse_cache: HashMap::new(),
         };
 
-        vault.load_cache()?;
+        let skipped = vault.load_cache()?;
+        if skipped > 0 {
+            tracing::warn!(skipped, "vault opened with skipped corrupt entries");
+        }
         Ok(vault)
     }
 
@@ -113,7 +116,15 @@ impl SqliteVault {
     }
 
     /// Load all mappings into the in-memory cache.
-    fn load_cache(&mut self) -> Result<()> {
+    ///
+    /// Returns the number of entries skipped due to decryption failure.
+    /// Skipped entries are logged as warnings but do NOT prevent the vault
+    /// from opening — the remaining entries are still usable.
+    ///
+    /// # Local patch
+    /// This function was patched from the upstream cloakpipe to propagate
+    /// decrypt errors instead of silently substituting "[decrypt_failed]".
+    fn load_cache(&mut self) -> Result<usize> {
         let mut stmt = self
             .conn
             .prepare("SELECT original_enc, token, category, token_id FROM mappings")?;
@@ -126,11 +137,20 @@ impl SqliteVault {
             Ok((enc, token, category, token_id))
         })?;
 
+        let mut skipped: usize = 0;
         for row in rows {
             let (enc, token, category_str, token_id) = row?;
-            let original = self
-                .decrypt_value(&enc)
-                .unwrap_or_else(|_| "[decrypt_failed]".to_string());
+            let original = match self.decrypt_value(&enc) {
+                Ok(v) => v,
+                Err(_) => {
+                    tracing::warn!(
+                        token_id,
+                        "vault: skipping entry with decrypt failure"
+                    );
+                    skipped += 1;
+                    continue;
+                }
+            };
             let category = Self::parse_category(&category_str);
 
             let pseudo = PseudoToken {
@@ -143,7 +163,7 @@ impl SqliteVault {
             self.reverse_cache.insert(token, original);
         }
 
-        Ok(())
+        Ok(skipped)
     }
 
     /// Get or create a pseudo-token for the given original value.
