@@ -4,6 +4,27 @@ All notable changes to the `anno-rag` crate are documented here. Other crates in
 
 Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Semver: pre-1.0 minor versions may introduce breaking changes.
 
+## [0.12.1] — 2026-06-09
+
+### Added
+- **Automatic MCP registration on install** — WiX CustomAction (Windows MSI) and `postinstall` script (macOS PKG) call `anno-rag setup-mcp --target all` immediately after installation; users no longer need to register the server manually
+- **macOS PKG + DMG installer** (`scripts/release/build-macos-pkg.sh`) — native `.pkg` wrapped in `.dmg`, with optional code signing (`APPLE_CODESIGN_IDENTITY`, `APPLE_INSTALLER_SIGNING_IDENTITY`) and notarisation (`APPLE_ID` / `APP_SPECIFIC_PASSWORD` / `APPLE_TEAM_ID`)
+- **`install-mcp.sh` / `install-mcp.ps1`** — convenience scripts bundled in every release archive for archive-based installs
+
+### Fixed
+- **PII span fusion** — overlapping detected entities now merge instead of being dropped; `original` string re-derived from source text after fusion (`crates/anno-rag/src/detect.rs`)
+- **Vault decrypt errors propagated** — silent `"[decrypt_failed]"` substitution replaced by proper `Error` return (`crates/anno-rag/src/vault_sqlite.rs`)
+- **Vault salt path-derived** — per-vault SHA-256 salt replaces static constant; migration path preserves existing vaults (`crates/anno-rag/src/vault_sqlite.rs`)
+- **Gateway error types** — monolithic `Error::Upstream(String)` split into `UpstreamConnect`, `UpstreamStatus { status, message }`, `UpstreamParse`; `IntoResponse` sanitises messages before sending to clients (`crates/anno-privacy-gateway`)
+- **Metal GPU build** — missing `CANDLE_NER_MODEL_DIR` constant (`#[cfg(feature = "gpu-metal")]`) in `detect.rs` caused `E0425` compile failure
+- **CUDA Linux build** — `Jimver/cuda-toolkit` generated wrong package names for cuBLAS (`cuda-cublas-12-4`); now installed directly as `libcublas-12-4` / `libcublas-dev-12-4`
+- **Homebrew publish step** — `actions/checkout@v6` rejected empty `HOMEBREW_TAP_TOKEN`; falls back to `github.token` when the secret is unset
+
+### Changed
+- Workspace version bumped 0.12.0 → 0.12.1
+
+---
+
 ## [0.11.0] — 2026-06-06
 
 ### Added
