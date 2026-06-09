@@ -183,7 +183,7 @@ powershell -NoProfile -ExecutionPolicy Bypass -File scripts\test-local.ps1 -Pack
 
 Expected: ALL tests PASS including `dedup_overlaps_partial_overlap_fuses_spans`.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add crates/anno-rag/src/detect.rs
@@ -202,7 +202,7 @@ overlapping spans."
 **Files:**
 - Modify: `vendor/cloakpipe/crates/cloakpipe-core/src/vault_sqlite.rs:116-147`
 
-- [ ] **Step 1: Add `tracing` dependency to `cloakpipe-core`**
+- [x] **Step 1: Add `tracing` dependency to `cloakpipe-core`**
 
 Check `vendor/cloakpipe/crates/cloakpipe-core/Cargo.toml` for existing `tracing` dependency. If missing, add:
 
@@ -210,7 +210,7 @@ Check `vendor/cloakpipe/crates/cloakpipe-core/Cargo.toml` for existing `tracing`
 tracing = { version = "0.1" }
 ```
 
-- [ ] **Step 2: Modify `load_cache` to skip and count decrypt failures**
+- [x] **Step 2: Modify `load_cache` to skip and count decrypt failures**
 
 Replace lines 116-147 of `vendor/cloakpipe/crates/cloakpipe-core/src/vault_sqlite.rs`:
 
@@ -267,7 +267,7 @@ Replace lines 116-147 of `vendor/cloakpipe/crates/cloakpipe-core/src/vault_sqlit
     }
 ```
 
-- [ ] **Step 3: Update all callers of `load_cache`**
+- [x] **Step 3: Update all callers of `load_cache`**
 
 Search for `load_cache` calls in `vault_sqlite.rs` and update them to handle the new `Result<usize>` return type. The typical caller pattern:
 
@@ -282,7 +282,7 @@ if skipped > 0 {
 }
 ```
 
-- [ ] **Step 4: Run check to verify compilation**
+- [x] **Step 4: Run check to verify compilation**
 
 Run:
 ```powershell
@@ -291,7 +291,7 @@ powershell -NoProfile -ExecutionPolicy Bypass -File scripts\dev-fast.ps1 -Packag
 
 Expected: compiles without errors.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add vendor/cloakpipe/crates/cloakpipe-core/src/vault_sqlite.rs
@@ -314,7 +314,7 @@ This is a local patch to the vendored cloakpipe-core crate."
 - Modify: `crates/anno-rag/src/vault.rs:450-463` (function signature + body)
 - Modify: callers at lines 418, 715, 807
 
-- [ ] **Step 1: Write a failing test for path-derived salt**
+- [x] **Step 1: Write a failing test for path-derived salt**
 
 Add a test in `crates/anno-rag/src/vault.rs` (inside the existing test module, or create one if needed):
 
@@ -351,7 +351,7 @@ mod salt_tests {
 }
 ```
 
-- [ ] **Step 2: Run tests to verify they fail**
+- [x] **Step 2: Run tests to verify they fail**
 
 Run:
 ```powershell
@@ -360,7 +360,7 @@ powershell -NoProfile -ExecutionPolicy Bypass -File scripts\test-local.ps1 -Pack
 
 Expected: FAIL — `derive_via_argon2` doesn't accept a `Path` parameter yet.
 
-- [ ] **Step 3: Implement path-derived salt + keep legacy function**
+- [x] **Step 3: Implement path-derived salt + keep legacy function**
 
 Replace lines 450-463 of `crates/anno-rag/src/vault.rs`:
 
@@ -405,7 +405,7 @@ pub(crate) fn derive_via_argon2_legacy(passphrase: &str) -> Result<[u8; 32]> {
 
 Add `use std::path::Path;` at the top of the file if not already imported. Also verify `sha2` is in `crates/anno-rag/Cargo.toml` dependencies (it likely is via workspace).
 
-- [ ] **Step 4: Update caller — `VaultKeySource::derive` (line 418)**
+- [x] **Step 4: Update caller — `VaultKeySource::derive` (line 418)**
 
 In `crates/anno-rag/src/vault.rs`, the `derive()` method on `VaultKeySource` at line 418:
 
@@ -424,7 +424,7 @@ Self::Passphrase(p) => {
 
 Note: `derive()` is called without a vault path context. The proper path-derived key is used inside `VaultStore::open` where the path is known. The `derive()` convenience function falls back to legacy for backward compatibility.
 
-- [ ] **Step 5: Update caller — `vault_key_status` (line 715)**
+- [x] **Step 5: Update caller — `vault_key_status` (line 715)**
 
 ```rust
 // Before:
@@ -436,7 +436,7 @@ let usable = derive_via_argon2_legacy(&passphrase).is_ok();
 
 This status check doesn't have a vault path — it just validates the passphrase can be derived at all.
 
-- [ ] **Step 6: Update caller — `initialize_vault_key_from_passphrase` (line 807)**
+- [x] **Step 6: Update caller — `initialize_vault_key_from_passphrase` (line 807)**
 
 ```rust
 // Before:
@@ -448,7 +448,7 @@ let key = derive_via_argon2_legacy(passphrase)?;
 
 Same reasoning — this init function stores the derived key in the keyring; the path-specific derivation happens when the vault is actually opened.
 
-- [ ] **Step 7: Run tests to verify they pass**
+- [x] **Step 7: Run tests to verify they pass**
 
 Run:
 ```powershell
@@ -457,7 +457,7 @@ powershell -NoProfile -ExecutionPolicy Bypass -File scripts\test-local.ps1 -Pack
 
 Expected: ALL tests PASS.
 
-- [ ] **Step 8: Commit**
+- [x] **Step 8: Commit**
 
 ```bash
 git add crates/anno-rag/src/vault.rs
@@ -477,13 +477,13 @@ backward compatibility and migration from existing vaults."
 
 After all 3 tasks:
 
-- [ ] **Run the full anno-rag test suite**
+- [x] **Run the full anno-rag test suite**
 
 ```powershell
 powershell -NoProfile -ExecutionPolicy Bypass -File scripts\test-local.ps1 -Package anno-rag
 ```
 
-- [ ] **Cross-crate check**
+- [x] **Cross-crate check**
 
 ```powershell
 powershell -NoProfile -ExecutionPolicy Bypass -File scripts\dev-fast.ps1 -AllAffected
