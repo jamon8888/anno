@@ -163,3 +163,6 @@ required-features = ["gliner2-fastino-candle"]
 [package.metadata.docs.rs]
 all-features = true
 rustdoc-args = ["--cfg", "docsrs"]
+
+[lints]
+workspace = true

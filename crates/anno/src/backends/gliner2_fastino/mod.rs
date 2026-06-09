@@ -1,6 +1,6 @@
 //! gliner2_fastino — fastino-ai GLiNER2 backend (issue #18).
 //!
-//! **Status:** experimental / WIP. No API stability guarantees in Phase 1.
+//! **Status:** Shipped (Phase 4). Candle + LoRA NER backend with merge-at-load.
 //!
 //! Loads `fastino/gliner2-*` ONNX models (Zaratiana et al. 2025,
 //! arXiv:2507.18546). Distinct from `gliner_multitask` (which loads GLiNER v1
