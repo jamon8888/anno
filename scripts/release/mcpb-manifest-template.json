@@ -1,5 +1,4 @@
 {
-  "$schema": "https://raw.githubusercontent.com/modelcontextprotocol/mcpb/main/manifest-schema.json",
   "manifest_version": "0.3",
   "name": "hacienda-anno-rag",
   "display_name": "Hacienda / anno-rag",
@@ -11,45 +10,41 @@
   "license": "MIT OR Apache-2.0",
   "server": {
     "type": "binary",
-    "entry_point": "__BINARY__"
-  },
-  "mcp_config": {
-    "command": "__COMMAND__",
-    "args": ["mcp"]
+    "entry_point": "__BINARY__",
+    "mcp_config": {
+      "command": "__COMMAND__",
+      "args": ["mcp"]
+    }
   },
   "compatibility": {
     "platforms": ["__PLATFORM__"]
   },
-  "user_config": [
-    {
-      "id": "ANNO_MODELS_DIR",
-      "name": "Models directory",
+  "user_config": {
+    "ANNO_MODELS_DIR": {
+      "title": "Models directory",
       "description": "Path to downloaded model files. Leave blank and ask me to 'Set up anno-rag' to download automatically.",
       "type": "directory",
       "required": false
     },
-    {
-      "id": "ANNO_RAG_VAULT_PASSPHRASE",
-      "name": "Vault passphrase",
+    "ANNO_RAG_VAULT_PASSPHRASE": {
+      "title": "Vault passphrase",
       "description": "Leave blank to use the OS keyring (recommended). Only set for headless or scripted use.",
       "type": "string",
       "sensitive": true,
       "required": false
     },
-    {
-      "id": "ANNO_NO_DOWNLOADS",
-      "name": "Block model downloads",
+    "ANNO_NO_DOWNLOADS": {
+      "title": "Block model downloads",
       "description": "Prevent all network model downloads. Enable after models are downloaded.",
       "type": "boolean",
       "required": false,
       "default": false
     },
-    {
-      "id": "TESSERACT_PATH",
-      "name": "Tesseract path (optional)",
+    "TESSERACT_PATH": {
+      "title": "Tesseract path (optional)",
       "description": "Path to the tesseract executable for OCR support. Leave blank to disable OCR.",
       "type": "file",
       "required": false
     }
-  ]
+  }
 }

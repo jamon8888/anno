@@ -353,7 +353,7 @@ jobs:
           m['version'] = sys.argv[1]
           m['compatibility']['platforms'] = [sys.argv[2]]
           m['server']['entry_point'] = 'server/' + sys.argv[3]
-          m['mcp_config']['command'] = '\${__dirname}/server/' + sys.argv[3]
+          m['server']['mcp_config']['command'] = '\${__dirname}/server/' + sys.argv[3]
           json.dump(m, open('mcpb-staging/manifest.json', 'w'), indent=2)
           print('manifest OK')
           " "$VERSION" "$PLATFORM" "$BIN"

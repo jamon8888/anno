@@ -51,15 +51,25 @@ def main() -> None:
                 fail("server.entry_point does not point to embedded binary")
 
             expected_command = "${__dirname}/" + binary_entry
-            if manifest.get("mcp_config", {}).get("command") != expected_command:
-                fail("mcp_config.command does not point to embedded binary")
+            mcp_config = manifest.get("server", {}).get("mcp_config", {})
+            if mcp_config.get("command") != expected_command:
+                fail("server.mcp_config.command does not point to embedded binary")
 
-            if manifest.get("mcp_config", {}).get("args") != ["mcp"]:
-                fail("mcp_config.args must be ['mcp']")
+            if mcp_config.get("args") != ["mcp"]:
+                fail("server.mcp_config.args must be ['mcp']")
+
+            # Reject legacy top-level mcp_config (invalid per MCPB 0.3 spec)
+            if "mcp_config" in manifest:
+                fail("mcp_config must be inside server, not at top level")
 
             platforms = manifest.get("compatibility", {}).get("platforms", [])
             if platforms != [args.platform]:
                 fail(f"compatibility.platforms mismatch: {platforms!r}")
+
+            # user_config must be an object keyed by config ID, not an array
+            user_config = manifest.get("user_config")
+            if user_config is not None and not isinstance(user_config, dict):
+                fail("user_config must be an object (keyed by config ID), not an array")
     except FileNotFoundError:
         raise
     except zipfile.BadZipFile as exc:
