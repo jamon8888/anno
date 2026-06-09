@@ -59,7 +59,9 @@ $RequiredFiles = @(
     "docs/release/examples/claude_desktop_config.windows.json",
     "docs/release/examples/claude_desktop_config.macos.json",
     "scripts/setup-mcp.ps1",
-    "scripts/setup-mcp.sh"
+    "scripts/setup-mcp.sh",
+    "scripts/install-mcp.ps1",
+    "scripts/install-mcp.sh"
 )
 
 $MissingFiles = @(foreach ($RelativePath in $RequiredFiles) {
@@ -96,6 +98,9 @@ foreach ($RelativePath in $RequiredFiles) {
     }
     if ($RelativePath -like "scripts/setup-mcp.*") {
         $DestinationDir = $ScriptsOutDir
+    }
+    if ($RelativePath -like "scripts/install-mcp.*") {
+        $DestinationDir = $StagingDir
     }
 
     Copy-Item -LiteralPath $SourcePath -Destination $DestinationDir

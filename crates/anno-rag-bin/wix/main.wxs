@@ -163,6 +163,26 @@
 
         <SetProperty Id='ARPINSTALLLOCATION' Value='[APPLICATIONFOLDER]' After='CostFinalize'/>
 
+        <!--
+          Post-install: register anno-rag as an MCP server in Claude Desktop
+          (claude_desktop_config.json) and Claude Code (~/.claude/settings.json).
+          Return="ignore" — MCP registration failure must never abort the install.
+          Execute="deferred" + Impersonate="yes" runs in the interactive user context
+          so %APPDATA% and %USERPROFILE% resolve to the correct user profile.
+          Condition: NOT REMOVE — run on install and upgrade, skip on uninstall.
+        -->
+        <CustomAction
+            Id='SetupMcp'
+            Execute='deferred'
+            Impersonate='yes'
+            Return='ignore'
+            FileKey='exe0'
+            ExeCommand='setup-mcp --target all --skip-models'/>
+
+        <InstallExecuteSequence>
+            <Custom Action='SetupMcp' After='InstallFiles'>NOT REMOVE</Custom>
+        </InstallExecuteSequence>
+
         
         <!--
           Uncomment the following `Icon` and `Property` tags to change the product icon.

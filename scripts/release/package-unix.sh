@@ -49,6 +49,8 @@ required_files=(
   "docs/release/examples/claude_desktop_config.macos.json"
   "scripts/setup-mcp.ps1"
   "scripts/setup-mcp.sh"
+  "scripts/install-mcp.sh"
+  "scripts/install-mcp.ps1"
 )
 
 missing=()
@@ -101,6 +103,9 @@ cp -- "${repo_root}/docs/release/examples/claude_desktop_config.windows.json" "$
 cp -- "${repo_root}/docs/release/examples/claude_desktop_config.macos.json" "${staging_dir}/examples/"
 cp -- "${repo_root}/scripts/setup-mcp.ps1" "${staging_dir}/scripts/"
 cp -- "${repo_root}/scripts/setup-mcp.sh" "${staging_dir}/scripts/"
+cp -- "${repo_root}/scripts/install-mcp.sh" "${staging_dir}/"
+cp -- "${repo_root}/scripts/install-mcp.ps1" "${staging_dir}/"
+chmod +x "${staging_dir}/install-mcp.sh"
 
 tar -C "${dist_dir}" -czf "${tarball_path}" "${package_name}"
 
