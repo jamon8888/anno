@@ -415,7 +415,7 @@ impl VaultKeySource {
     /// Returns [`Error::Vault`] on KDF / keyring / KMS-stub failure.
     pub fn derive(&self) -> Result<[u8; 32]> {
         match self {
-            Self::Passphrase(p) => derive_via_argon2(p),
+            Self::Passphrase(p) => derive_via_argon2_legacy(p),
             Self::Keyring => derive_via_keyring(),
             Self::Kms { provider, key_id } => Err(Error::Vault(format!(
                 "KMS key source not implemented in v0.4 \
@@ -447,7 +447,26 @@ pub fn derive_key() -> Result<[u8; 32]> {
     VaultKeySource::from_env().derive()
 }
 
-pub(crate) fn derive_via_argon2(passphrase: &str) -> Result<[u8; 32]> {
+pub(crate) fn derive_via_argon2(passphrase: &str, vault_path: &Path) -> Result<[u8; 32]> {
+    use argon2::{Algorithm, Argon2, Params, Version};
+    use sha2::{Digest, Sha256};
+
+    let params = Params::new(19_456, 2, 1, Some(32))
+        .map_err(|e| Error::Vault(format!("argon2 params: {e}")))?;
+    let argon = Argon2::new(Algorithm::Argon2id, Version::V0x13, params);
+
+    let path_str = vault_path.to_string_lossy();
+    let path_hash = Sha256::digest(path_str.as_bytes());
+    let salt = &path_hash[..16];
+
+    let mut key = [0u8; 32];
+    argon
+        .hash_password_into(passphrase.as_bytes(), salt, &mut key)
+        .map_err(|e| Error::Vault(format!("argon2 derive: {e}")))?;
+    Ok(key)
+}
+
+pub(crate) fn derive_via_argon2_legacy(passphrase: &str) -> Result<[u8; 32]> {
     use argon2::{Algorithm, Argon2, Params, Version};
 
     let params = Params::new(19_456, 2, 1, Some(32))
@@ -712,7 +731,7 @@ pub fn vault_key_status() -> Result<VaultKeyStatus> {
     }
 
     if let Ok(passphrase) = std::env::var("ANNO_RAG_VAULT_PASSPHRASE") {
-        let usable = derive_via_argon2(&passphrase).is_ok();
+        let usable = derive_via_argon2_legacy(&passphrase).is_ok();
         return Ok(VaultKeyStatus {
             source: VaultKeyStatusSource::EnvPassphrase,
             present: true,
@@ -804,7 +823,7 @@ pub fn store_passphrase_derived_key_in_keyring(passphrase: &str) -> Result<()> {
 /// Used by `anno_init_vault` and startup repair flows. The passphrase itself is
 /// never returned or logged.
 pub fn initialize_vault_key_from_passphrase(passphrase: &str) -> Result<VaultKeyStatus> {
-    let key = derive_via_argon2(passphrase)?;
+    let key = derive_via_argon2_legacy(passphrase)?;
     match store_key_in_keyring(&key) {
         Ok(()) => Ok(VaultKeyStatus {
             source: VaultKeyStatusSource::Keyring,
@@ -1106,6 +1125,29 @@ mod tests {
         assert!(status.usable);
         assert!(!status.persistent);
         assert!(!status.message.to_lowercase().contains("test-status"));
+    }
+
+    #[test]
+    fn derive_via_argon2_different_paths_produce_different_keys() {
+        let pass = "test-passphrase";
+        let key_a = derive_via_argon2(pass, Path::new("/vault/a.db")).unwrap();
+        let key_b = derive_via_argon2(pass, Path::new("/vault/b.db")).unwrap();
+        assert_ne!(key_a, key_b, "different vault paths must produce different keys");
+    }
+
+    #[test]
+    fn derive_via_argon2_same_path_is_deterministic() {
+        let pass = "test-passphrase";
+        let key_a = derive_via_argon2(pass, Path::new("/vault/a.db")).unwrap();
+        let key_b = derive_via_argon2(pass, Path::new("/vault/a.db")).unwrap();
+        assert_eq!(key_a, key_b, "same path + same passphrase must produce same key");
+    }
+
+    #[test]
+    fn derive_via_argon2_legacy_compat() {
+        let pass = "test-passphrase";
+        let legacy_key = derive_via_argon2_legacy(pass).unwrap();
+        assert_eq!(legacy_key.len(), 32);
     }
 
     unsafe fn restore_env(name: &str, value: Option<OsString>) {
