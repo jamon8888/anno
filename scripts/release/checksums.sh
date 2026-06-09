@@ -12,11 +12,11 @@ if [[ ! -d "${dist_dir}" ]]; then
 fi
 
 shopt -s nullglob
-archives=("${dist_dir}"/*.zip "${dist_dir}"/*.tar.gz)
+archives=("${dist_dir}"/*.zip "${dist_dir}"/*.tar.gz "${dist_dir}"/*.dmg)
 shopt -u nullglob
 
 if (( ${#archives[@]} == 0 )); then
-  echo "Cannot write checksums. No .zip or .tar.gz archives found in ${dist_dir}" >&2
+  echo "Cannot write checksums. No .zip, .tar.gz, or .dmg archives found in ${dist_dir}" >&2
   exit 1
 fi
 

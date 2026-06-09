@@ -151,6 +151,19 @@ jobs:
         if: runner.os == 'macOS'
         run: ./scripts/release/package-unix.sh "$RELEASE_TAG" "${{ matrix.target }}"
 
+      - name: Build macOS PKG/DMG
+        if: runner.os == 'macOS'
+        run: |
+          chmod +x scripts/release/build-macos-pkg.sh
+          chmod +x scripts/release/postinstall.sh
+          ./scripts/release/build-macos-pkg.sh "$RELEASE_TAG" "${{ matrix.target }}" --skip-notarize
+        env:
+          APPLE_CODESIGN_IDENTITY: ${{ secrets.APPLE_CODESIGN_IDENTITY }}
+          APPLE_INSTALLER_SIGNING_IDENTITY: ${{ secrets.APPLE_INSTALLER_SIGNING_IDENTITY }}
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APP_SPECIFIC_PASSWORD: ${{ secrets.APP_SPECIFIC_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+
       - name: Inspect Unix archive
         if: runner.os == 'macOS'
         shell: bash
@@ -200,7 +213,9 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: release-${{ matrix.target }}
-          path: dist/*.${{ matrix.archive }}
+          path: |
+            dist/*.${{ matrix.archive }}
+            dist/*.dmg
           if-no-files-found: error
 
   release:
@@ -242,4 +257,5 @@ jobs:
           files: |
             dist/*.zip
             dist/*.tar.gz
+            dist/*.dmg
             dist/SHA256SUMS.txt
