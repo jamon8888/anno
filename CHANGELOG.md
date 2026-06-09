@@ -4,6 +4,22 @@ All notable changes to the `anno-rag` crate are documented here. Other crates in
 
 Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Semver: pre-1.0 minor versions may introduce breaking changes.
 
+## [0.12.2] — 2026-06-10
+
+### Fixed
+- **Release workflow** — `cargo-dist` plan step (exit 255) caused by custom WiX `SetupMcp` action being flagged as dirty; added `"msi"` to `allow-dirty` in `[workspace.metadata.dist]`
+- **Eval Sanity timeout** — CI job consistently hit the 15-minute wall on cold runners; raised to 25 minutes
+
+### Changed
+- **Code quality: god-file splits** — three large source files converted to directory modules with zero public-API change:
+  - `anno/src/core/grounded.rs` (6005L) → `grounded/{mod, signal, track, identity, html, eval_render}.rs`
+  - `anno-rag-mcp/src/lib.rs` (6079L) → extracted `params`, `wire`, `search`, `legal`, `review` modules
+  - `coref/mention_ranking/algorithm.rs` (4934L) → `algorithm/{mod, features, scoring}.rs`
+- **Workspace lints** — `[lints] workspace = true` propagated to `anno`, `anno-cli`, `anno-eval`, `anno-corpus-core`
+- Workspace version bumped 0.12.1 → 0.12.2
+
+---
+
 ## [0.12.1] — 2026-06-09
 
 ### Added
