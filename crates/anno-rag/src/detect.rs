@@ -203,6 +203,10 @@ pub const NER_MODEL_ID: &str = "SemplificaAI/gliner2-multi-v1-onnx";
 /// Candle/PyTorch GLiNER2 repo used for Apple Metal detector acceleration.
 pub const CANDLE_NER_MODEL_ID: &str = "fastino/gliner2-multi-v1";
 
+/// Local subdirectory name where the Candle GLiNER2 model is cached on disk.
+#[cfg(feature = "gpu-metal")]
+const CANDLE_NER_MODEL_DIR: &str = "gliner2-multi-v1-candle";
+
 /// GDPR-coverage NER labels: (label, description sent to the model, per-label threshold).
 ///
 /// Descriptions are in French to match the primary document language. The model
