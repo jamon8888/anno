@@ -90,7 +90,10 @@ mod tests {
     fn upstream_parse_display() {
         let err = Error::UpstreamParse("expected value at line 1 column 1".to_string());
         let msg = format!("{err}");
-        assert!(msg.starts_with("upstream response parse failed:"), "got: {msg}");
+        assert!(
+            msg.starts_with("upstream response parse failed:"),
+            "got: {msg}"
+        );
     }
 
     #[test]

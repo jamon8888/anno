@@ -143,10 +143,7 @@ impl SqliteVault {
             let original = match self.decrypt_value(&enc) {
                 Ok(v) => v,
                 Err(_) => {
-                    tracing::warn!(
-                        token_id,
-                        "vault: skipping entry with decrypt failure"
-                    );
+                    tracing::warn!(token_id, "vault: skipping entry with decrypt failure");
                     skipped += 1;
                     continue;
                 }

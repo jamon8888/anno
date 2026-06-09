@@ -1342,6 +1342,10 @@ mod tests {
         ];
         let text = "Jean Dupont"; // 11 bytes, matches [0..11]
         dedup_overlaps(&mut entities, text);
-        assert_eq!(entities.len(), 2, "adjacent (non-overlapping) spans must stay separate");
+        assert_eq!(
+            entities.len(),
+            2,
+            "adjacent (non-overlapping) spans must stay separate"
+        );
     }
 }

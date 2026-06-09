@@ -239,8 +239,9 @@ fn tool_call_to_anthropic(call: &Value) -> Result<Value> {
         .get("arguments")
         .and_then(Value::as_str)
         .unwrap_or("{}");
-    let input = serde_json::from_str::<Value>(arguments)
-        .map_err(|e| Error::UpstreamParse(format!("OpenAI tool call arguments are not JSON: {e}")))?;
+    let input = serde_json::from_str::<Value>(arguments).map_err(|e| {
+        Error::UpstreamParse(format!("OpenAI tool call arguments are not JSON: {e}"))
+    })?;
 
     Ok(json!({
         "type": "tool_use",

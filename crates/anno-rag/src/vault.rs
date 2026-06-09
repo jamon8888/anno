@@ -1132,7 +1132,10 @@ mod tests {
         let pass = "test-passphrase";
         let key_a = derive_via_argon2(pass, Path::new("/vault/a.db")).unwrap();
         let key_b = derive_via_argon2(pass, Path::new("/vault/b.db")).unwrap();
-        assert_ne!(key_a, key_b, "different vault paths must produce different keys");
+        assert_ne!(
+            key_a, key_b,
+            "different vault paths must produce different keys"
+        );
     }
 
     #[test]
@@ -1140,7 +1143,10 @@ mod tests {
         let pass = "test-passphrase";
         let key_a = derive_via_argon2(pass, Path::new("/vault/a.db")).unwrap();
         let key_b = derive_via_argon2(pass, Path::new("/vault/a.db")).unwrap();
-        assert_eq!(key_a, key_b, "same path + same passphrase must produce same key");
+        assert_eq!(
+            key_a, key_b,
+            "same path + same passphrase must produce same key"
+        );
     }
 
     #[test]
