@@ -18,18 +18,24 @@ pub async fn complete(
     let response = request
         .send()
         .await
-        .map_err(|e| Error::Upstream(format!("provider request failed: {e}")))?;
+        .map_err(|e| Error::UpstreamConnect(format!("provider request failed: {e}")))?;
     let status = response.status();
     if !status.is_success() {
         let body = response.text().await.unwrap_or_default();
-        return Err(Error::Upstream(format!(
-            "provider returned status {status}: {body}"
-        )));
+        tracing::warn!(
+            http_status = %status,
+            response_body = %body,
+            "provider returned non-success response"
+        );
+        return Err(Error::UpstreamStatus {
+            status: status.as_u16(),
+            message: status.canonical_reason().unwrap_or("unknown").to_string(),
+        });
     }
     response
         .json::<Value>()
         .await
-        .map_err(|e| Error::Upstream(format!("provider response is not JSON: {e}")))
+        .map_err(|e| Error::UpstreamParse(format!("provider response is not JSON: {e}")))
 }
 
 /// Execute one streaming OpenAI-compatible chat completion.
@@ -47,13 +53,19 @@ pub async fn stream(
     let response = request
         .send()
         .await
-        .map_err(|e| Error::Upstream(format!("provider stream request failed: {e}")))?;
+        .map_err(|e| Error::UpstreamConnect(format!("provider stream request failed: {e}")))?;
     let status = response.status();
     if !status.is_success() {
         let body = response.text().await.unwrap_or_default();
-        return Err(Error::Upstream(format!(
-            "provider stream returned status {status}: {body}"
-        )));
+        tracing::warn!(
+            http_status = %status,
+            response_body = %body,
+            "provider stream returned non-success response"
+        );
+        return Err(Error::UpstreamStatus {
+            status: status.as_u16(),
+            message: status.canonical_reason().unwrap_or("unknown").to_string(),
+        });
     }
     Ok(response.bytes_stream())
 }

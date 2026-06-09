@@ -14,15 +14,22 @@ pub async fn forward_messages(client: &Client, base_url: &str, body: &Value) -> 
         .json(body)
         .send()
         .await
-        .map_err(|e| Error::Upstream(e.to_string()))?;
+        .map_err(|e| Error::UpstreamConnect(e.to_string()))?;
 
     let status = response.status();
     let value = response
         .json::<Value>()
         .await
-        .map_err(|e| Error::Upstream(e.to_string()))?;
+        .map_err(|e| Error::UpstreamParse(e.to_string()))?;
     if !status.is_success() {
-        return Err(Error::Upstream(value.to_string()));
+        tracing::warn!(
+            http_status = status.as_u16(),
+            "upstream returned non-success response"
+        );
+        return Err(Error::UpstreamStatus {
+            status: status.as_u16(),
+            message: status.canonical_reason().unwrap_or("unknown").to_string(),
+        });
     }
     Ok(value)
 }
@@ -40,15 +47,22 @@ pub async fn forward_messages_stream(
         .json(body)
         .send()
         .await
-        .map_err(|e| Error::Upstream(e.to_string()))?;
+        .map_err(|e| Error::UpstreamConnect(e.to_string()))?;
 
     let status = response.status();
     if !status.is_success() {
-        let value = response
+        let _body = response
             .json::<Value>()
             .await
-            .map_err(|e| Error::Upstream(e.to_string()))?;
-        return Err(Error::Upstream(value.to_string()));
+            .map_err(|e| Error::UpstreamParse(e.to_string()))?;
+        tracing::warn!(
+            http_status = status.as_u16(),
+            "upstream returned non-success response"
+        );
+        return Err(Error::UpstreamStatus {
+            status: status.as_u16(),
+            message: status.canonical_reason().unwrap_or("unknown").to_string(),
+        });
     }
 
     Ok(response.bytes_stream())
@@ -61,15 +75,22 @@ pub async fn forward_models(client: &Client, base_url: &str) -> Result<Value> {
         .get(url)
         .send()
         .await
-        .map_err(|e| Error::Upstream(e.to_string()))?;
+        .map_err(|e| Error::UpstreamConnect(e.to_string()))?;
 
     let status = response.status();
     let value = response
         .json::<Value>()
         .await
-        .map_err(|e| Error::Upstream(e.to_string()))?;
+        .map_err(|e| Error::UpstreamParse(e.to_string()))?;
     if !status.is_success() {
-        return Err(Error::Upstream(value.to_string()));
+        tracing::warn!(
+            http_status = status.as_u16(),
+            "upstream returned non-success response"
+        );
+        return Err(Error::UpstreamStatus {
+            status: status.as_u16(),
+            message: status.canonical_reason().unwrap_or("unknown").to_string(),
+        });
     }
     Ok(value)
 }

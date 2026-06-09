@@ -78,10 +78,10 @@ pub fn anthropic_response_from_openai(input: &Value) -> Result<Value> {
         .get("choices")
         .and_then(Value::as_array)
         .and_then(|choices| choices.first())
-        .ok_or_else(|| Error::Upstream("OpenAI response missing choices[0]".to_string()))?;
+        .ok_or_else(|| Error::UpstreamParse("OpenAI response missing choices[0]".to_string()))?;
     let message = choice
         .get("message")
-        .ok_or_else(|| Error::Upstream("OpenAI response missing message".to_string()))?;
+        .ok_or_else(|| Error::UpstreamParse("OpenAI response missing message".to_string()))?;
 
     let mut content = Vec::new();
     if let Some(text) = message.get("content").and_then(Value::as_str) {
@@ -133,7 +133,7 @@ pub fn anthropic_stream_frame_from_openai(
         .and_then(|choices| choices.first())
         .and_then(|choice| choice.get("delta"))
         .ok_or_else(|| {
-            Error::Upstream("OpenAI stream chunk missing choices[0].delta".to_string())
+            Error::UpstreamParse("OpenAI stream chunk missing choices[0].delta".to_string())
         })?;
 
     if let Some(content) = delta.get("content").and_then(Value::as_str) {
@@ -240,7 +240,7 @@ fn tool_call_to_anthropic(call: &Value) -> Result<Value> {
         .and_then(Value::as_str)
         .unwrap_or("{}");
     let input = serde_json::from_str::<Value>(arguments)
-        .map_err(|e| Error::Upstream(format!("OpenAI tool call arguments are not JSON: {e}")))?;
+        .map_err(|e| Error::UpstreamParse(format!("OpenAI tool call arguments are not JSON: {e}")))?;
 
     Ok(json!({
         "type": "tool_use",

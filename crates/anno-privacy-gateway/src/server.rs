@@ -806,12 +806,12 @@ fn file_metadata_json(stored: &crate::file_registry::StoredFile) -> Value {
 pub async fn serve(config: GatewayConfig) -> Result<()> {
     let listener = tokio::net::TcpListener::bind(config.listen)
         .await
-        .map_err(|e| Error::Upstream(e.to_string()))?;
+        .map_err(|e| Error::Config(format!("failed to bind {}: {e}", config.listen)))?;
     let app = router(AppState::try_new(config)?);
     axum::serve(listener, app)
         .with_graceful_shutdown(shutdown_signal())
         .await
-        .map_err(|e| Error::Upstream(e.to_string()))?;
+        .map_err(|e| Error::Config(format!("server error: {e}")))?;
     tracing::info!(
         target: "anno_privacy_gateway::shutdown",
         event = "stopped",
