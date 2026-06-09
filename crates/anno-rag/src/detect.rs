@@ -569,7 +569,7 @@ impl Detector {
                 .then_with(|| (b.end - b.start).cmp(&(a.end - a.start)))
                 .then_with(|| pattern_priority(&a.source).cmp(&pattern_priority(&b.source)))
         });
-        dedup_overlaps(&mut all);
+        dedup_overlaps(&mut all, text);
 
         // 4. Validators (defense layer and above).
         let rejection_counts = if GdprLayerSet::from_env().includes_validators() {
@@ -613,7 +613,7 @@ impl Detector {
                 .then_with(|| (b.end - b.start).cmp(&(a.end - a.start)))
                 .then_with(|| pattern_priority(&a.source).cmp(&pattern_priority(&b.source)))
         });
-        dedup_overlaps(&mut all);
+        dedup_overlaps(&mut all, text);
         Ok(all)
     }
 
@@ -657,7 +657,7 @@ impl Detector {
                 .then_with(|| (b.end - b.start).cmp(&(a.end - a.start)))
                 .then_with(|| pattern_priority(&a.source).cmp(&pattern_priority(&b.source)))
         });
-        dedup_overlaps(&mut pii);
+        dedup_overlaps(&mut pii, text);
 
         let mut legal: Vec<LegalEntity> = raw_model_spans
             .iter()
@@ -754,7 +754,7 @@ fn pattern_priority(s: &DetectionSource) -> u8 {
     }
 }
 
-fn dedup_overlaps(entities: &mut Vec<DetectedEntity>) {
+fn dedup_overlaps(entities: &mut Vec<DetectedEntity>, text: &str) {
     debug_assert!(
         entities.windows(2).all(|w| w[0].start <= w[1].start),
         "dedup_overlaps requires entities sorted by start"
@@ -766,6 +766,8 @@ fn dedup_overlaps(entities: &mut Vec<DetectedEntity>) {
                 // Fusion: extend coverage to the max of both spans.
                 // For PII masking, over-masking is safer than under-masking.
                 last.end = last.end.max(entity.end);
+                // Re-derive original from source text so it matches [start..end].
+                last.original = text[last.start..last.end].to_string();
                 continue;
             }
         }
@@ -1250,7 +1252,7 @@ mod tests {
                 source: DetectionSource::Ner,
             },
         ];
-        dedup_overlaps(&mut entities);
+        dedup_overlaps(&mut entities, "");
         assert_eq!(entities.len(), 2);
         assert_eq!(entities[0].start, 0);
         assert_eq!(entities[0].end, 4);
@@ -1278,10 +1280,12 @@ mod tests {
                 source: DetectionSource::Ner,
             },
         ];
-        dedup_overlaps(&mut entities);
+        let text = "Jean Dupont"; // 11 bytes, matches [0..11]
+        dedup_overlaps(&mut entities, text);
         assert_eq!(entities.len(), 1);
         assert_eq!(entities[0].start, 0);
         assert_eq!(entities[0].end, 11);
+        assert_eq!(entities[0].original, "Jean Dupont");
     }
 
     #[test]
@@ -1304,10 +1308,12 @@ mod tests {
                 source: DetectionSource::Ner,
             },
         ];
-        dedup_overlaps(&mut entities);
+        let text = "Jean Dupont SA"; // 14 bytes, matches [0..14]
+        dedup_overlaps(&mut entities, text);
         assert_eq!(entities.len(), 1, "partial overlap must fuse into one span");
         assert_eq!(entities[0].start, 0);
         assert_eq!(entities[0].end, 14, "end must extend to cover both spans");
+        assert_eq!(entities[0].original, "Jean Dupont SA");
     }
 
     #[test]
@@ -1330,7 +1336,8 @@ mod tests {
                 source: DetectionSource::Ner,
             },
         ];
-        dedup_overlaps(&mut entities);
+        let text = "Jean Dupont"; // 11 bytes, matches [0..11]
+        dedup_overlaps(&mut entities, text);
         assert_eq!(entities.len(), 2, "adjacent (non-overlapping) spans must stay separate");
     }
 }
