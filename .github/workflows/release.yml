@@ -605,7 +605,7 @@ jobs:
           # ── Intel Mac — Metal not available; CPU-only, kept for completeness
           # ── Linux x86_64 — NVIDIA CUDA ────────────────────────────────────
           - name: cuda-linux
-            runner: ubuntu-22.04
+            runner: ubuntu-24.04
             target: x86_64-unknown-linux-gnu
             features: gpu-cuda
             suffix: -cuda
