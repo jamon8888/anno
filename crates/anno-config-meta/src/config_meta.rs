@@ -28,7 +28,7 @@ pub fn derive(input: TokenStream) -> Result<TokenStream, Error> {
         let name_str = field_name.to_string();
 
         entries.push(quote! {
-            ::anno_rag::config_meta_types::FieldMeta {
+            crate::config_meta_types::FieldMeta {
                 name:          #name_str,
                 env_var:       #env,
                 cli_flag:      #cli,
@@ -43,8 +43,8 @@ pub fn derive(input: TokenStream) -> Result<TokenStream, Error> {
     Ok(quote! {
         impl #name {
             /// Returns static metadata for every configuration field.
-            pub fn config_schema() -> &'static [::anno_rag::config_meta_types::FieldMeta] {
-                static SCHEMA: &[::anno_rag::config_meta_types::FieldMeta] = &[ #(#entries),* ];
+            pub fn config_schema() -> &'static [crate::config_meta_types::FieldMeta] {
+                static SCHEMA: &[crate::config_meta_types::FieldMeta] = &[ #(#entries),* ];
                 SCHEMA
             }
         }

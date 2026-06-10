@@ -49,14 +49,16 @@ impl std::fmt::Display for GdprLayerSet {
 }
 
 impl FromStr for GdprLayerSet {
-    type Err = ();
+    type Err = String;
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         match s.trim().to_ascii_lowercase().as_str() {
             "basic" => Ok(Self::Basic),
             "defense" => Ok(Self::Defense),
             "shadow" => Ok(Self::Shadow),
             "full" => Ok(Self::Full),
-            _ => Err(()),
+            other => Err(format!(
+                "unknown gdpr-layers '{other}'; valid: basic, defense, shadow, full"
+            )),
         }
     }
 }

@@ -23,9 +23,9 @@ bit-vec = { version = "0.8" }
 bitflags = { version = "2", default-features = false, features = ["std"] }
 bytemuck = { version = "1", default-features = false, features = ["aarch64_simd", "derive", "extern_crate_alloc", "wasm_simd"] }
 bytes = { version = "1", features = ["serde"] }
-candle-core = { version = "0.10", features = ["cuda", "metal"] }
-candle-nn = { version = "0.10", features = ["cuda", "metal"] }
-candle-transformers = { version = "0.10", features = ["cuda", "metal"] }
+candle-core = { version = "0.10" }
+candle-nn = { version = "0.10" }
+candle-transformers = { version = "0.10" }
 clap = { version = "4", features = ["derive", "env", "wrap_help"] }
 clap_builder = { version = "4", default-features = false, features = ["color", "env", "std", "suggestions", "usage", "wrap_help"] }
 compact_str = { version = "0.9", features = ["serde"] }
@@ -122,9 +122,9 @@ bit-vec = { version = "0.8" }
 bitflags = { version = "2", default-features = false, features = ["std"] }
 bytemuck = { version = "1", default-features = false, features = ["aarch64_simd", "derive", "extern_crate_alloc", "wasm_simd"] }
 bytes = { version = "1", features = ["serde"] }
-candle-core = { version = "0.10", features = ["cuda", "metal"] }
-candle-nn = { version = "0.10", features = ["cuda", "metal"] }
-candle-transformers = { version = "0.10", features = ["cuda", "metal"] }
+candle-core = { version = "0.10" }
+candle-nn = { version = "0.10" }
+candle-transformers = { version = "0.10" }
 cc = { version = "1", default-features = false, features = ["parallel"] }
 clap = { version = "4", features = ["derive", "env", "wrap_help"] }
 clap_builder = { version = "4", default-features = false, features = ["color", "env", "std", "suggestions", "usage", "wrap_help"] }
@@ -214,6 +214,26 @@ zip-f595c2ba2a3f28df = { package = "zip", version = "2" }
 zstd = { version = "0.13" }
 zstd-safe = { version = "7", default-features = false, features = ["arrays", "legacy", "std", "zdict_builder"] }
 zstd-sys = { version = "2", default-features = false, features = ["legacy", "std", "zdict_builder"] }
+
+[target.'cfg(target_os = "macos")'.dependencies]
+candle-core = { version = "0.10", features = ["metal"] }
+candle-nn = { version = "0.10", features = ["metal"] }
+candle-transformers = { version = "0.10", features = ["metal"] }
+
+[target.'cfg(target_os = "macos")'.build-dependencies]
+candle-core = { version = "0.10", features = ["metal"] }
+candle-nn = { version = "0.10", features = ["metal"] }
+candle-transformers = { version = "0.10", features = ["metal"] }
+
+[target.'cfg(target_os = "linux")'.dependencies]
+candle-core = { version = "0.10", features = ["cuda"] }
+candle-nn = { version = "0.10", features = ["cuda"] }
+candle-transformers = { version = "0.10", features = ["cuda"] }
+
+[target.'cfg(target_os = "linux")'.build-dependencies]
+candle-core = { version = "0.10", features = ["cuda"] }
+candle-nn = { version = "0.10", features = ["cuda"] }
+candle-transformers = { version = "0.10", features = ["cuda"] }
 
 [target.x86_64-pc-windows-msvc.dependencies]
 esaxx-rs = { version = "0.1", default-features = false, features = ["cpp"] }
