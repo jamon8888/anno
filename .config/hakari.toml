@@ -26,3 +26,19 @@ platforms = [
 
 # Write out exact versions rather than a semver range. (Defaults to false.)
 # exact-versions = true
+
+# Only traverse default features for candle crates.
+# cuda/metal are opt-in features (gpu-cuda / gpu-metal Cargo features) that
+# require nvcc or a Metal SDK. Including them in workspace-hack would force
+# every CI runner to have those toolchains installed even for non-GPU builds.
+[[traversal-rules]]
+name = "candle-core"
+type = "default-only"
+
+[[traversal-rules]]
+name = "candle-nn"
+type = "default-only"
+
+[[traversal-rules]]
+name = "candle-transformers"
+type = "default-only"
