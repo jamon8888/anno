@@ -4,6 +4,17 @@ All notable changes to the `anno-rag` crate are documented here. Other crates in
 
 Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Semver: pre-1.0 minor versions may introduce breaking changes.
 
+## [0.12.3] — 2026-06-10
+
+### Fixed
+- **CUDA Linux binary** — switched CI runner `ubuntu-22.04` → `ubuntu-24.04`; gcc 14 on updated ubuntu-22.04 images generates C23 `__isoc23_strtoll` calls that glibc 2.35 doesn't have; glibc 2.39 (Ubuntu 24.04) does
+- **Homebrew formula publish** — `jamon8888/homebrew-hacienda` tap was an empty repo with no commits; `refs/heads/main` didn't exist so checkout failed; initialized with first commit
+
+### Changed
+- Workspace version bumped 0.12.2 → 0.12.3
+
+---
+
 ## [0.12.2] — 2026-06-10
 
 ### Fixed
