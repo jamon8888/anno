@@ -7,6 +7,7 @@
 //! - `anno-rag diagnose-gpu` — print accelerator diagnostics
 //! - `anno-rag review <subcmd>` — tabular review management
 
+mod config_cmd;
 mod review;
 mod setup_mcp;
 
@@ -58,6 +59,11 @@ enum Cmd {
         #[command(flatten)]
         config: anno_rag::config::ConfigOverrides,
     },
+    /// Config management: init, show, validate.
+    Config {
+        #[command(subcommand)]
+        sub: ConfigSubCmd,
+    },
     /// Run the MCP server on stdio. Used by Cowork as a plugin transport.
     /// Blocks until stdin closes.
     Mcp,
@@ -95,6 +101,28 @@ enum VaultCmd {
     /// Generate a new random vault key and replace the keyring entry.
     /// Requires an existing entry; fails otherwise.
     Rotate,
+}
+
+#[derive(Subcommand)]
+enum ConfigSubCmd {
+    /// Create ~/.anno-rag/config.toml from the built-in template.
+    Init {
+        /// Custom path for the config file (default: ~/.anno-rag/config.toml).
+        #[arg(long)]
+        path: Option<PathBuf>,
+    },
+    /// Print effective configuration with source annotation.
+    Show {
+        /// Custom config file path.
+        #[arg(long)]
+        path: Option<PathBuf>,
+    },
+    /// Validate config.toml without starting the pipeline.
+    Validate {
+        /// Config file path (default: ~/.anno-rag/config.toml).
+        #[arg(long)]
+        path: Option<PathBuf>,
+    },
 }
 
 #[tokio::main]
@@ -143,6 +171,29 @@ async fn main() -> anyhow::Result<()> {
     if let Cmd::Mcp = &cli.cmd {
         let key = derive_key()?;
         anno_rag_mcp::serve_stdio_lazy(cfg, key).await?;
+        return Ok(());
+    }
+
+    if let Cmd::Config { sub } = &cli.cmd {
+        match sub {
+            ConfigSubCmd::Init { path } => {
+                let p = path
+                    .clone()
+                    .or_else(AnnoRagConfig::default_config_path)
+                    .ok_or_else(|| anyhow::anyhow!("cannot determine config path"))?;
+                config_cmd::config_init(&p)?;
+            }
+            ConfigSubCmd::Show { path } => {
+                config_cmd::config_show(path.as_deref())?;
+            }
+            ConfigSubCmd::Validate { path } => {
+                let p = path
+                    .clone()
+                    .or_else(AnnoRagConfig::default_config_path)
+                    .ok_or_else(|| anyhow::anyhow!("cannot determine config path"))?;
+                config_cmd::config_validate(&p)?;
+            }
+        }
         return Ok(());
     }
 
@@ -243,6 +294,7 @@ async fn main() -> anyhow::Result<()> {
         Cmd::SetupMcp(_) => unreachable!("handled above before Pipeline::new"),
         Cmd::Vault { .. } => unreachable!("handled above before Pipeline::new"),
         Cmd::Review(_) => unreachable!("handled above before Pipeline::new"),
+        Cmd::Config { .. } => unreachable!("handled above before Pipeline::new"),
     }
     Ok(())
 }
