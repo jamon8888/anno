@@ -67,7 +67,7 @@ fn test_default_includes_ml_backend_when_available() {
     if stats.layer_count >= 3 {
         let has_ml = stats.layer_names.iter().any(|name| {
             let n = name.to_lowercase();
-            n.contains("bert") || n.contains("gliner")
+            n.contains("bert") || n.contains("gliner") || n.contains("nuner")
         });
         assert!(
             has_ml,
