@@ -322,6 +322,7 @@ name = "anno-rag"
 version = "0.2.0"
 dependencies = [
  "anno",
+ "anno-config-meta",
  "anno-corpus-core",
  "anno-knowledge-core",
  "anyhow",

@@ -11,7 +11,7 @@ mod review;
 mod setup_mcp;
 
 use anno_rag::{
-    config::{AdvancedPdfNativeMode, AnnoRagConfig, MemoryNerMode, OcrMode},
+    config::{AdvancedPdfNativeMode, AnnoRagConfig, OcrMode},
     pipeline::Pipeline,
     vault::derive_key,
 };
@@ -141,13 +141,12 @@ async fn main() -> anyhow::Result<()> {
         return Ok(());
     }
 
-    // Initialize cfg early so it's available for short-circuit branches
-    let mut cfg = AnnoRagConfig::default();
-    if let Ok(mode) = std::env::var("ANNO_RAG_MEMORY_NER_MODE") {
-        if let Some(mode) = MemoryNerMode::from_env_value(&mode) {
-            cfg.memory_ner_mode = mode;
-        }
-    }
+    // Initialize cfg: defaults → ~/.anno-rag/config.toml → env vars.
+    // CLI overrides (Task 4) will be applied after flag parsing.
+    let mut cfg = AnnoRagConfig::load(None).unwrap_or_else(|e| {
+        tracing::warn!("config load error: {e}; using defaults");
+        AnnoRagConfig::default()
+    });
     if let Cmd::Ingest {
         enable_ocr,
         ocr_mode,
@@ -232,7 +231,10 @@ async fn main() -> anyhow::Result<()> {
 
     // DownloadModels needs no Pipeline — short-circuit before keyring lookup.
     if let Cmd::DownloadModels { dir } = &cli.cmd {
-        let mut cfg = AnnoRagConfig::default();
+        let mut cfg = AnnoRagConfig::load(None).unwrap_or_else(|e| {
+            tracing::warn!("config load error: {e}; using defaults");
+            AnnoRagConfig::default()
+        });
         if let Some(d) = dir {
             // models_cache() = data_dir/models, so set data_dir = d.parent()
             // which makes models_cache() == d (when d ends in "models").
