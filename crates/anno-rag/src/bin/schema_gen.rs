@@ -24,7 +24,10 @@ fn main() {
     // is reproducible across machines regardless of $HOME.
     let mut defaults_json = defaults_json;
     if let serde_json::Value::Object(ref mut map) = defaults_json {
-        map.insert("data_dir".to_string(), serde_json::Value::String("~/.anno-rag".to_string()));
+        map.insert(
+            "data_dir".to_string(),
+            serde_json::Value::String("~/.anno-rag".to_string()),
+        );
     }
 
     // 1. config-schema.json
@@ -47,13 +50,12 @@ fn main() {
         })
         .collect();
 
-    let schema_json = serde_json::to_string_pretty(&schema_entries)
-        .expect("schema must serialize");
+    let schema_json = serde_json::to_string_pretty(&schema_entries).expect("schema must serialize");
 
     let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
-        .parent()  // crates/
+        .parent() // crates/
         .unwrap()
-        .parent()  // repo root
+        .parent() // repo root
         .unwrap();
 
     let schema_path = root.join("crates/anno-rag/config-schema.json");
@@ -63,7 +65,8 @@ fn main() {
     // 2. config.toml.example
     let mut toml_lines = vec![
         "# anno-rag configuration file".to_string(),
-        "# Copy to ~/.anno-rag/config.toml and uncomment the fields you want to change.".to_string(),
+        "# Copy to ~/.anno-rag/config.toml and uncomment the fields you want to change."
+            .to_string(),
         "# All values shown are the defaults.".to_string(),
         String::new(),
     ];

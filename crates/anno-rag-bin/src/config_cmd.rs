@@ -33,8 +33,8 @@ pub fn config_show(config_path: Option<&Path>) -> anyhow::Result<()> {
 
     let file_cfg_json: Option<serde_json::Value> = if file_exists {
         let contents = std::fs::read_to_string(path.as_ref().unwrap())?;
-        let file_cfg: AnnoRagConfig = toml::from_str(&contents)
-            .map_err(|e| anyhow::anyhow!("parse error: {e}"))?;
+        let file_cfg: AnnoRagConfig =
+            toml::from_str(&contents).map_err(|e| anyhow::anyhow!("parse error: {e}"))?;
         Some(serde_json::to_value(file_cfg)?)
     } else {
         None

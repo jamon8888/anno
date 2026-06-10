@@ -1,6 +1,6 @@
 use proc_macro2::TokenStream;
 use quote::quote;
-use syn::{Data, DeriveInput, Error, Field, Lit, parse2};
+use syn::{parse2, Data, DeriveInput, Error, Field, Lit};
 
 pub fn derive(input: TokenStream) -> Result<TokenStream, Error> {
     let ast: DeriveInput = parse2(input)?;
@@ -70,18 +70,22 @@ pub(crate) fn extract_config_meta_pub(field: &Field) -> Result<ConfigMetaAttrs, 
         let mut since = String::new();
 
         attr.parse_nested_meta(|meta| {
-            let key = meta.path.get_ident().map(|i| i.to_string()).unwrap_or_default();
+            let key = meta
+                .path
+                .get_ident()
+                .map(|i| i.to_string())
+                .unwrap_or_default();
             let value: Lit = meta.value()?.parse()?;
             let s = match &value {
                 Lit::Str(s) => s.value(),
                 _ => return Err(meta.error("expected string literal")),
             };
             match key.as_str() {
-                "env"   => env   = s,
-                "cli"   => cli   = s,
-                "doc"   => doc   = s,
+                "env" => env = s,
+                "cli" => cli = s,
+                "doc" => doc = s,
                 "since" => since = s,
-                other   => return Err(meta.error(format!("unknown key: {other}"))),
+                other => return Err(meta.error(format!("unknown key: {other}"))),
             }
             Ok(())
         })?;
@@ -104,7 +108,12 @@ pub(crate) fn extract_config_meta_pub(field: &Field) -> Result<ConfigMetaAttrs, 
                 "config_meta requires `doc = \"description\"`",
             ));
         }
-        return Ok(ConfigMetaAttrs { env, cli, doc, since });
+        return Ok(ConfigMetaAttrs {
+            env,
+            cli,
+            doc,
+            since,
+        });
     }
 
     Err(Error::new_spanned(

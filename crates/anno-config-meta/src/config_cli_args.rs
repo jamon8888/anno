@@ -1,6 +1,6 @@
 use proc_macro2::TokenStream;
 use quote::quote;
-use syn::{Data, DeriveInput, Error, GenericArgument, PathArguments, Type, parse2};
+use syn::{parse2, Data, DeriveInput, Error, GenericArgument, PathArguments, Type};
 
 use crate::config_meta::extract_config_meta_pub;
 
@@ -9,7 +9,12 @@ pub fn derive(input: TokenStream) -> Result<TokenStream, Error> {
 
     let fields = match &ast.data {
         Data::Struct(s) => &s.fields,
-        _ => return Err(Error::new_spanned(&ast, "ConfigCliArgs only supports structs")),
+        _ => {
+            return Err(Error::new_spanned(
+                &ast,
+                "ConfigCliArgs only supports structs",
+            ))
+        }
     };
 
     let mut field_tokens = Vec::new();

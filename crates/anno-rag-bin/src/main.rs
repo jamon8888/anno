@@ -270,12 +270,21 @@ async fn main() -> anyhow::Result<()> {
     let pipeline = Pipeline::new(cfg.clone(), key).await?;
 
     match cli.cmd {
-        Cmd::Ingest { folder, recursive, output, config: _ } => {
+        Cmd::Ingest {
+            folder,
+            recursive,
+            output,
+            config: _,
+        } => {
             let out = output.unwrap_or_else(|| cfg.outputs_dir());
             let n = pipeline.ingest_folder(&folder, recursive, &out).await?;
             println!("ingested {n} documents → {}", out.display());
         }
-        Cmd::Search { query, top_k, config: _ } => {
+        Cmd::Search {
+            query,
+            top_k,
+            config: _,
+        } => {
             let hits = pipeline.search(&query, top_k).await?;
             if hits.is_empty() {
                 println!("(no results)");
