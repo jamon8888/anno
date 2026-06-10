@@ -11,7 +11,7 @@ mod review;
 mod setup_mcp;
 
 use anno_rag::{
-    config::{AdvancedPdfNativeMode, AnnoRagConfig, OcrMode},
+    config::{AnnoRagConfig, OcrMode},
     pipeline::Pipeline,
     vault::derive_key,
 };
@@ -43,30 +43,9 @@ enum Cmd {
         /// Where to write pseudonymized copies. Defaults to ~/.anno-rag/outputs.
         #[arg(short, long)]
         output: Option<PathBuf>,
-        /// [DEPRECATED] Use --ocr-mode auto_embedded instead.
-        #[arg(long, default_value_t = false)]
-        enable_ocr: bool,
-        /// OCR mode: 'off' (default) or 'auto_embedded'.
-        #[arg(long, value_parser = parse_ocr_mode)]
-        ocr_mode: Option<OcrMode>,
-        /// Enable structured native PDF extraction for text-layer PDFs.
-        #[arg(long, default_value_t = false)]
-        advanced_pdf_native: bool,
-        /// Keep running PDF headers in the advanced native PDF profile.
-        #[arg(long, default_value_t = false)]
-        pdf_keep_headers: bool,
-        /// Keep running PDF footers in the advanced native PDF profile.
-        #[arg(long, default_value_t = false)]
-        pdf_keep_footers: bool,
-        /// Extract PDF annotations in the advanced native PDF profile.
-        #[arg(long, default_value_t = false)]
-        pdf_extract_annotations: bool,
-        /// Hierarchy cluster count for advanced native PDF extraction.
-        #[arg(long, default_value_t = 6)]
-        pdf_hierarchy_clusters: usize,
-        /// Allow single-column pseudo-tables in advanced native PDF extraction.
-        #[arg(long, default_value_t = false)]
-        pdf_allow_single_column_tables: bool,
+        /// Config overrides — any AnnoRagConfig field settable here (e.g. --ocr-mode, --gdpr-layers).
+        #[command(flatten)]
+        config: anno_rag::config::ConfigOverrides,
     },
     /// Search the indexed corpus and return ranked pseudonymized chunks.
     Search {
@@ -75,6 +54,9 @@ enum Cmd {
         /// Number of results.
         #[arg(short = 'k', long, default_value_t = 10)]
         top_k: usize,
+        /// Config overrides.
+        #[command(flatten)]
+        config: anno_rag::config::ConfigOverrides,
     },
     /// Run the MCP server on stdio. Used by Cowork as a plugin transport.
     /// Blocks until stdin closes.
@@ -115,17 +97,6 @@ enum VaultCmd {
     Rotate,
 }
 
-fn parse_ocr_mode(s: &str) -> std::result::Result<OcrMode, String> {
-    match s {
-        "off" => Ok(OcrMode::Off),
-        "auto_embedded" => Ok(OcrMode::AutoEmbedded),
-        other => Err(format!(
-            "invalid OCR mode '{}'; expected 'off' or 'auto_embedded'",
-            other
-        )),
-    }
-}
-
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
     tracing_subscriber::fmt()
@@ -141,38 +112,21 @@ async fn main() -> anyhow::Result<()> {
         return Ok(());
     }
 
-    // Initialize cfg: defaults → ~/.anno-rag/config.toml → env vars.
-    // CLI overrides (Task 4) will be applied after flag parsing.
-    let mut cfg = AnnoRagConfig::load(None).unwrap_or_else(|e| {
+    // Extract CLI overrides from subcommand, then load: defaults → TOML → env → overrides.
+    let config_overrides = match &cli.cmd {
+        Cmd::Ingest { config, .. } => Some(config.clone()),
+        Cmd::Search { config, .. } => Some(config.clone()),
+        _ => None,
+    };
+    let mut cfg = AnnoRagConfig::load(config_overrides.as_ref()).unwrap_or_else(|e| {
         tracing::warn!("config load error: {e}; using defaults");
         AnnoRagConfig::default()
     });
-    if let Cmd::Ingest {
-        enable_ocr,
-        ocr_mode,
-        advanced_pdf_native,
-        pdf_keep_headers,
-        pdf_keep_footers,
-        pdf_extract_annotations,
-        pdf_hierarchy_clusters,
-        pdf_allow_single_column_tables,
-        ..
-    } = &cli.cmd
-    {
-        if let Some(mode) = ocr_mode {
-            cfg.ocr_mode = *mode;
-        } else if *enable_ocr {
-            tracing::warn!("--enable-ocr is deprecated; use --ocr-mode auto_embedded instead");
-            cfg.ocr_mode = OcrMode::AutoEmbedded;
-        }
-        if *advanced_pdf_native {
-            cfg.advanced_pdf_native = AdvancedPdfNativeMode::Structured;
-        }
-        cfg.pdf_keep_headers = *pdf_keep_headers;
-        cfg.pdf_keep_footers = *pdf_keep_footers;
-        cfg.pdf_extract_annotations = *pdf_extract_annotations;
-        cfg.pdf_hierarchy_clusters = *pdf_hierarchy_clusters;
-        cfg.pdf_allow_single_column_tables = *pdf_allow_single_column_tables;
+
+    // --enable-ocr / ANNO_RAG_ENABLE_OCR: deprecated flag, promote to ocr_mode.
+    if cfg.enable_ocr && cfg.ocr_mode == OcrMode::Off {
+        tracing::warn!("--enable-ocr / ANNO_RAG_ENABLE_OCR is deprecated; use --ocr-mode auto_embedded instead");
+        cfg.ocr_mode = OcrMode::AutoEmbedded;
     }
 
     cfg.warn_deprecated_fields();
@@ -265,24 +219,12 @@ async fn main() -> anyhow::Result<()> {
     let pipeline = Pipeline::new(cfg.clone(), key).await?;
 
     match cli.cmd {
-        Cmd::Ingest {
-            folder,
-            recursive,
-            output,
-            enable_ocr: _,
-            ocr_mode: _,
-            advanced_pdf_native: _,
-            pdf_keep_headers: _,
-            pdf_keep_footers: _,
-            pdf_extract_annotations: _,
-            pdf_hierarchy_clusters: _,
-            pdf_allow_single_column_tables: _,
-        } => {
+        Cmd::Ingest { folder, recursive, output, config: _ } => {
             let out = output.unwrap_or_else(|| cfg.outputs_dir());
             let n = pipeline.ingest_folder(&folder, recursive, &out).await?;
             println!("ingested {n} documents → {}", out.display());
         }
-        Cmd::Search { query, top_k } => {
+        Cmd::Search { query, top_k, config: _ } => {
             let hits = pipeline.search(&query, top_k).await?;
             if hits.is_empty() {
                 println!("(no results)");

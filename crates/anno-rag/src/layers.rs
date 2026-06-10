@@ -37,6 +37,17 @@ impl GdprLayerSet {
     }
 }
 
+impl std::fmt::Display for GdprLayerSet {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Basic => write!(f, "basic"),
+            Self::Defense => write!(f, "defense"),
+            Self::Shadow => write!(f, "shadow"),
+            Self::Full => write!(f, "full"),
+        }
+    }
+}
+
 impl FromStr for GdprLayerSet {
     type Err = ();
     fn from_str(s: &str) -> Result<Self, Self::Err> {

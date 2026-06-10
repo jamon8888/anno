@@ -25,6 +25,7 @@ path = "src/main.rs"
 anno-rag         = { path = "../anno-rag" }
 anno-rag-mcp     = { path = "../anno-rag-mcp" }
 anno-rag-tabular = { path = "../anno-rag-tabular", features = ["gliner2"] }
+anno-config-meta = { path = "../anno-config-meta" }
 
 async-trait     = "0.1"
 clap            = { workspace = true }

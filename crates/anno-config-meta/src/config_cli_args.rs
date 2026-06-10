@@ -26,17 +26,25 @@ pub fn derive(input: TokenStream) -> Result<TokenStream, Error> {
         let doc_str = &meta.doc;
 
         let inner_ty = inner_option_type(&field.ty);
-        let field_ty = match inner_ty {
-            Some(t) => quote! { Option<#t> },
-            None => {
-                let ty = &field.ty;
-                quote! { Option<#ty> }
-            }
+        let effective_ty = match inner_ty {
+            Some(t) => t,
+            None => &field.ty,
         };
+
+        // HashMap and other map-like types cannot be parsed from a single CLI
+        // flag string.  Emit `#[arg(skip)]` so clap ignores them entirely;
+        // they can still be set via the TOML file or env var.
+        if is_map_type(effective_ty) {
+            field_tokens.push(quote! {
+                #[arg(skip)]
+                pub #field_name: Option<#effective_ty>
+            });
+            continue;
+        }
 
         field_tokens.push(quote! {
             #[arg(long = #cli_str, env = #env_str, help = #doc_str)]
-            pub #field_name: #field_ty
+            pub #field_name: Option<#effective_ty>
         });
     }
 
@@ -46,6 +54,18 @@ pub fn derive(input: TokenStream) -> Result<TokenStream, Error> {
             #(#field_tokens),*
         }
     })
+}
+
+/// Returns `true` when `ty` is a map-like type that clap cannot parse from a
+/// single string argument (e.g. `HashMap<K, V>`, `BTreeMap<K, V>`).
+fn is_map_type(ty: &Type) -> bool {
+    if let Type::Path(tp) = ty {
+        if let Some(seg) = tp.path.segments.last() {
+            let name = seg.ident.to_string();
+            return matches!(name.as_str(), "HashMap" | "BTreeMap" | "IndexMap");
+        }
+    }
+    false
 }
 
 fn inner_option_type(ty: &Type) -> Option<&Type> {
