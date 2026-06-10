@@ -769,14 +769,31 @@ mod tests {
     }
 
     #[test]
-    fn gdpr_layers_round_trips_through_toml() {
+    fn gdpr_layers_round_trips_through_json() {
         let c = AnnoRagConfig {
             gdpr_layers: crate::layers::GdprLayerSet::Basic,
             ..Default::default()
         };
         let s = serde_json::to_string(&c).expect("serialize");
+        assert!(s.contains(r#""gdpr_layers":"basic""#), "wire format should be lowercase snake_case");
         let back: AnnoRagConfig = serde_json::from_str(&s).expect("deserialize");
         assert_eq!(back.gdpr_layers, crate::layers::GdprLayerSet::Basic);
+    }
+
+    #[test]
+    fn gdpr_layers_round_trips_through_toml() {
+        // Full round-trip: serialize a complete config to TOML and read it back.
+        // Partial deserialization is not tested here because data_dir and other
+        // required fields have no serde default (Task 3 will add #[serde(default)]
+        // to enable partial TOML files for config loading).
+        let cfg = AnnoRagConfig {
+            gdpr_layers: crate::layers::GdprLayerSet::Shadow,
+            ..Default::default()
+        };
+        let s = toml::to_string(&cfg).expect("serialize to toml");
+        assert!(s.contains("gdpr_layers = \"shadow\""), "toml wire format should be lowercase snake_case: {s}");
+        let back: AnnoRagConfig = toml::from_str(&s).expect("deserialize from toml");
+        assert_eq!(back.gdpr_layers, crate::layers::GdprLayerSet::Shadow);
     }
 
     #[test]
