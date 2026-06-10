@@ -1,0 +1,344 @@
+[
+  {
+    "name": "data_dir",
+    "env_var": "ANNO_RAG_DATA_DIR",
+    "cli_flag": "--data-dir",
+    "doc": "Root directory for vault, index, and model weights. Default: ~/.anno-rag",
+    "default_value": "\"~/.anno-rag\"",
+    "since": "0.1",
+    "type_name": "PathBuf"
+  },
+  {
+    "name": "embed_model",
+    "env_var": "ANNO_RAG_EMBED_MODEL",
+    "cli_flag": "--embed-model",
+    "doc": "HuggingFace model ID for the embedder. Default: intfloat/multilingual-e5-small",
+    "default_value": "\"intfloat/multilingual-e5-small\"",
+    "since": "0.1",
+    "type_name": "String"
+  },
+  {
+    "name": "embed_dim",
+    "env_var": "ANNO_RAG_EMBED_DIM",
+    "cli_flag": "--embed-dim",
+    "doc": "Vector dimension; must match embedder output. Default: 384",
+    "default_value": "384",
+    "since": "0.1",
+    "type_name": "usize"
+  },
+  {
+    "name": "default_top_k",
+    "env_var": "ANNO_RAG_DEFAULT_TOP_K",
+    "cli_flag": "--default-top-k",
+    "doc": "Default number of results returned by search. Default: 10",
+    "default_value": "10",
+    "since": "0.1",
+    "type_name": "usize"
+  },
+  {
+    "name": "chunk_max_chars",
+    "env_var": "ANNO_RAG_CHUNK_MAX_CHARS",
+    "cli_flag": "--chunk-max-chars",
+    "doc": "Max chunk size in characters. Default: 2048",
+    "default_value": "2048",
+    "since": "0.1",
+    "type_name": "usize"
+  },
+  {
+    "name": "chunk_overlap",
+    "env_var": "ANNO_RAG_CHUNK_OVERLAP",
+    "cli_flag": "--chunk-overlap",
+    "doc": "Chunk overlap in characters. Default: 256",
+    "default_value": "256",
+    "since": "0.1",
+    "type_name": "usize"
+  },
+  {
+    "name": "gdpr_layers",
+    "env_var": "ANNO_GDPR_LAYERS",
+    "cli_flag": "--gdpr-layers",
+    "doc": "PII detection layer set: basic|defense|shadow|full. Default: defense",
+    "default_value": "\"defense\"",
+    "since": "0.10",
+    "type_name": "GdprLayerSet"
+  },
+  {
+    "name": "vector_index_threshold",
+    "env_var": "ANNO_RAG_VECTOR_INDEX_THRESHOLD",
+    "cli_flag": "--vector-index-threshold",
+    "doc": "Chunk count above which IVF_HNSW_SQ index is built. Default: 1000",
+    "default_value": "1000",
+    "since": "0.5",
+    "type_name": "usize"
+  },
+  {
+    "name": "ner_warmup_model",
+    "env_var": "ANNO_RAG_NER_WARMUP_MODEL",
+    "cli_flag": "--ner-warmup-model",
+    "doc": "HF Hub model ID to pre-warm on startup. Default: none",
+    "default_value": "null",
+    "since": "0.6",
+    "type_name": "Option<String>"
+  },
+  {
+    "name": "mcp_server_name",
+    "env_var": "ANNO_RAG_MCP_SERVER_NAME",
+    "cli_flag": "--mcp-server-name",
+    "doc": "MCP server name advertised on initialize. Default: anno-rag",
+    "default_value": "\"anno-rag\"",
+    "since": "0.3",
+    "type_name": "String"
+  },
+  {
+    "name": "ocr_mode",
+    "env_var": "ANNO_RAG_OCR_MODE",
+    "cli_flag": "--ocr-mode",
+    "doc": "OCR mode: off|auto_embedded. Default: off",
+    "default_value": "\"off\"",
+    "since": "0.11",
+    "type_name": "OcrMode"
+  },
+  {
+    "name": "enable_ocr",
+    "env_var": "ANNO_RAG_ENABLE_OCR",
+    "cli_flag": "--enable-ocr",
+    "doc": "[DEPRECATED] Use --ocr-mode auto_embedded instead. Default: false",
+    "default_value": "false",
+    "since": "0.4",
+    "type_name": "bool"
+  },
+  {
+    "name": "tesseract_path",
+    "env_var": "ANNO_RAG_TESSERACT_PATH",
+    "cli_flag": "--tesseract-path",
+    "doc": "[DEPRECATED] Legacy path to tesseract binary; ignored by embedded OCR. Default: none",
+    "default_value": "null",
+    "since": "0.4",
+    "type_name": "Option<PathBuf>"
+  },
+  {
+    "name": "ocr_batch_budget_secs",
+    "env_var": "ANNO_RAG_OCR_BATCH_BUDGET_SECS",
+    "cli_flag": "--ocr-batch-budget-secs",
+    "doc": "Per-folder OCR wall-clock budget in seconds. Default: none (unlimited)",
+    "default_value": "null",
+    "since": "0.11",
+    "type_name": "Option<u64>"
+  },
+  {
+    "name": "ocr_cache_enabled",
+    "env_var": "ANNO_RAG_OCR_CACHE_ENABLED",
+    "cli_flag": "--ocr-cache-enabled",
+    "doc": "Enable kreuzberg extraction cache. Default: true",
+    "default_value": "true",
+    "since": "0.11",
+    "type_name": "bool"
+  },
+  {
+    "name": "ocr_backend",
+    "env_var": "ANNO_RAG_OCR_BACKEND",
+    "cli_flag": "--ocr-backend",
+    "doc": "Primary OCR backend passed to kreuzberg (e.g. paddleocr). Default: none (tesseract)",
+    "default_value": "null",
+    "since": "0.12",
+    "type_name": "Option<String>"
+  },
+  {
+    "name": "advanced_pdf_native",
+    "env_var": "ANNO_RAG_ADVANCED_PDF_NATIVE",
+    "cli_flag": "--advanced-pdf-native",
+    "doc": "Native PDF extraction profile: off|structured. Default: off",
+    "default_value": "\"off\"",
+    "since": "0.11",
+    "type_name": "AdvancedPdfNativeMode"
+  },
+  {
+    "name": "pdf_keep_headers",
+    "env_var": "ANNO_RAG_PDF_KEEP_HEADERS",
+    "cli_flag": "--pdf-keep-headers",
+    "doc": "Preserve running headers in advanced native PDF. Default: false",
+    "default_value": "false",
+    "since": "0.11",
+    "type_name": "bool"
+  },
+  {
+    "name": "pdf_keep_footers",
+    "env_var": "ANNO_RAG_PDF_KEEP_FOOTERS",
+    "cli_flag": "--pdf-keep-footers",
+    "doc": "Preserve running footers in advanced native PDF. Default: false",
+    "default_value": "false",
+    "since": "0.11",
+    "type_name": "bool"
+  },
+  {
+    "name": "pdf_extract_annotations",
+    "env_var": "ANNO_RAG_PDF_EXTRACT_ANNOTATIONS",
+    "cli_flag": "--pdf-extract-annotations",
+    "doc": "Extract PDF annotations in advanced native PDF. Default: false",
+    "default_value": "false",
+    "since": "0.11",
+    "type_name": "bool"
+  },
+  {
+    "name": "pdf_hierarchy_clusters",
+    "env_var": "ANNO_RAG_PDF_HIERARCHY_CLUSTERS",
+    "cli_flag": "--pdf-hierarchy-clusters",
+    "doc": "Font-size cluster count for PDF hierarchy (1-7). Default: 6",
+    "default_value": "6",
+    "since": "0.11",
+    "type_name": "usize"
+  },
+  {
+    "name": "pdf_allow_single_column_tables",
+    "env_var": "ANNO_RAG_PDF_ALLOW_SINGLE_COLUMN_TABLES",
+    "cli_flag": "--pdf-allow-single-column-tables",
+    "doc": "Allow single-column pseudo-tables in PDF extraction. Default: false",
+    "default_value": "false",
+    "since": "0.11",
+    "type_name": "bool"
+  },
+  {
+    "name": "pdf_structured_sidecar",
+    "env_var": "ANNO_RAG_PDF_STRUCTURED_SIDECAR",
+    "cli_flag": "--pdf-structured-sidecar",
+    "doc": "Emit diagnostic structured sidecar for advanced PDFs. Default: false",
+    "default_value": "false",
+    "since": "0.12",
+    "type_name": "bool"
+  },
+  {
+    "name": "embedder_dtype",
+    "env_var": "ANNO_RAG_EMBEDDER_DTYPE",
+    "cli_flag": "--embedder-dtype",
+    "doc": "Embedder weight dtype: f32 (default) or f16 (experimental). Default: none (f32)",
+    "default_value": "null",
+    "since": "0.12",
+    "type_name": "Option<String>"
+  },
+  {
+    "name": "accelerator",
+    "env_var": "ANNO_ACCELERATOR",
+    "cli_flag": "--accelerator",
+    "doc": "Runtime accelerator: auto|cpu|metal|cuda. Default: auto",
+    "default_value": "\"auto\"",
+    "since": "0.10",
+    "type_name": "AcceleratorPreference"
+  },
+  {
+    "name": "rerank_model",
+    "env_var": "ANNO_RAG_RERANK_MODEL",
+    "cli_flag": "--rerank-model",
+    "doc": "HF Hub model ID for the cross-encoder reranker. Default: onnx-community/bge-reranker-v2-m3-ONNX",
+    "default_value": "\"onnx-community/bge-reranker-v2-m3-ONNX\"",
+    "since": "0.12",
+    "type_name": "String"
+  },
+  {
+    "name": "rerank_onnx_file",
+    "env_var": "ANNO_RAG_RERANK_ONNX_FILE",
+    "cli_flag": "--rerank-onnx-file",
+    "doc": "ONNX file within rerank_model. Default: onnx/model_int8.onnx",
+    "default_value": "\"onnx/model_int8.onnx\"",
+    "since": "0.12",
+    "type_name": "String"
+  },
+  {
+    "name": "rerank_pool_size",
+    "env_var": "ANNO_RAG_RERANK_POOL_SIZE",
+    "cli_flag": "--rerank-pool-size",
+    "doc": "RRF candidates to over-fetch before reranking. Default: 30",
+    "default_value": "30",
+    "since": "0.12",
+    "type_name": "usize"
+  },
+  {
+    "name": "rerank_batch_size",
+    "env_var": "ANNO_RAG_RERANK_BATCH_SIZE",
+    "cli_flag": "--rerank-batch-size",
+    "doc": "Max (query,passage) pairs per ONNX reranker batch. Default: 8",
+    "default_value": "8",
+    "since": "0.12",
+    "type_name": "usize"
+  },
+  {
+    "name": "memory_collection_name",
+    "env_var": "ANNO_RAG_MEMORY_COLLECTION_NAME",
+    "cli_flag": "--memory-collection-name",
+    "doc": "LanceDB collection name for memories. Default: memories",
+    "default_value": "\"memories\"",
+    "since": "0.8",
+    "type_name": "String"
+  },
+  {
+    "name": "memory_embedding_dim",
+    "env_var": "ANNO_RAG_MEMORY_EMBEDDING_DIM",
+    "cli_flag": "--memory-embedding-dim",
+    "doc": "Embedding dimension for memory vectors. Default: 384",
+    "default_value": "384",
+    "since": "0.8",
+    "type_name": "usize"
+  },
+  {
+    "name": "memory_ner_mode",
+    "env_var": "ANNO_RAG_MEMORY_NER_MODE",
+    "cli_flag": "--memory-ner-mode",
+    "doc": "NER mode for memory_save: disabled|async|sync. Default: async",
+    "default_value": "\"async\"",
+    "since": "0.9",
+    "type_name": "MemoryNerMode"
+  },
+  {
+    "name": "compaction_interval_secs",
+    "env_var": "ANNO_RAG_COMPACTION_INTERVAL_SECS",
+    "cli_flag": "--compaction-interval-secs",
+    "doc": "Seconds between background compactions. Default: 86400 (24h)",
+    "default_value": "86400",
+    "since": "0.9",
+    "type_name": "u64"
+  },
+  {
+    "name": "compaction_min_age_secs",
+    "env_var": "ANNO_RAG_COMPACTION_MIN_AGE_SECS",
+    "cli_flag": "--compaction-min-age-secs",
+    "doc": "Minimum tombstone age before compaction (seconds). Default: 3600",
+    "default_value": "3600",
+    "since": "0.9",
+    "type_name": "u64"
+  },
+  {
+    "name": "entity_aliases",
+    "env_var": "ANNO_RAG_ENTITY_ALIASES",
+    "cli_flag": "--entity-aliases",
+    "doc": "JSON object mapping canonical entity surface forms to substituted forms. Default: {}",
+    "default_value": "{}",
+    "since": "0.10",
+    "type_name": "std::collections::HashMap<String,String>"
+  },
+  {
+    "name": "conflict_cosine_threshold",
+    "env_var": "ANNO_RAG_CONFLICT_COSINE_THRESHOLD",
+    "cli_flag": "--conflict-cosine-threshold",
+    "doc": "Cosine threshold for memory conflict detection (0.0-1.0). Default: 0.85",
+    "default_value": "0.85",
+    "since": "0.10",
+    "type_name": "f32"
+  },
+  {
+    "name": "graph_max_hops",
+    "env_var": "ANNO_RAG_GRAPH_MAX_HOPS",
+    "cli_flag": "--graph-max-hops",
+    "doc": "Maximum BFS hop count for graph_recall. Default: 2",
+    "default_value": "2",
+    "since": "0.10",
+    "type_name": "u8"
+  },
+  {
+    "name": "graph_per_hop_limit",
+    "env_var": "ANNO_RAG_GRAPH_PER_HOP_LIMIT",
+    "cli_flag": "--graph-per-hop-limit",
+    "doc": "Max candidates per BFS hop in graph_recall. Default: 50",
+    "default_value": "50",
+    "since": "0.10",
+    "type_name": "usize"
+  }
+]

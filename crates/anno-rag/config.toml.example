@@ -1,0 +1,117 @@
+# anno-rag configuration file
+# Copy to ~/.anno-rag/config.toml and uncomment the fields you want to change.
+# All values shown are the defaults.
+
+# Root directory for vault, index, and model weights. Default: ~/.anno-rag (env: ANNO_RAG_DATA_DIR)
+# data_dir = "~/.anno-rag"
+
+# HuggingFace model ID for the embedder. Default: intfloat/multilingual-e5-small (env: ANNO_RAG_EMBED_MODEL)
+# embed_model = "intfloat/multilingual-e5-small"
+
+# Vector dimension; must match embedder output. Default: 384 (env: ANNO_RAG_EMBED_DIM)
+# embed_dim = 384
+
+# Default number of results returned by search. Default: 10 (env: ANNO_RAG_DEFAULT_TOP_K)
+# default_top_k = 10
+
+# Max chunk size in characters. Default: 2048 (env: ANNO_RAG_CHUNK_MAX_CHARS)
+# chunk_max_chars = 2048
+
+# Chunk overlap in characters. Default: 256 (env: ANNO_RAG_CHUNK_OVERLAP)
+# chunk_overlap = 256
+
+# PII detection layer set: basic|defense|shadow|full. Default: defense (env: ANNO_GDPR_LAYERS)
+# gdpr_layers = "defense"
+
+# Chunk count above which IVF_HNSW_SQ index is built. Default: 1000 (env: ANNO_RAG_VECTOR_INDEX_THRESHOLD)
+# vector_index_threshold = 1000
+
+# HF Hub model ID to pre-warm on startup. Default: none (env: ANNO_RAG_NER_WARMUP_MODEL)
+# ner_warmup_model = null
+
+# MCP server name advertised on initialize. Default: anno-rag (env: ANNO_RAG_MCP_SERVER_NAME)
+# mcp_server_name = "anno-rag"
+
+# OCR mode: off|auto_embedded. Default: off (env: ANNO_RAG_OCR_MODE)
+# ocr_mode = "off"
+
+# [DEPRECATED] Use --ocr-mode auto_embedded instead. Default: false (env: ANNO_RAG_ENABLE_OCR)
+# enable_ocr = false
+
+# [DEPRECATED] Legacy path to tesseract binary; ignored by embedded OCR. Default: none (env: ANNO_RAG_TESSERACT_PATH)
+# tesseract_path = null
+
+# Per-folder OCR wall-clock budget in seconds. Default: none (unlimited) (env: ANNO_RAG_OCR_BATCH_BUDGET_SECS)
+# ocr_batch_budget_secs = null
+
+# Enable kreuzberg extraction cache. Default: true (env: ANNO_RAG_OCR_CACHE_ENABLED)
+# ocr_cache_enabled = true
+
+# Primary OCR backend passed to kreuzberg (e.g. paddleocr). Default: none (tesseract) (env: ANNO_RAG_OCR_BACKEND)
+# ocr_backend = null
+
+# Native PDF extraction profile: off|structured. Default: off (env: ANNO_RAG_ADVANCED_PDF_NATIVE)
+# advanced_pdf_native = "off"
+
+# Preserve running headers in advanced native PDF. Default: false (env: ANNO_RAG_PDF_KEEP_HEADERS)
+# pdf_keep_headers = false
+
+# Preserve running footers in advanced native PDF. Default: false (env: ANNO_RAG_PDF_KEEP_FOOTERS)
+# pdf_keep_footers = false
+
+# Extract PDF annotations in advanced native PDF. Default: false (env: ANNO_RAG_PDF_EXTRACT_ANNOTATIONS)
+# pdf_extract_annotations = false
+
+# Font-size cluster count for PDF hierarchy (1-7). Default: 6 (env: ANNO_RAG_PDF_HIERARCHY_CLUSTERS)
+# pdf_hierarchy_clusters = 6
+
+# Allow single-column pseudo-tables in PDF extraction. Default: false (env: ANNO_RAG_PDF_ALLOW_SINGLE_COLUMN_TABLES)
+# pdf_allow_single_column_tables = false
+
+# Emit diagnostic structured sidecar for advanced PDFs. Default: false (env: ANNO_RAG_PDF_STRUCTURED_SIDECAR)
+# pdf_structured_sidecar = false
+
+# Embedder weight dtype: f32 (default) or f16 (experimental). Default: none (f32) (env: ANNO_RAG_EMBEDDER_DTYPE)
+# embedder_dtype = null
+
+# Runtime accelerator: auto|cpu|metal|cuda. Default: auto (env: ANNO_ACCELERATOR)
+# accelerator = "auto"
+
+# HF Hub model ID for the cross-encoder reranker. Default: onnx-community/bge-reranker-v2-m3-ONNX (env: ANNO_RAG_RERANK_MODEL)
+# rerank_model = "onnx-community/bge-reranker-v2-m3-ONNX"
+
+# ONNX file within rerank_model. Default: onnx/model_int8.onnx (env: ANNO_RAG_RERANK_ONNX_FILE)
+# rerank_onnx_file = "onnx/model_int8.onnx"
+
+# RRF candidates to over-fetch before reranking. Default: 30 (env: ANNO_RAG_RERANK_POOL_SIZE)
+# rerank_pool_size = 30
+
+# Max (query,passage) pairs per ONNX reranker batch. Default: 8 (env: ANNO_RAG_RERANK_BATCH_SIZE)
+# rerank_batch_size = 8
+
+# LanceDB collection name for memories. Default: memories (env: ANNO_RAG_MEMORY_COLLECTION_NAME)
+# memory_collection_name = "memories"
+
+# Embedding dimension for memory vectors. Default: 384 (env: ANNO_RAG_MEMORY_EMBEDDING_DIM)
+# memory_embedding_dim = 384
+
+# NER mode for memory_save: disabled|async|sync. Default: async (env: ANNO_RAG_MEMORY_NER_MODE)
+# memory_ner_mode = "async"
+
+# Seconds between background compactions. Default: 86400 (24h) (env: ANNO_RAG_COMPACTION_INTERVAL_SECS)
+# compaction_interval_secs = 86400
+
+# Minimum tombstone age before compaction (seconds). Default: 3600 (env: ANNO_RAG_COMPACTION_MIN_AGE_SECS)
+# compaction_min_age_secs = 3600
+
+# JSON object mapping canonical entity surface forms to substituted forms. Default: {} (env: ANNO_RAG_ENTITY_ALIASES)
+# entity_aliases = {}
+
+# Cosine threshold for memory conflict detection (0.0-1.0). Default: 0.85 (env: ANNO_RAG_CONFLICT_COSINE_THRESHOLD)
+# conflict_cosine_threshold = 0.85
+
+# Maximum BFS hop count for graph_recall. Default: 2 (env: ANNO_RAG_GRAPH_MAX_HOPS)
+# graph_max_hops = 2
+
+# Max candidates per BFS hop in graph_recall. Default: 50 (env: ANNO_RAG_GRAPH_PER_HOP_LIMIT)
+# graph_per_hop_limit = 50
