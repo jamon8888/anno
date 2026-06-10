@@ -10,6 +10,7 @@ members = [
     "crates/anno",
     "crates/anno-eval",
     "crates/anno-cli",
+    "crates/anno-config-meta",
     "crates/anno-rag",
     "crates/anno-rag-bin",
     "crates/anno-rag-mcp",
@@ -36,6 +37,9 @@ homepage = "https://docs.rs/anno"
 documentation = "https://docs.rs/anno"
 
 [workspace.dependencies]
+proc-macro2 = "1"
+quote       = "1"
+syn         = { version = "2", features = ["full"] }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 thiserror = "2"
