@@ -92,6 +92,18 @@ pub(crate) fn extract_config_meta_pub(field: &Field) -> Result<ConfigMetaAttrs, 
                 "config_meta requires `env = \"ANNO_...\"`",
             ));
         }
+        if cli.is_empty() {
+            return Err(Error::new_spanned(
+                field,
+                "config_meta requires `cli = \"--flag-name\"`",
+            ));
+        }
+        if doc.is_empty() {
+            return Err(Error::new_spanned(
+                field,
+                "config_meta requires `doc = \"description\"`",
+            ));
+        }
         return Ok(ConfigMetaAttrs { env, cli, doc, since });
     }
 
