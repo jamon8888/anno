@@ -3,11 +3,29 @@
 //! Run:  cargo run -p anno-rag --bin schema-gen --features generate-schema
 //! The three output files are committed and kept in sync by CI.
 
+/// Convert a serde_json Value to a TOML-compatible string representation.
+fn json_value_to_toml_repr(v: &serde_json::Value) -> String {
+    match v {
+        serde_json::Value::String(s) => format!("\"{}\"", s),
+        serde_json::Value::Bool(b) => b.to_string(),
+        serde_json::Value::Number(n) => n.to_string(),
+        serde_json::Value::Object(_) => "{}".to_string(),
+        serde_json::Value::Array(_) => "[]".to_string(),
+        serde_json::Value::Null => "# (unset by default)".to_string(),
+    }
+}
+
 fn main() {
     let schema = anno_rag::AnnoRagConfig::config_schema();
     let defaults = anno_rag::AnnoRagConfig::default();
     let defaults_json: serde_json::Value =
         serde_json::to_value(&defaults).expect("default config must serialize");
+    // Normalize data_dir to a platform-agnostic sentinel so the schema
+    // is reproducible across machines regardless of $HOME.
+    let mut defaults_json = defaults_json;
+    if let serde_json::Value::Object(ref mut map) = defaults_json {
+        map.insert("data_dir".to_string(), serde_json::Value::String("~/.anno-rag".to_string()));
+    }
 
     // 1. config-schema.json
     let schema_entries: Vec<serde_json::Value> = schema
@@ -50,12 +68,17 @@ fn main() {
         String::new(),
     ];
     for f in schema {
-        let default_val = defaults_json
-            .get(f.name)
-            .map(|v| v.to_string())
-            .unwrap_or_default();
+        let val = defaults_json.get(f.name);
         toml_lines.push(format!("# {} (env: {})", f.doc, f.env_var));
-        toml_lines.push(format!("# {} = {}", f.name, default_val));
+        match val {
+            None | Some(serde_json::Value::Null) => {
+                toml_lines.push(format!("# {} =  # (unset by default)", f.name));
+            }
+            Some(v) => {
+                let toml_repr = json_value_to_toml_repr(v);
+                toml_lines.push(format!("# {} = {}", f.name, toml_repr));
+            }
+        }
         toml_lines.push(String::new());
     }
 
@@ -75,13 +98,14 @@ fn main() {
         "|-------|---------|----------|---------|-------|-------------|".to_string(),
     ];
     for f in schema {
-        let default_val = defaults_json
-            .get(f.name)
-            .map(|v| v.to_string())
-            .unwrap_or_default();
+        let val = defaults_json.get(f.name);
+        let default_display = match val {
+            None | Some(serde_json::Value::Null) => "*(unset)*".to_string(),
+            Some(v) => format!("`{}`", json_value_to_toml_repr(v)),
+        };
         md_lines.push(format!(
-            "| `{}` | `{}` | `{}` | `{}` | {} | {} |",
-            f.name, f.env_var, f.cli_flag, default_val, f.since, f.doc
+            "| `{}` | `{}` | `{}` | {} | {} | {} |",
+            f.name, f.env_var, f.cli_flag, default_display, f.since, f.doc
         ));
     }
     md_lines.push(String::new());

@@ -27,7 +27,7 @@
 # vector_index_threshold = 1000
 
 # HF Hub model ID to pre-warm on startup. Default: none (env: ANNO_RAG_NER_WARMUP_MODEL)
-# ner_warmup_model = null
+# ner_warmup_model =  # (unset by default)
 
 # MCP server name advertised on initialize. Default: anno-rag (env: ANNO_RAG_MCP_SERVER_NAME)
 # mcp_server_name = "anno-rag"
@@ -39,16 +39,16 @@
 # enable_ocr = false
 
 # [DEPRECATED] Legacy path to tesseract binary; ignored by embedded OCR. Default: none (env: ANNO_RAG_TESSERACT_PATH)
-# tesseract_path = null
+# tesseract_path =  # (unset by default)
 
 # Per-folder OCR wall-clock budget in seconds. Default: none (unlimited) (env: ANNO_RAG_OCR_BATCH_BUDGET_SECS)
-# ocr_batch_budget_secs = null
+# ocr_batch_budget_secs =  # (unset by default)
 
 # Enable kreuzberg extraction cache. Default: true (env: ANNO_RAG_OCR_CACHE_ENABLED)
 # ocr_cache_enabled = true
 
 # Primary OCR backend passed to kreuzberg (e.g. paddleocr). Default: none (tesseract) (env: ANNO_RAG_OCR_BACKEND)
-# ocr_backend = null
+# ocr_backend =  # (unset by default)
 
 # Native PDF extraction profile: off|structured. Default: off (env: ANNO_RAG_ADVANCED_PDF_NATIVE)
 # advanced_pdf_native = "off"
@@ -72,7 +72,7 @@
 # pdf_structured_sidecar = false
 
 # Embedder weight dtype: f32 (default) or f16 (experimental). Default: none (f32) (env: ANNO_RAG_EMBEDDER_DTYPE)
-# embedder_dtype = null
+# embedder_dtype =  # (unset by default)
 
 # Runtime accelerator: auto|cpu|metal|cuda. Default: auto (env: ANNO_ACCELERATOR)
 # accelerator = "auto"
