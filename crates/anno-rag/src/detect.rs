@@ -404,6 +404,7 @@ pub struct Detector {
     ner: NerBackend,
     #[cfg(feature = "heuristic-fr")]
     heuristic_fr: anno::backends::heuristic_fr::HeuristicFrNer,
+    gdpr_layers: GdprLayerSet,
 }
 
 impl Detector {
@@ -437,6 +438,7 @@ impl Detector {
                 ner: NerBackend::Onnx(ner),
                 #[cfg(feature = "heuristic-fr")]
                 heuristic_fr: anno::backends::heuristic_fr::HeuristicFrNer::new(),
+                gdpr_layers: cfg.gdpr_layers,
             });
         }
         // ─────────────────────────────────────────────────────────────────────
@@ -446,6 +448,7 @@ impl Detector {
             ner: NerBackend::Onnx(ner),
             #[cfg(feature = "heuristic-fr")]
             heuristic_fr: anno::backends::heuristic_fr::HeuristicFrNer::new(),
+            gdpr_layers: cfg.gdpr_layers,
         })
     }
 
@@ -473,6 +476,7 @@ impl Detector {
                 ner: NerBackend::Candle(ner),
                 #[cfg(feature = "heuristic-fr")]
                 heuristic_fr: anno::backends::heuristic_fr::HeuristicFrNer::new(),
+                gdpr_layers: _cfg.gdpr_layers,
             });
         }
         let ner =
@@ -485,6 +489,7 @@ impl Detector {
             ner: NerBackend::Candle(ner),
             #[cfg(feature = "heuristic-fr")]
             heuristic_fr: anno::backends::heuristic_fr::HeuristicFrNer::new(),
+            gdpr_layers: _cfg.gdpr_layers,
         })
     }
 
@@ -541,7 +546,7 @@ impl Detector {
 
         // 1b. FR heuristics (defense layer and above).
         #[cfg(feature = "heuristic-fr")]
-        if GdprLayerSet::from_env().includes_heuristics() {
+        if self.gdpr_layers.includes_heuristics() {
             let labels = pii_label_set();
             let label_refs: Vec<&str> = labels.iter().copied().collect();
             if let Ok(heur_entities) = self.heuristic_fr.extract_with_types(text, &label_refs, 0.5)
@@ -576,7 +581,7 @@ impl Detector {
         dedup_overlaps(&mut all, text);
 
         // 4. Validators (defense layer and above).
-        let rejection_counts = if GdprLayerSet::from_env().includes_validators() {
+        let rejection_counts = if self.gdpr_layers.includes_validators() {
             let validators = default_validators();
             let (kept, counts) = apply_validators(all, text, &validators);
             all = kept;

@@ -4,6 +4,7 @@
 //! TOML file loading lands in v0.2.
 
 use crate::accelerator::AcceleratorPreference;
+use crate::layers::GdprLayerSet;
 use serde::{Deserialize, Serialize};
 use std::ffi::OsString;
 use std::path::PathBuf;
@@ -101,6 +102,11 @@ pub struct AnnoRagConfig {
     pub chunk_max_chars: usize,
     /// Chunk overlap in characters.
     pub chunk_overlap: usize,
+
+    /// GDPR detection layer set. Default: `defense`.
+    /// Overrideable via `ANNO_GDPR_LAYERS` env var.
+    #[serde(default)]
+    pub gdpr_layers: GdprLayerSet,
 
     /// Threshold (chunk count) at which `Store::maybe_build_index` will
     /// build an IVF_HNSW_SQ index on the vector column. Below this, flat
@@ -350,6 +356,7 @@ impl Default for AnnoRagConfig {
             default_top_k: 10,
             chunk_max_chars: 2048,
             chunk_overlap: 256,
+            gdpr_layers: GdprLayerSet::Defense,
             vector_index_threshold: default_vector_index_threshold(),
             ner_warmup_model: None,
             mcp_server_name: default_mcp_server_name(),
@@ -753,6 +760,23 @@ mod tests {
     fn ocr_backend_defaults_to_none() {
         let c = AnnoRagConfig::default();
         assert!(c.ocr_backend.is_none());
+    }
+
+    #[test]
+    fn gdpr_layers_defaults_to_defense() {
+        let c = AnnoRagConfig::default();
+        assert_eq!(c.gdpr_layers, crate::layers::GdprLayerSet::Defense);
+    }
+
+    #[test]
+    fn gdpr_layers_round_trips_through_toml() {
+        let c = AnnoRagConfig {
+            gdpr_layers: crate::layers::GdprLayerSet::Basic,
+            ..Default::default()
+        };
+        let s = serde_json::to_string(&c).expect("serialize");
+        let back: AnnoRagConfig = serde_json::from_str(&s).expect("deserialize");
+        assert_eq!(back.gdpr_layers, crate::layers::GdprLayerSet::Basic);
     }
 
     #[test]

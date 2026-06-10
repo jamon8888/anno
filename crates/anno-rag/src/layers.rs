@@ -3,7 +3,8 @@
 use std::str::FromStr;
 
 /// Tiered GDPR detection layer set, selected at runtime via `ANNO_GDPR_LAYERS`.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "snake_case")]
 pub enum GdprLayerSet {
     /// Regex + GLiNER2 only — original behaviour.
     Basic,
