@@ -997,8 +997,11 @@ impl Pipeline {
                 .memory_candidates_for_conflict(&m.entity_refs, m.session_id.as_deref())
                 .await?;
             for prior in &candidates {
-                if crate::conflict::resolves_conflict(&m, prior, self.cfg.conflict_cosine_threshold as f32)
-                {
+                if crate::conflict::resolves_conflict(
+                    &m,
+                    prior,
+                    self.cfg.conflict_cosine_threshold as f32,
+                ) {
                     self.store
                         .memory_update_valid_to(&prior.id, m.created_at)
                         .await?;
