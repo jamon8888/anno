@@ -75,6 +75,13 @@ pub(crate) fn sql_string_lit(value: &str) -> String {
     format!("'{}'", value.replace('\'', "''"))
 }
 
+fn is_lance_table_not_found(e: &lancedb::Error) -> bool {
+    let msg = e.to_string();
+    msg.contains("was not found")
+        || msg.contains("not found")
+        || msg.contains("does not exist")
+}
+
 /// LanceDB handle for legal enrichment.
 #[derive(Clone)]
 pub struct LegalStore {
@@ -95,22 +102,20 @@ impl LegalStore {
             .execute()
             .await
             .map_err(|err| Error::Legal(format!("legal_store connect: {err}")))?;
-        let names = conn
-            .table_names()
-            .execute()
-            .await
-            .map_err(|err| Error::Legal(format!("legal_store list: {err}")))?;
         let schema = legal_enrichment_schema();
-        let table = if names.iter().any(|name| name == LEGAL_ENRICHMENT_TABLE) {
-            conn.open_table(LEGAL_ENRICHMENT_TABLE).execute().await
-        } else {
-            let empty = RecordBatchIterator::new(std::iter::empty(), schema);
-            let reader: Box<dyn arrow_array::RecordBatchReader + Send> = Box::new(empty);
-            conn.create_table(LEGAL_ENRICHMENT_TABLE, reader)
-                .execute()
-                .await
-        }
-        .map_err(|err| Error::Legal(format!("legal_store open: {err}")))?;
+        let table = match conn.open_table(LEGAL_ENRICHMENT_TABLE).execute().await {
+            Ok(t) => t,
+            Err(e) if is_lance_table_not_found(&e) => {
+                tracing::info!("legal_chunk_enrichment table missing or corrupt — recreating");
+                let empty = RecordBatchIterator::new(std::iter::empty(), schema);
+                let reader: Box<dyn arrow_array::RecordBatchReader + Send> = Box::new(empty);
+                conn.create_table(LEGAL_ENRICHMENT_TABLE, reader)
+                    .execute()
+                    .await
+                    .map_err(|err| Error::Legal(format!("legal_store create: {err}")))?
+            }
+            Err(err) => return Err(Error::Legal(format!("legal_store open: {err}"))),
+        };
 
         Ok(Self { table })
     }
@@ -518,6 +523,24 @@ mod tests {
         let batch = legal_rows_to_record_batch(&[row]).expect("encodes ok");
         assert_eq!(batch.num_rows(), 1);
         assert_eq!(batch.num_columns(), 21);
+    }
+
+    #[tokio::test]
+    async fn open_recovers_when_versions_dir_missing() {
+        let dir = tempfile::tempdir().unwrap();
+        let index_path = dir.path().join("index.lance");
+        std::fs::create_dir_all(&index_path).unwrap();
+
+        // Simulate corrupt table: directory exists but _versions/ is absent
+        let orphan = index_path.join("legal_chunk_enrichment.lance");
+        std::fs::create_dir_all(orphan.join("_indices")).unwrap();
+
+        let cfg = crate::config::AnnoRagConfig {
+            data_dir: dir.path().to_path_buf(),
+            ..Default::default()
+        };
+        let result = LegalStore::open(&cfg).await;
+        assert!(result.is_ok(), "expected Ok, got: {:?}", result.err());
     }
 
     #[test]
