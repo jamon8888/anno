@@ -7,19 +7,22 @@ license      = "MIT OR Apache-2.0"
 description  = "Local GDPR-compliant document anonymizer + RAG service (French legal)"
 
 [features]
-default = ["heuristic-fr"]
+default = ["heuristic-fr", "embedded-ocr", "rerank"]
 heuristic-fr = ["anno/heuristic-fr"]
+generate-schema = []
+# Opt-in gate for heavy integration tests that require model downloads + LanceDB.
+# These tests are #[ignore]'d by default; compile them with:
+#   cargo test -p anno-rag --features dev-integration --test <name> -- --ignored
+dev-integration = []
 # Apple Silicon Metal acceleration for Candle-backed embedder/detector paths.
 gpu-metal = ["anno/gliner2-fastino-candle-metal", "anno/metal"]
 # Windows/Linux NVIDIA CUDA acceleration for ONNX-backed detector paths.
 gpu-cuda = ["anno/gliner2-fastino-cuda"]
-# Opt-in cross-encoder reranker (BGE-reranker-v2-m3 INT8 ONNX, ~571 MB
-# download on first use). Pulls ort + ndarray. Default off so plain
-# `cargo install anno-rag` users don't pay the model download.
+# Cross-encoder reranker (BGE-reranker-v2-m3 INT8 ONNX, ~571 MB download on
+# first use). In default features so the distributed binary always reranks.
 rerank = ["dep:ort", "dep:ndarray", "dep:is-terminal"]
-# Enables embedded Kreuzberg/Tesseract OCR. Runtime still defaults to
-# `ocr_mode = off`; callers must opt in with `ocr_mode = auto_embedded`
-# or the compatibility `--enable-ocr` CLI flag.
+# Embedded Kreuzberg/Tesseract OCR. In default features so the distributed
+# binary supports scanned PDFs. Runtime default is ocr_mode = auto_embedded.
 embedded-ocr = ["kreuzberg/ocr"]
 # Adds PaddleOCR as an automatic quality-based fallback behind Tesseract.
 # Requires `embedded-ocr`. kreuzberg's `effective_pipeline()` auto-constructs
@@ -28,6 +31,7 @@ ocr-paddle = ["kreuzberg/paddle-ocr", "kreuzberg/ocr"]
 
 [dependencies]
 anno            = { path = "../anno", features = ["gliner2-fastino"] }
+anno-config-meta = { path = "../anno-config-meta" }
 anno-corpus-core = { workspace = true }
 anno-knowledge-core = { path = "../anno-knowledge-core" }
 cloakpipe-core  = { path = "../../vendor/cloakpipe/crates/cloakpipe-core" }
@@ -90,6 +94,11 @@ insta           = { version = "1", features = ["yaml"] }
 criterion       = { version = "0.5", features = ["html_reports", "async_tokio"] }
 proptest        = "1"
 
+[[bin]]
+name = "schema-gen"
+path = "src/bin/schema_gen.rs"
+required-features = ["generate-schema"]
+
 [[bench]]
 name = "bench_cold_start"
 harness = false
@@ -127,6 +136,30 @@ harness = false
 [[bench]]
 name = "legal_eval"
 harness = false
+
+[[test]]
+name = "rerank_integration"
+required-features = ["rerank"]
+
+[[test]]
+name = "rerank_smoke"
+required-features = ["rerank"]
+
+[[test]]
+name = "e2e"
+required-features = ["dev-integration"]
+
+[[test]]
+name = "ingest_scale"
+required-features = ["dev-integration"]
+
+[[test]]
+name = "locomo_smoke"
+required-features = ["dev-integration"]
+
+[[test]]
+name = "memory_proptest"
+required-features = ["dev-integration"]
 
 [lints]
 workspace = true

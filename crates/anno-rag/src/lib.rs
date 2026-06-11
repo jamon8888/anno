@@ -24,6 +24,7 @@ pub mod accelerator;
 pub mod bench_cli;
 pub mod canonicalize;
 pub mod config;
+pub mod config_meta_types;
 pub mod conflict;
 pub mod detect;
 pub mod docx_instructions;

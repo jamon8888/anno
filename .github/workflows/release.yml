@@ -398,6 +398,15 @@ jobs:
           name: artifacts-mcpb-${{ join(matrix.targets, '_') }}
           path: ${{ env.MCPB_NAME }}
 
+      # ANNO-PATCH: attach config artifacts to release archive — re-apply after every `dist generate`.
+      - name: Bundle config artifacts
+        shell: bash
+        run: |
+          TARGET="${{ join(matrix.targets, '-') }}"
+          cp crates/anno-rag/config-schema.json    "target/${TARGET}/dist/"
+          cp crates/anno-rag/config.toml.example   "target/${TARGET}/dist/"
+          cp docs/reference/configuration.md       "target/${TARGET}/dist/CONFIGURATION.md"
+
       - id: cargo-dist
         name: Post-build
         # We force bash here just because github makes it really hard to get values up

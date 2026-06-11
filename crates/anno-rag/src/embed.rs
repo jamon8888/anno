@@ -1,8 +1,8 @@
-//! Embed text with `intfloat/multilingual-e5-small` via candle.
+//! Embed text via candle (default: `OrdalieTech/Solon-embeddings-large-0.1`).
 //!
-//! 118M params, 384-dim, 100+ languages. Weights are fetched from HuggingFace
-//! Hub on first use and cached under `cfg.models_cache()` (via hf-hub's own
-//! cache resolution). CPU-only in v0.1; GPU support is a v0.2 opt-in feature.
+//! Weights are fetched from HuggingFace Hub on first use and cached under
+//! `cfg.models_cache()`. The local cache subdirectory is derived from the last
+//! component of `cfg.embed_model` (e.g. `Solon-embeddings-large-0.1/`).
 //!
 //! Following the e5 convention, every input is prefixed with `"passage: "`
 //! before tokenization. The final embedding is mean-pooled (weighted by the
@@ -40,7 +40,12 @@ impl Embedder {
             .filter(|value| !value.is_empty())
             .map(std::path::PathBuf::from)
             .unwrap_or_else(|| cfg.models_cache());
-        let base = local_models_dir.join("multilingual-e5-small");
+        let model_subdir = cfg
+            .embed_model
+            .split('/')
+            .next_back()
+            .unwrap_or(cfg.embed_model.as_str());
+        let base = local_models_dir.join(model_subdir);
         let config_path = base.join("config.json");
         let tokenizer_path = base.join("tokenizer.json");
         let weights_path = base.join("model.safetensors");
@@ -294,7 +299,7 @@ mod tests {
         assert!(cfg.embedder_dtype.is_none(), "default leaves dtype unset");
         let e = Embedder::load(&cfg).await.expect("f32 load");
         let v = e.embed_batch(&["Bonjour".into()]).expect("embed");
-        assert_eq!(v[0].len(), 384);
+        assert_eq!(v[0].len(), 1024);
     }
 
     #[tokio::test]
@@ -306,7 +311,7 @@ mod tests {
         };
         let e = Embedder::load(&cfg).await.expect("f16 load");
         let v = e.embed_batch(&["Bonjour".into()]).expect("embed");
-        assert_eq!(v[0].len(), 384);
+        assert_eq!(v[0].len(), 1024);
     }
 
     #[tokio::test]
@@ -315,14 +320,19 @@ mod tests {
         // Embedder::load must enter the local branch and fail with a "(local)"
         // error — proving the fast-path is taken when all 3 files are present.
         let dir = tempfile::tempdir().expect("tempdir");
-        let e5_dir = dir.path().join("multilingual-e5-small");
-        std::fs::create_dir_all(&e5_dir).expect("mkdir");
-        std::fs::write(e5_dir.join("config.json"), b"not json").expect("config");
-        std::fs::write(e5_dir.join("tokenizer.json"), b"not json").expect("tok");
-        std::fs::write(e5_dir.join("model.safetensors"), b"not safetensors").expect("weights");
+        let cfg = crate::config::AnnoRagConfig::default();
+        let model_subdir = cfg
+            .embed_model
+            .split('/')
+            .next_back()
+            .unwrap_or(&cfg.embed_model);
+        let embed_dir = dir.path().join(model_subdir);
+        std::fs::create_dir_all(&embed_dir).expect("mkdir");
+        std::fs::write(embed_dir.join("config.json"), b"not json").expect("config");
+        std::fs::write(embed_dir.join("tokenizer.json"), b"not json").expect("tok");
+        std::fs::write(embed_dir.join("model.safetensors"), b"not safetensors").expect("weights");
 
         let _models_dir = crate::env_guard::ScopedAnnoModelsDir::set(dir.path());
-        let cfg = crate::config::AnnoRagConfig::default();
         let result = Embedder::load(&cfg).await;
 
         let err = match result {
@@ -343,11 +353,16 @@ mod tests {
             data_dir: dir.path().to_path_buf(),
             ..Default::default()
         };
-        let e5_dir = cfg.models_cache().join("multilingual-e5-small");
-        std::fs::create_dir_all(&e5_dir).expect("mkdir");
-        std::fs::write(e5_dir.join("config.json"), b"not json").expect("config");
-        std::fs::write(e5_dir.join("tokenizer.json"), b"not json").expect("tok");
-        std::fs::write(e5_dir.join("model.safetensors"), b"not safetensors").expect("weights");
+        let model_subdir = cfg
+            .embed_model
+            .split('/')
+            .next_back()
+            .unwrap_or(&cfg.embed_model);
+        let embed_dir = cfg.models_cache().join(model_subdir);
+        std::fs::create_dir_all(&embed_dir).expect("mkdir");
+        std::fs::write(embed_dir.join("config.json"), b"not json").expect("config");
+        std::fs::write(embed_dir.join("tokenizer.json"), b"not json").expect("tok");
+        std::fs::write(embed_dir.join("model.safetensors"), b"not safetensors").expect("weights");
 
         let _models_dir = crate::env_guard::ScopedAnnoModelsDir::unset();
         let result = Embedder::load(&cfg).await;
@@ -370,12 +385,18 @@ mod tests {
         // (it would attempt HF network), so we verify the directory existence
         // check logic compiles correctly and the fast-path condition is false.
         let dir = tempfile::tempdir().expect("tempdir");
-        std::fs::create_dir_all(dir.path().join("multilingual-e5-small")).expect("mkdir");
-        let e5_dir = dir.path().join("multilingual-e5-small");
+        let cfg = crate::config::AnnoRagConfig::default();
+        let model_subdir = cfg
+            .embed_model
+            .split('/')
+            .next_back()
+            .unwrap_or(&cfg.embed_model);
+        let embed_dir = dir.path().join(model_subdir);
+        std::fs::create_dir_all(&embed_dir).expect("mkdir");
         // Exactly 0 of the 3 files exist → fast-path must not trigger
-        let has_all = e5_dir.join("config.json").exists()
-            && e5_dir.join("tokenizer.json").exists()
-            && e5_dir.join("model.safetensors").exists();
+        let has_all = embed_dir.join("config.json").exists()
+            && embed_dir.join("tokenizer.json").exists()
+            && embed_dir.join("model.safetensors").exists();
         assert!(!has_all, "empty dir must not trigger local-load path");
     }
 }

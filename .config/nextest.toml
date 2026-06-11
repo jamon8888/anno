@@ -99,6 +99,10 @@ failure-output = "immediate"
 # Show only failures — keep the terminal clean during fast iteration
 status-level = "fail"
 test-threads = "num-cpus"
+# Limit build parallelism to prevent OOM when linking many integration test
+# binaries that all mmap the large anno_rag rlib simultaneously (os error 1455
+# on Windows with 16 GB RAM).
+build-jobs = 2
 # Kill any test that takes > 30s — those belong in CI, not the local loop
 slow-timeout = { period = "30s", terminate-after = 1 }
 # Exclude integration tests, ML model tests, and database tests.

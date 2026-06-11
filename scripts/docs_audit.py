@@ -141,15 +141,29 @@ def check_banned_strings(repo_root: Path) -> int:
     ]
     patterns = [(s, re.compile(s)) for s in banned]
 
+    # Files that are exempt from the banned-string check:
+    # - schema_gen.rs: the generator binary that writes to docs/reference/ by design
+    # - docs/superpowers/{plans,specs}: planning artifacts that may reference proposed paths
+    exempt_rel: set[Path] = {Path("crates/anno-rag/src/bin/schema_gen.rs")}
+    exempt_prefixes = (
+        Path("docs") / "superpowers" / "plans",
+        Path("docs") / "superpowers" / "specs",
+    )
+
     offenders: list[tuple[Path, str]] = []
     for p in iter_tracked_text_files(repo_root):
+        rel = p.relative_to(repo_root)
+        if rel in exempt_rel:
+            continue
+        if any(rel.parts[: len(pfx.parts)] == pfx.parts for pfx in exempt_prefixes):
+            continue
         try:
             text = p.read_text(encoding="utf-8", errors="replace")
         except Exception:
             continue
         for raw, pat in patterns:
             if pat.search(text):
-                offenders.append((p.relative_to(repo_root), raw))
+                offenders.append((rel, raw))
 
     if not offenders:
         print("OK: no banned stale references found.")
