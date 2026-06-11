@@ -1065,7 +1065,7 @@ mod tests {
     #[test]
     fn defaults_are_sensible() {
         let c = AnnoRagConfig::default();
-        assert_eq!(c.embed_dim, 384);
+        assert_eq!(c.embed_dim, 1024);
         assert!(c.default_top_k > 0);
         assert!(c.chunk_max_chars > c.chunk_overlap);
     }
@@ -1224,6 +1224,7 @@ mod tests {
     fn legacy_enable_ocr_maps_to_auto_embedded() {
         let c = AnnoRagConfig {
             enable_ocr: true,
+            ocr_mode: OcrMode::Off, // explicitly exercise the legacy compat path
             ..Default::default()
         };
 
@@ -1446,13 +1447,13 @@ mod tests {
         let cfg = AnnoRagConfig::load_from_file(Some(&toml_path), None).expect("load");
 
         assert_eq!(cfg.default_top_k, 42);
-        assert_eq!(cfg.embed_dim, 384); // unchanged default
+        assert_eq!(cfg.embed_dim, 1024); // unchanged default
     }
 
     #[test]
     fn load_with_no_file_returns_defaults() {
         let cfg = AnnoRagConfig::load_from_file(None, None).expect("load");
-        assert_eq!(cfg.embed_dim, 384);
+        assert_eq!(cfg.embed_dim, 1024);
         assert_eq!(cfg.default_top_k, 10);
     }
 }

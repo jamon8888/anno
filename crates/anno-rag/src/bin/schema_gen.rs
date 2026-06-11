@@ -50,7 +50,8 @@ fn main() {
         })
         .collect();
 
-    let schema_json = serde_json::to_string_pretty(&schema_entries).expect("schema must serialize");
+    let schema_json =
+        serde_json::to_string_pretty(&schema_entries).expect("schema must serialize") + "\n";
 
     let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
         .parent() // crates/
@@ -106,9 +107,10 @@ fn main() {
             None | Some(serde_json::Value::Null) => "*(unset)*".to_string(),
             Some(v) => format!("`{}`", json_value_to_toml_repr(v)),
         };
+        let doc_escaped = f.doc.replace('|', r"\|");
         md_lines.push(format!(
             "| `{}` | `{}` | `{}` | {} | {} | {} |",
-            f.name, f.env_var, f.cli_flag, default_display, f.since, f.doc
+            f.name, f.env_var, f.cli_flag, default_display, f.since, doc_escaped
         ));
     }
     md_lines.push(String::new());
@@ -116,7 +118,7 @@ fn main() {
 
     let docs_path = root.join("docs/reference/configuration.md");
     std::fs::create_dir_all(docs_path.parent().unwrap()).expect("create docs/reference");
-    std::fs::write(&docs_path, md_lines.join("\n")).expect("write configuration.md");
+    std::fs::write(&docs_path, md_lines.join("\n") + "\n").expect("write configuration.md");
     eprintln!("wrote {}", docs_path.display());
 
     println!("Schema generation complete.");
