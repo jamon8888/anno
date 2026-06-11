@@ -96,11 +96,60 @@ and must be designed together:
 ### Components
 
 - `apps/anno-control/` — Tauri v2 app (React frontend + Rust `src-tauri`).
-- `crates/anno-control-core/` — Rust library: engine-state file, audit reader,
-  vault control, corpus/model/config readers, CLI invokers, `RegulatoryProfile`.
+- `crates/anno-control-core/` — Rust library that owns **pure file/OS operations** with
+  no engine instance and no vault key: engine-state file (read/write/sign), audit
+  read+verify, hardware probe, `config.toml` + Claude Desktop config, `RegulatoryProfile`.
   Tauri commands are thin wrappers; all logic and tests live here.
+- `anno-rag control <verb> --json` — the **Engine Control Contract** (Phase 0): a
+  versioned-JSON CLI namespace for anything that needs a `Pipeline` (vault_stats,
+  erasure, corpus ops). `anno-control-core` shells out to it as short-lived processes.
 - Engine instrumentation in existing `anno-rag` crates (kill-switch enforcement,
-  egress ledger, hash-chained audit, erasure receipts, oversight log, provenance).
+  egress ledger, hash-chained audit, erasure certificate, oversight log, provenance).
+
+### Boundary split (avoids the two-engine hazard)
+
+Two `Pipeline`s touching the same vault + LanceDB would risk corruption. So the boundary
+is split by whether an operation needs the engine:
+
+- **Pure file/OS ops → `anno-control-core` directly** (kill-switch flip, audit read,
+  hardware probe, config read/write). Cheap, synchronous, no vault key.
+- **Engine ops → `anno-rag control` CLI, short-lived** (vault_stats, erasure, corpus).
+  One process, one op, exits — never a second long-lived Pipeline alongside the
+  Claude-Desktop-spawned MCP server.
+
+## Engine Control Contract (Phase 0 — build first)
+
+A codebase audit found the engine surface is **half-built and inconsistent**: some
+commands emit JSON (`diagnose-gpu`, `vault status`), most print human text; audit is
+`tracing`-only with no persistent hash-chained store; there is no kill-switch, no egress
+ledger. Building the Tauri app against that moving target would bake in fragility. So a
+**Phase 0 engine control contract is built first**, before any Tauri code.
+
+### Reuse (already present)
+
+- `anno-rag setup-mcp` — Claude Desktop config write (Win/macOS detection, backup,
+  atomic temp write), Claude Code args, `anno_health` verification (~70% of onboarding).
+- `anno-rag diagnose-gpu` — JSON accelerator diagnostics (hardware probe).
+- `anno-rag vault status` / `rotate` — JSON keyring status, never echoes the key.
+- `Pipeline::forget() -> ErasureReceipt` — erasure receipt primitive already exists.
+- `Pipeline::vault_stats()`, `vault_admin`, `config` modules — structured library API.
+
+### Build (Phase 0 additions)
+
+- **Versioned JSON envelope** — `{schema_version, ok, data | error}` and an
+  `anno-rag control <verb> --json` namespace; bring the already-JSON commands under one
+  stable, versioned contract.
+- **Hash-chained audit log** — append-only write + read + verify, replacing the
+  scattered `tracing`-only `legal/audit.rs` events. Foundation for inspection export and
+  every kill-switch / erasure event.
+- **Engine-state kill-switch** — `engine-state.json` read + signed write; the MCP server
+  and the control CLI both honor it per-call; panic mode drops the vault key.
+- **Egress ledger** — record/expose outbound calls for the sovereignty proof.
+- **Formalize** the hardware report (stable `diagnose-gpu` schema) and the **erasure
+  certificate** (wrap the existing `ErasureReceipt`).
+
+Phase 0 also depends on the in-flight config-management work (`config-schema.json`,
+`AnnoRagConfig::load`) for the settings contract; that PR should land first.
 
 ## The On/Off Kill-Switch
 
@@ -271,6 +320,14 @@ features — just the empty socket they plug into.
 Ordered by dependency, not by pillar: vault and audit are load-bearing for the
 compliance cockpit. Each phase is independently demoable to a client.
 
+### Phase 0 — Engine control contract (engine-side, no UI)
+
+The versioned `anno-rag control --json` namespace; hash-chained audit log; engine-state
+kill-switch enforcement (MCP + control CLI, vault-key drop); egress ledger; formalized
+hardware report + erasure certificate. Depends on the config-management PR landing.
+Ship value: a stable, testable engine boundary — no Tauri code yet, but everything after
+targets a fixed contract instead of a moving surface.
+
 ### Phase 1 — Safety spine (walking skeleton)
 
 Tauri shell + `anno-control-core` + command boundary; Claude Desktop wiring/onboarding
@@ -360,6 +417,8 @@ Packaging:
 | Risk | Mitigation |
 |---|---|
 | Treated as a frontend skin, guarantees become theater | Co-design engine instrumentation per the table; test the guarantees, not the UI |
+| UI built against a half-JSON/half-text engine surface | Phase 0 control contract first; versioned JSON envelope with contract tests; UI targets a fixed schema |
+| Two live Pipelines corrupt vault/index | Boundary split: file/OS ops in anno-control-core; engine ops via short-lived control CLI, never a second long-lived Pipeline |
 | Poll-based monitoring feels stale | Short intervals for health; event-driven file-watch on audit log + engine-state |
 | Concurrent vault/index writers corrupt state | Tauri is reader + config writer; mutating actions go through the engine or run while idle |
 | Kill-switch re-enabled by a sync tool | Signed state file; engine rejects unsigned/mismatched records |
