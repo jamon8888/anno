@@ -321,7 +321,11 @@ mod tests {
         // error — proving the fast-path is taken when all 3 files are present.
         let dir = tempfile::tempdir().expect("tempdir");
         let cfg = crate::config::AnnoRagConfig::default();
-        let model_subdir = cfg.embed_model.split('/').next_back().unwrap_or(&cfg.embed_model);
+        let model_subdir = cfg
+            .embed_model
+            .split('/')
+            .next_back()
+            .unwrap_or(&cfg.embed_model);
         let embed_dir = dir.path().join(model_subdir);
         std::fs::create_dir_all(&embed_dir).expect("mkdir");
         std::fs::write(embed_dir.join("config.json"), b"not json").expect("config");
@@ -349,7 +353,11 @@ mod tests {
             data_dir: dir.path().to_path_buf(),
             ..Default::default()
         };
-        let model_subdir = cfg.embed_model.split('/').next_back().unwrap_or(&cfg.embed_model);
+        let model_subdir = cfg
+            .embed_model
+            .split('/')
+            .next_back()
+            .unwrap_or(&cfg.embed_model);
         let embed_dir = cfg.models_cache().join(model_subdir);
         std::fs::create_dir_all(&embed_dir).expect("mkdir");
         std::fs::write(embed_dir.join("config.json"), b"not json").expect("config");
@@ -378,7 +386,11 @@ mod tests {
         // check logic compiles correctly and the fast-path condition is false.
         let dir = tempfile::tempdir().expect("tempdir");
         let cfg = crate::config::AnnoRagConfig::default();
-        let model_subdir = cfg.embed_model.split('/').next_back().unwrap_or(&cfg.embed_model);
+        let model_subdir = cfg
+            .embed_model
+            .split('/')
+            .next_back()
+            .unwrap_or(&cfg.embed_model);
         let embed_dir = dir.path().join(model_subdir);
         std::fs::create_dir_all(&embed_dir).expect("mkdir");
         // Exactly 0 of the 3 files exist → fast-path must not trigger
