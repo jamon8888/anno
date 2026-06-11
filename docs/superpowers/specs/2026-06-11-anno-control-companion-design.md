@@ -48,6 +48,8 @@ The app leads with **two co-equal pillars**: a **trust & compliance cockpit** an
 - No document editor or workflow execution screens (deferred to the workbench phase).
 - No tax/accounting features (only the seam that will later receive them).
 - No modification of original source documents.
+- The premium sovereign LLM gateway is a later phase (Phase 6), not part of the core v1
+  control plane — only its entitlement seam is introduced early.
 
 ## Architecture
 
@@ -266,6 +268,54 @@ solve — which is exactly where the control plane adds unique value.
 - Every auto-applied profile writes an audit event and stores the hardware report, so a
   regulated install can reproduce exactly why a configuration was chosen.
 
+## Premium: Sovereign LLM Gateway
+
+The `anno-privacy-gateway` crate is already a complete sovereign LLM proxy: a
+loopback-only axum server that pseudonymizes PII, routes to a chosen provider, and
+rehydrates the response (streaming included). It supports a single `openai_compatible`
+provider abstraction (`base_url` + `api_key_env`), per-provider `dpa_verified` and
+`allowed_privacy_modes`, and three privacy modes: `pseudonymized`, `cleartext-dpa`,
+`cleartext-local`. Proven providers include Mistral and OVH AI Endpoints (EU sovereign).
+See `2026-06-06-cowork-3p-sovereign-gateway-design.md`.
+
+This is offered as a **premium tier** that unlocks connecting to LLMs other than
+Anthropic — cloud (OpenAI, Mistral, OVH, …) and **local models** (e.g. Gemma via
+Ollama/llama.cpp at an OpenAI-compatible endpoint, in `cleartext-local` mode where
+nothing leaves the machine).
+
+### Architecture fit — data plane, not control plane
+
+The gateway is a local HTTP listener, which seems to violate the "no daemon / no HTTP
+server" rule. It does not: that rule governs the **control plane** (Tauri ↔ engine). The
+gateway is a **data-plane proxy** that must listen because LLM clients connect to it. So
+it is a **separate managed process** (the existing `anno-privacy-gateway` bin), and the
+Tauri control plane supervises its lifecycle exactly as it supervises `anno-rag` — Tauri
+itself still has no listener. The gateway is a second managed engine, behind the
+entitlement gate. Its bind stays loopback-only with a bearer token.
+
+### Integration work (not building the proxy — it exists)
+
+1. **Entitlement gate** — an offline, Ed25519-signed license token verified locally in
+   `anno-control-core` (no phone-home, works air-gapped). Unlocks the "LLM Providers"
+   surface and permits starting the gateway process.
+2. **Provider keys → OS keyring (security gap to close).** Keys come from plaintext env
+   vars today (`api_key_env`); the app must store them in the keyring and inject them
+   into the gateway env at spawn (or extend the gateway to resolve from keyring). No
+   plaintext provider keys on disk.
+3. **Provider + privacy-policy matrix UI** — per provider: endpoint, region,
+   `dpa_verified`, allowed privacy modes, models. This is the premium UX.
+4. **Wire gateway traffic into existing surfaces** — its audit, `fresh_pii_redacted`,
+   and egress flow into the Phase 0 audit log + egress ledger + sovereignty proof, so the
+   cockpit covers gateway calls too.
+5. **Client wiring** — onboarding points the LLM client's base_url at the local gateway
+   (reusing the Claude Desktop wiring machinery).
+
+### Tiers
+
+- **Free** — Anthropic via Claude Desktop + local-only RAG; no gateway.
+- **Premium** — multi-provider cloud routing with per-provider RGPD policy, plus
+  local-LLM routing (`cleartext-local`) for models like Gemma.
+
 ## Frontend Stack
 
 A control-plane dashboard with heavy tables, schema-driven forms, and poll-based data.
@@ -368,6 +418,15 @@ processing; DPIA status; Art.14 human-oversight log; model/version provenance vi
 Composes audit + vault + provenance + egress, so it is deliberately last.
 Ship value: turns logged truth into regulator-ready documents.
 
+### Phase 6 — Premium: sovereign LLM gateway
+
+Offline signed-license entitlement seam; supervise the `anno-privacy-gateway` process
+lifecycle; provider keys in OS keyring; provider + privacy-policy matrix UI; wire gateway
+audit/egress/PII-redaction into the cockpit; client base_url wiring; local-LLM
+(`cleartext-local`) provider support for Gemma-class models. Depends on Phase 0 (audit +
+egress) and the compliance cockpit (Phases 2/4).
+Ship value: the premium tier — safely use non-Anthropic and local LLMs on legal data.
+
 Trade-off: this is trust-spine-first, so operational ergonomics (Phase 3) land third,
 not first. Phases 2 and 3 may swap if the app should feel useful-as-a-control-panel
 sooner, at the cost of building the evidence generator on a less-mature audit layer.
@@ -419,6 +478,9 @@ Packaging:
 | Treated as a frontend skin, guarantees become theater | Co-design engine instrumentation per the table; test the guarantees, not the UI |
 | UI built against a half-JSON/half-text engine surface | Phase 0 control contract first; versioned JSON envelope with contract tests; UI targets a fixed schema |
 | Two live Pipelines corrupt vault/index | Boundary split: file/OS ops in anno-control-core; engine ops via short-lived control CLI, never a second long-lived Pipeline |
+| Premium gateway listener undermines "no server" stance | Gateway is a data-plane proxy (must listen), supervised as a separate process; loopback-only + bearer token; control plane stays listener-free |
+| Provider API keys leak from plaintext env/config | Keys in OS keyring, injected at gateway spawn; never written to disk in cleartext |
+| Cleartext routing to a non-DPA provider | Privacy mode enforced per provider (`allowed_privacy_modes` + `dpa_verified`); cockpit + egress ledger record provider, mode, and PII redacted per call |
 | Poll-based monitoring feels stale | Short intervals for health; event-driven file-watch on audit log + engine-state |
 | Concurrent vault/index writers corrupt state | Tauri is reader + config writer; mutating actions go through the engine or run while idle |
 | Kill-switch re-enabled by a sync tool | Signed state file; engine rejects unsigned/mismatched records |
