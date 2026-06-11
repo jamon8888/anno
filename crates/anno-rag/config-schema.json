@@ -321,7 +321,7 @@
     "doc": "Cosine threshold for memory conflict detection (0.0-1.0). Default: 0.85",
     "default_value": "0.85",
     "since": "0.10",
-    "type_name": "f32"
+    "type_name": "f64"
   },
   {
     "name": "graph_max_hops",

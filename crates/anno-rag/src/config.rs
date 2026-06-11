@@ -596,7 +596,7 @@ pub struct AnnoRagConfig {
         since = "0.10"
     )]
     #[serde(default = "default_conflict_cosine_threshold")]
-    pub conflict_cosine_threshold: f32,
+    pub conflict_cosine_threshold: f64,
 
     /// Maximum hop count for `Pipeline::graph_recall`. Default 2.
     /// Caps the BFS depth over `entity_refs`; higher values risk
@@ -639,7 +639,7 @@ fn default_compaction_min_age_secs() -> u64 {
     3600
 }
 
-fn default_conflict_cosine_threshold() -> f32 {
+fn default_conflict_cosine_threshold() -> f64 {
     0.85
 }
 
