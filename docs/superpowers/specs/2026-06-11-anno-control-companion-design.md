@@ -32,6 +32,8 @@ operations teams that, alongside Claude Desktop, can:
 - control the encrypted vault (lock/unlock, keyring binding, backup);
 - prove a local-only posture ("nothing left this machine");
 - manage indexed folders/corpora and models;
+- detect the machine's hardware and auto-install the right accelerated build (Metal /
+  CUDA / CPU) with a recommended performance profile;
 - edit configuration through a UI instead of TOML;
 - show a tamper-evident audit trail and export an inspection pack;
 - generate RGPD and EU AI Act evidence from that audit trail.
@@ -89,6 +91,7 @@ and must be designed together:
 | RGPD Art.17 erasure cert | `memory_forget` + vault purge emit a verifiable receipt |
 | AI Act human-oversight log | Record who validated which AI-proposed field |
 | Model provenance | Stamp outputs with model/adapter/version/thresholds |
+| Hardware auto-tuning | `diagnose-gpu` emits a machine-readable hardware/accelerator report the UI can parse |
 
 ### Components
 
@@ -170,6 +173,49 @@ UI: one prominent green/amber/red toggle with current actor/timestamp and a
    downloads/updates, disk usage, accelerator (CPU/GPU).
 9. **Settings-as-UI** — a form rendered from `config-schema.json` (the config-management
    work already shipped) instead of hand-editing TOML.
+10. **Hardware-aware auto-tuning** — probe the machine, install the correct accelerated
+    build, verify it, and apply a recommended performance profile (see the dedicated
+    section below).
+
+## Hardware-Aware Auto-Tuning
+
+### The key constraint: acceleration is compile-time, not just runtime
+
+The engine already detects the accelerator at runtime (`ANNO_ACCELERATOR=auto` →
+`AcceleratorDecision`, plus a `diagnose-gpu` subcommand). But GPU support is gated into
+**separate binaries** at build time (`release-accelerated.yml`):
+
+- Apple Silicon → Metal build (`aarch64-apple-darwin`, `--features gpu-metal`);
+- Windows + NVIDIA → CUDA build (`x86_64-pc-windows-msvc`);
+- everything else → CPU build.
+
+`accelerator=auto` cannot turn a CPU build into a GPU one. So "optimize automatically"
+is fundamentally an **install-time binary-selection problem** the runtime flag cannot
+solve — which is exactly where the control plane adds unique value.
+
+### Three layers (v1 ships all three: full auto-tuning profile)
+
+1. **Hardware probe (onboarding)** — OS/arch, CPU cores, RAM, GPU vendor + VRAM.
+   Cross-platform via `wgpu` adapter enumeration (Metal / DX12 / Vulkan) or platform
+   APIs.
+2. **Pick + install the correct build** — map probe → {Metal aarch64 / CUDA x86_64-win /
+   CPU}, download the matching release artifact, then run `diagnose-gpu` to confirm the
+   GPU actually works (not merely "present").
+3. **Apply a recommended performance profile** — write into `config.toml`: `accelerator`,
+   embedder `dtype`, reranker ONNX variant (`int8` for CPU/low-VRAM vs `q4f16` for GPU),
+   batch sizes, and `vector_index_threshold`, sized to detected RAM/VRAM. Applied in one
+   click with a visible "recommended vs. override" toggle; the chosen values land in
+   `config.toml` so the decision is auditable and reproducible.
+
+### Caveats baked in
+
+- `f16` dtype can produce degenerate (NaN) vectors on CPU (per the engine's own note),
+  so it is GPU-only and validated — never auto-enabled on CPU.
+- `q4f16` reranker (702 MB) is recommended only when VRAM allows; `int8` otherwise.
+- An AMD/Intel Windows GPU with no matching accelerated build is reported truthfully
+  ("GPU found, no accelerated build → using CPU") rather than silently pretending.
+- Every auto-applied profile writes an audit event and stores the hardware report, so a
+  regulated install can reproduce exactly why a configuration was chosen.
 
 ## Frontend Stack
 
@@ -228,9 +274,11 @@ compliance cockpit. Each phase is independently demoable to a client.
 ### Phase 1 — Safety spine (walking skeleton)
 
 Tauri shell + `anno-control-core` + command boundary; Claude Desktop wiring/onboarding
-(register MCP server, engine-compat check, verify connection); engine lifecycle/health/
-version; the three-state kill-switch.
-Ship value: "Install it, it wires Anno into Claude Desktop, and you get a panic button."
+(register MCP server, engine-compat check, verify connection); **hardware probe +
+correct accelerated-build selection + `diagnose-gpu` verify + set `accelerator`**;
+engine lifecycle/health/version; the three-state kill-switch.
+Ship value: "Install it, it detects your hardware, installs the right build, wires Anno
+into Claude Desktop, and you get a panic button."
 
 ### Phase 2 — Audit core + vault control
 
@@ -242,8 +290,12 @@ This is the foundation the evidence generator stands on.
 ### Phase 3 — Operational surfaces
 
 Folder & corpus management; model & resource manager; settings-as-UI (rendered from
-`config-schema.json`). Parallelizable; depend only on Phase 1 + the config work shipped.
-Ship value: the app becomes the daily driver — no more TOML, no CLI.
+`config-schema.json`); the **full hardware auto-tuning profile** (dtype, reranker
+variant, batch sizes, index threshold sized to RAM/VRAM) as a re-runnable, one-click
+recommended-vs-override action. Parallelizable; depend only on Phase 1 + the config work
+shipped.
+Ship value: the app becomes the daily driver — no more TOML, no CLI, and it tunes itself
+to the machine.
 
 ### Phase 4 — Sovereignty proof
 
@@ -314,11 +366,17 @@ Packaging:
 | v1 scope (9 areas) overruns | Strict phase boundaries; each phase ships independently |
 | Tax/accounting creeps into v1 | RegulatoryProfile seam with exactly one profile; tax features deferred to their own spec |
 | Cloud LLM (tabular) undermines local-only claim | Provider inventory flags cloud providers explicitly; sovereignty badge reflects actual configuration |
+| Wrong accelerated build installed for hardware | Probe → build map verified by `diagnose-gpu` post-install; fall back to CPU build and report truthfully if GPU fails |
+| f16 auto-tuning produces NaN vectors on CPU | f16 is GPU-only and validated; never auto-enabled on CPU |
+| Auto-applied profile hurts reproducibility on regulated installs | Every profile writes the hardware report + chosen values to config.toml + audit; override always available |
 
 ## Success Criteria
 
 - A user can install the app, wire Anno into Claude Desktop, and pass the engine-compat
   check.
+- On first run the app probes hardware, installs the correct accelerated build
+  (Metal / CUDA / CPU), verifies it with `diagnose-gpu`, and applies a recommended
+  performance profile — all overridable, all recorded to config.toml + audit.
 - Flipping the kill-switch to panic instantly makes every Anno tool refuse and drops the
   vault key, with an audit event recorded.
 - The audit log is hash-chained and an inspection pack can be exported.
