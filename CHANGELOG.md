@@ -4,6 +4,29 @@ All notable changes to the `anno-rag` crate are documented here. Other crates in
 
 Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Semver: pre-1.0 minor versions may introduce breaking changes.
 
+## [0.13.0] — 2026-06-11
+
+### Added
+- **Unified config management** — every configuration field now reachable via TOML file (`~/.anno-rag/config.toml`), environment variable, **and** CLI flag
+- **`anno-config-meta` proc-macro crate** — `ConfigMeta` + `ConfigCliArgs` derives generate `config_schema()` metadata and a `ConfigOverrides` clap struct from `#[config_meta(env, cli, doc, since)]` annotations
+- **`AnnoRagConfig::load()` pipeline** — layered config resolution: defaults → TOML file → env vars → CLI overrides; `serde(default)` on all fields for partial TOML
+- **38 CLI flags** — `#[command(flatten)] config: ConfigOverrides` in `Ingest` and `Search` subcommands; all fields controllable without touching a config file
+- **`anno-rag config init|show|validate`** — copies bundled example, shows field sources (`[default]`/`[env: ...]`/`[file: ...]`), validates TOML
+- **CI `config-schema` job** — re-runs schema-gen and asserts `git diff --exit-code` on generated artifacts
+- **Release artifacts** — `config-schema.json` + `config.toml.example` bundled alongside binaries
+- **Comprehensive docs** — `docs/CONFIGURATION.md` + `docs/reference/configuration.md` with full field reference
+
+### Fixed
+- **Workspace-hack fix** — `candle-core/metal` moved to `[target.'cfg(target_os = "macos"')]`, `cuda` to Linux-only; prevents `objc2` compile error on Windows
+- **Proc-macro path fix** — `::anno_rag::config_meta_types` → `crate::config_meta_types` in generated code (E0433)
+- **`GdprLayerSet::FromStr::Err`** — `()` → `String` for clap `ValueParser` compatibility
+- **Integration test fixes** — `required-features = ["rerank"]` for rerank tests; `required-features = ["dev-integration"]` for 4 heavy tests; `build-jobs = 2` in nextest local profile to prevent OOM on 16 GB RAM
+
+### Changed
+- Workspace version bumped 0.12.3 → 0.13.0
+
+---
+
 ## [0.12.3] — 2026-06-10
 
 ### Fixed
