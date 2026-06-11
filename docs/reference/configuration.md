@@ -7,16 +7,16 @@ Precedence (lowest → highest): defaults → `~/.anno-rag/config.toml` → env 
 | Field | Env var | CLI flag | Default | Since | Description |
 |-------|---------|----------|---------|-------|-------------|
 | `data_dir` | `ANNO_RAG_DATA_DIR` | `--data-dir` | `"~/.anno-rag"` | 0.1 | Root directory for vault, index, and model weights. Default: ~/.anno-rag |
-| `embed_model` | `ANNO_RAG_EMBED_MODEL` | `--embed-model` | `"intfloat/multilingual-e5-small"` | 0.1 | HuggingFace model ID for the embedder. Default: intfloat/multilingual-e5-small |
-| `embed_dim` | `ANNO_RAG_EMBED_DIM` | `--embed-dim` | `384` | 0.1 | Vector dimension; must match embedder output. Default: 384 |
+| `embed_model` | `ANNO_RAG_EMBED_MODEL` | `--embed-model` | `"OrdalieTech/Solon-embeddings-large-0.1"` | 0.1 | HuggingFace model ID for the embedder. Default: OrdalieTech/Solon-embeddings-large-0.1 |
+| `embed_dim` | `ANNO_RAG_EMBED_DIM` | `--embed-dim` | `1024` | 0.1 | Vector dimension; must match embedder output. Default: 1024 |
 | `default_top_k` | `ANNO_RAG_DEFAULT_TOP_K` | `--default-top-k` | `10` | 0.1 | Default number of results returned by search. Default: 10 |
 | `chunk_max_chars` | `ANNO_RAG_CHUNK_MAX_CHARS` | `--chunk-max-chars` | `2048` | 0.1 | Max chunk size in characters. Default: 2048 |
 | `chunk_overlap` | `ANNO_RAG_CHUNK_OVERLAP` | `--chunk-overlap` | `256` | 0.1 | Chunk overlap in characters. Default: 256 |
 | `gdpr_layers` | `ANNO_GDPR_LAYERS` | `--gdpr-layers` | `"defense"` | 0.10 | PII detection layer set: basic\|defense\|shadow\|full. Default: defense |
 | `vector_index_threshold` | `ANNO_RAG_VECTOR_INDEX_THRESHOLD` | `--vector-index-threshold` | `1000` | 0.5 | Chunk count above which IVF_HNSW_SQ index is built. Default: 1000 |
-| `ner_warmup_model` | `ANNO_RAG_NER_WARMUP_MODEL` | `--ner-warmup-model` | *(unset)* | 0.6 | HF Hub model ID to pre-warm on startup. Default: none |
+| `ner_warmup_model` | `ANNO_RAG_NER_WARMUP_MODEL` | `--ner-warmup-model` | `"fastino/gliner2-multi-v1"` | 0.6 | HF Hub model ID to pre-warm on startup. Default: fastino/gliner2-multi-v1 |
 | `mcp_server_name` | `ANNO_RAG_MCP_SERVER_NAME` | `--mcp-server-name` | `"anno-rag"` | 0.3 | MCP server name advertised on initialize. Default: anno-rag |
-| `ocr_mode` | `ANNO_RAG_OCR_MODE` | `--ocr-mode` | `"off"` | 0.11 | OCR mode: off\|auto_embedded. Default: off |
+| `ocr_mode` | `ANNO_RAG_OCR_MODE` | `--ocr-mode` | `"auto_embedded"` | 0.11 | OCR mode: off\|auto_embedded. Default: auto_embedded |
 | `enable_ocr` | `ANNO_RAG_ENABLE_OCR` | `--enable-ocr` | `false` | 0.4 | [DEPRECATED] Use --ocr-mode auto_embedded instead. Default: false |
 | `tesseract_path` | `ANNO_RAG_TESSERACT_PATH` | `--tesseract-path` | *(unset)* | 0.4 | [DEPRECATED] Legacy path to tesseract binary; ignored by embedded OCR. Default: none |
 | `ocr_batch_budget_secs` | `ANNO_RAG_OCR_BATCH_BUDGET_SECS` | `--ocr-batch-budget-secs` | *(unset)* | 0.11 | Per-folder OCR wall-clock budget in seconds. Default: none (unlimited) |
@@ -36,7 +36,7 @@ Precedence (lowest → highest): defaults → `~/.anno-rag/config.toml` → env 
 | `rerank_pool_size` | `ANNO_RAG_RERANK_POOL_SIZE` | `--rerank-pool-size` | `30` | 0.12 | RRF candidates to over-fetch before reranking. Default: 30 |
 | `rerank_batch_size` | `ANNO_RAG_RERANK_BATCH_SIZE` | `--rerank-batch-size` | `8` | 0.12 | Max (query,passage) pairs per ONNX reranker batch. Default: 8 |
 | `memory_collection_name` | `ANNO_RAG_MEMORY_COLLECTION_NAME` | `--memory-collection-name` | `"memories"` | 0.8 | LanceDB collection name for memories. Default: memories |
-| `memory_embedding_dim` | `ANNO_RAG_MEMORY_EMBEDDING_DIM` | `--memory-embedding-dim` | `384` | 0.8 | Embedding dimension for memory vectors. Default: 384 |
+| `memory_embedding_dim` | `ANNO_RAG_MEMORY_EMBEDDING_DIM` | `--memory-embedding-dim` | `1024` | 0.8 | Embedding dimension for memory vectors. Default: 1024 |
 | `memory_ner_mode` | `ANNO_RAG_MEMORY_NER_MODE` | `--memory-ner-mode` | `"async"` | 0.9 | NER mode for memory_save: disabled\|async\|sync. Default: async |
 | `compaction_interval_secs` | `ANNO_RAG_COMPACTION_INTERVAL_SECS` | `--compaction-interval-secs` | `86400` | 0.9 | Seconds between background compactions. Default: 86400 (24h) |
 | `compaction_min_age_secs` | `ANNO_RAG_COMPACTION_MIN_AGE_SECS` | `--compaction-min-age-secs` | `3600` | 0.9 | Minimum tombstone age before compaction (seconds). Default: 3600 |

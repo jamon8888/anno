@@ -289,7 +289,7 @@ pub struct AnnoRagConfig {
     #[config_meta(
         env = "ANNO_RAG_NER_WARMUP_MODEL",
         cli = "--ner-warmup-model",
-        doc = "HF Hub model ID to pre-warm on startup. Default: SemplificaAI/gliner2-multi-v1-onnx",
+        doc = "HF Hub model ID to pre-warm on startup. Default: fastino/gliner2-multi-v1",
         since = "0.6"
     )]
     #[serde(default = "default_ner_warmup_model")]
@@ -309,7 +309,7 @@ pub struct AnnoRagConfig {
     #[config_meta(
         env = "ANNO_RAG_OCR_MODE",
         cli = "--ocr-mode",
-        doc = "OCR mode: off|auto_embedded. Default: off",
+        doc = "OCR mode: off|auto_embedded. Default: auto_embedded",
         since = "0.11"
     )]
     #[serde(default = "default_ocr_mode")]
