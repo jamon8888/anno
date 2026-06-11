@@ -11,8 +11,6 @@ const NER_MODEL_ID: &str = "SemplificaAI/gliner2-multi-v1-onnx";
 /// Candle/PyTorch GLiNER2 repo used by Metal sidecars.
 #[cfg(feature = "gpu-metal")]
 const CANDLE_NER_MODEL_ID: &str = "fastino/gliner2-multi-v1";
-/// Embedder HuggingFace repo id.
-const EMBED_MODEL_ID: &str = "intfloat/multilingual-e5-small";
 
 /// The eight base names of GLiNER2-Fastino's ONNX graphs (fp32_v2 layout).
 const NER_ONNX_BASES: &[&str] = &[
@@ -37,27 +35,31 @@ const NER_ONNX_BASES: &[&str] = &[
 /// [`Error::Io`] on filesystem errors.
 pub async fn download(cfg: &AnnoRagConfig) -> Result<PathBuf> {
     let models_dir = cfg.models_cache();
-    download_embedder(&models_dir).await?;
+    download_embedder(&models_dir, &cfg.embed_model).await?;
     download_ner(&models_dir).await?;
     #[cfg(feature = "gpu-metal")]
     download_candle_ner(&models_dir).await?;
     Ok(models_dir)
 }
 
-async fn download_embedder(models_dir: &Path) -> Result<()> {
-    let e5_dir = models_dir.join("multilingual-e5-small");
-    tokio::fs::create_dir_all(&e5_dir).await?;
+async fn download_embedder(models_dir: &Path, model_id: &str) -> Result<()> {
+    let subdir = model_id
+        .split('/')
+        .next_back()
+        .unwrap_or(model_id);
+    let embed_dir = models_dir.join(subdir);
+    tokio::fs::create_dir_all(&embed_dir).await?;
 
     let api =
         hf_hub::api::tokio::Api::new().map_err(|e| Error::Embed(format!("hf-hub init: {e}")))?;
-    let repo = api.model(EMBED_MODEL_ID.to_string());
+    let repo = api.model(model_id.to_string());
 
     // config.json
     let src = repo
         .get("config.json")
         .await
         .map_err(|e| Error::Embed(format!("config.json fetch: {e}")))?;
-    tokio::fs::copy(&src, e5_dir.join("config.json")).await?;
+    tokio::fs::copy(&src, embed_dir.join("config.json")).await?;
     println!("  embedder config.json    ... ok");
 
     // tokenizer.json
@@ -65,7 +67,7 @@ async fn download_embedder(models_dir: &Path) -> Result<()> {
         .get("tokenizer.json")
         .await
         .map_err(|e| Error::Embed(format!("tokenizer.json fetch: {e}")))?;
-    tokio::fs::copy(&src, e5_dir.join("tokenizer.json")).await?;
+    tokio::fs::copy(&src, embed_dir.join("tokenizer.json")).await?;
     println!("  embedder tokenizer.json ... ok");
 
     // weights — model.safetensors preferred, pytorch_model.bin fallback
@@ -80,16 +82,14 @@ async fn download_embedder(models_dir: &Path) -> Result<()> {
         }
     };
     let size_mb = std::fs::metadata(&src).map(|m| m.len()).unwrap_or(0) as f64 / 1_048_576.0;
-    tokio::fs::copy(&src, e5_dir.join(dest_name)).await?;
-    // e5-small ships model.safetensors; the pytorch_model.bin branch is a
-    // defensive fallback. NOTE: a raw .bin cannot be mmap-loaded as safetensors
-    // — if this branch ever fires the downstream Embedder::load will error at
-    // VarBuilder::from_mmaped_safetensors. Left as-is so the download at least
-    // completes; the error is surfaced at load time with a clear message.
+    tokio::fs::copy(&src, embed_dir.join(dest_name)).await?;
+    // safetensors is preferred; pytorch_model.bin is a defensive fallback.
+    // NOTE: a raw .bin cannot be mmap-loaded as safetensors — the error is
+    // surfaced at load time with a clear message.
     if dest_name == "pytorch_model.bin" {
         tokio::fs::copy(
-            e5_dir.join("pytorch_model.bin"),
-            e5_dir.join("model.safetensors"),
+            embed_dir.join("pytorch_model.bin"),
+            embed_dir.join("model.safetensors"),
         )
         .await?;
     }

@@ -30,8 +30,9 @@ The config file is optional. If it does not exist, all defaults apply.
 
 ### Enable OCR for scanned PDFs
 
-OCR is off by default. Enable it once the `embedded-ocr` Cargo feature is compiled in
-(the distributed binary ships with it).
+OCR is on by default (`auto_embedded`). The `embedded-ocr` Cargo feature must be
+compiled in — the distributed binary ships with it and sets `ocr_mode = "auto_embedded"`
+out of the box.
 
 **Config file:**
 ```toml
@@ -64,10 +65,11 @@ ocr_backend = "paddleocr"
 
 ### Switch the embedding model
 
-The default is `intfloat/multilingual-e5-small` (384-dim). To use a larger model:
+The default is `OrdalieTech/Solon-embeddings-large-0.1` (1024-dim), a French legal
+embedding model from OrdalieTech.
 
 ```toml
-embed_model = "intfloat/multilingual-e5-large"
+embed_model = "OrdalieTech/Solon-embeddings-large-0.1"
 embed_dim   = 1024
 ```
 
@@ -75,37 +77,39 @@ embed_dim   = 1024
 If you change this on an existing index you must re-ingest all documents — the stored
 vectors will have the wrong dimension.
 
-Common multilingual models and their dims:
+Other validated models and their dims:
 
-| Model | Dim |
-|-------|-----|
-| `intfloat/multilingual-e5-small` | 384 |
-| `intfloat/multilingual-e5-base`  | 768 |
-| `intfloat/multilingual-e5-large` | 1024 |
-| `BAAI/bge-m3`                    | 1024 |
+| Model | Dim | Notes |
+|-------|-----|-------|
+| `OrdalieTech/Solon-embeddings-large-0.1` | 1024 | **Default** — French legal |
+| `intfloat/multilingual-e5-small` | 384 | Lightweight multilingual |
+| `intfloat/multilingual-e5-base`  | 768 | Multilingual, balanced |
+| `intfloat/multilingual-e5-large` | 1024 | Multilingual, high recall |
+| `BAAI/bge-m3`                    | 1024 | Multilingual, top-tier |
 
 ---
 
 ### Set the GLiNER / NER warmup model
 
-anno-rag pre-warms an NER model at startup. The default is determined by the
-`anno` backend (currently `urchade/gliner_multi-v2.1`). To pin a specific model:
+anno-rag pre-warms an NER model at startup. The default is `fastino/gliner2-multi-v1`,
+the GLiNER2 Candle/LoRA model optimised for French legal NER.
 
 ```toml
-ner_warmup_model = "urchade/gliner_multi-v2.1"
+ner_warmup_model = "fastino/gliner2-multi-v1"
 ```
 
 Other validated GLiNER variants:
 
 | Model | Notes |
 |-------|-------|
-| `urchade/gliner_multi-v2.1` | Default, multilingual, balanced |
+| `fastino/gliner2-multi-v1` | **Default** — GLiNER2 Candle LoRA, French legal |
+| `urchade/gliner_multi-v2.1` | Multilingual, balanced |
 | `urchade/gliner_large-v2.1` | Higher recall, more RAM |
 | `numind/NuNER_Zero`          | Zero-shot NER, lighter |
 
 To disable NER warmup (saves ~30 s cold start, NER runs on first request):
 ```toml
-# ner_warmup_model is unset — omit the line entirely
+ner_warmup_model = ""   # empty string disables warmup
 ```
 
 ---
@@ -318,16 +322,16 @@ anno-rag search "clause résiliation" \
 | Field | Env var | CLI flag | Type | Default | Since |
 |-------|---------|----------|------|---------|-------|
 | `data_dir` | `ANNO_RAG_DATA_DIR` | `--data-dir` | path | `~/.anno-rag` | 0.1 |
-| `embed_model` | `ANNO_RAG_EMBED_MODEL` | `--embed-model` | string | `intfloat/multilingual-e5-small` | 0.1 |
-| `embed_dim` | `ANNO_RAG_EMBED_DIM` | `--embed-dim` | usize | `384` | 0.1 |
+| `embed_model` | `ANNO_RAG_EMBED_MODEL` | `--embed-model` | string | `OrdalieTech/Solon-embeddings-large-0.1` | 0.1 |
+| `embed_dim` | `ANNO_RAG_EMBED_DIM` | `--embed-dim` | usize | `1024` | 0.1 |
 | `default_top_k` | `ANNO_RAG_DEFAULT_TOP_K` | `--default-top-k` | usize | `10` | 0.1 |
 | `chunk_max_chars` | `ANNO_RAG_CHUNK_MAX_CHARS` | `--chunk-max-chars` | usize | `2048` | 0.1 |
 | `chunk_overlap` | `ANNO_RAG_CHUNK_OVERLAP` | `--chunk-overlap` | usize | `256` | 0.1 |
 | `gdpr_layers` | `ANNO_GDPR_LAYERS` | `--gdpr-layers` | `basic\|defense\|shadow\|full` | `defense` | 0.10 |
 | `vector_index_threshold` | `ANNO_RAG_VECTOR_INDEX_THRESHOLD` | `--vector-index-threshold` | usize | `1000` | 0.5 |
-| `ner_warmup_model` | `ANNO_RAG_NER_WARMUP_MODEL` | `--ner-warmup-model` | string? | _(unset)_ | 0.6 |
+| `ner_warmup_model` | `ANNO_RAG_NER_WARMUP_MODEL` | `--ner-warmup-model` | string? | `fastino/gliner2-multi-v1` | 0.6 |
 | `mcp_server_name` | `ANNO_RAG_MCP_SERVER_NAME` | `--mcp-server-name` | string | `anno-rag` | 0.3 |
-| `ocr_mode` | `ANNO_RAG_OCR_MODE` | `--ocr-mode` | `off\|auto_embedded` | `off` | 0.11 |
+| `ocr_mode` | `ANNO_RAG_OCR_MODE` | `--ocr-mode` | `off\|auto_embedded` | `auto_embedded` | 0.11 |
 | `enable_ocr` | `ANNO_RAG_ENABLE_OCR` | `--enable-ocr` | bool | `false` | 0.4 |
 | `ocr_batch_budget_secs` | `ANNO_RAG_OCR_BATCH_BUDGET_SECS` | `--ocr-batch-budget-secs` | u64? | _(unlimited)_ | 0.11 |
 | `ocr_cache_enabled` | `ANNO_RAG_OCR_CACHE_ENABLED` | `--ocr-cache-enabled` | bool | `true` | 0.11 |
@@ -346,7 +350,7 @@ anno-rag search "clause résiliation" \
 | `rerank_pool_size` | `ANNO_RAG_RERANK_POOL_SIZE` | `--rerank-pool-size` | usize | `30` | 0.12 |
 | `rerank_batch_size` | `ANNO_RAG_RERANK_BATCH_SIZE` | `--rerank-batch-size` | usize | `8` | 0.12 |
 | `memory_collection_name` | `ANNO_RAG_MEMORY_COLLECTION_NAME` | `--memory-collection-name` | string | `memories` | 0.8 |
-| `memory_embedding_dim` | `ANNO_RAG_MEMORY_EMBEDDING_DIM` | `--memory-embedding-dim` | usize | `384` | 0.8 |
+| `memory_embedding_dim` | `ANNO_RAG_MEMORY_EMBEDDING_DIM` | `--memory-embedding-dim` | usize | `1024` | 0.8 |
 | `memory_ner_mode` | `ANNO_RAG_MEMORY_NER_MODE` | `--memory-ner-mode` | `disabled\|async\|sync` | `async` | 0.9 |
 | `compaction_interval_secs` | `ANNO_RAG_COMPACTION_INTERVAL_SECS` | `--compaction-interval-secs` | u64 | `86400` | 0.9 |
 | `compaction_min_age_secs` | `ANNO_RAG_COMPACTION_MIN_AGE_SECS` | `--compaction-min-age-secs` | u64 | `3600` | 0.9 |
@@ -367,11 +371,11 @@ anno-rag search "clause résiliation" \
 # Storage
 data_dir = "/opt/anno-rag/data"
 
-# Embedder — multilingual-e5-base for better recall
-embed_model = "intfloat/multilingual-e5-base"
-embed_dim   = 768
+# Embedder — Solon-large (default, 1024-dim, French legal)
+embed_model = "OrdalieTech/Solon-embeddings-large-0.1"
+embed_dim   = 1024
 
-# OCR — embedded Kreuzberg, 3-minute budget per folder
+# OCR — enabled by default; set a 3-minute budget per folder
 ocr_mode              = "auto_embedded"
 ocr_batch_budget_secs = 180
 
@@ -381,8 +385,8 @@ pdf_keep_headers      = false
 pdf_keep_footers      = false
 pdf_extract_annotations = true
 
-# NER — GLiNER model, pre-warm on startup
-ner_warmup_model = "urchade/gliner_multi-v2.1"
+# NER — fastino GLiNER2, pre-warm on startup (default)
+ner_warmup_model = "fastino/gliner2-multi-v1"
 
 # GPU — auto-detect best available
 accelerator = "auto"

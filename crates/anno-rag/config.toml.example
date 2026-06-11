@@ -5,11 +5,11 @@
 # Root directory for vault, index, and model weights. Default: ~/.anno-rag (env: ANNO_RAG_DATA_DIR)
 # data_dir = "~/.anno-rag"
 
-# HuggingFace model ID for the embedder. Default: intfloat/multilingual-e5-small (env: ANNO_RAG_EMBED_MODEL)
-# embed_model = "intfloat/multilingual-e5-small"
+# HuggingFace model ID for the embedder. Default: OrdalieTech/Solon-embeddings-large-0.1 (env: ANNO_RAG_EMBED_MODEL)
+# embed_model = "OrdalieTech/Solon-embeddings-large-0.1"
 
-# Vector dimension; must match embedder output. Default: 384 (env: ANNO_RAG_EMBED_DIM)
-# embed_dim = 384
+# Vector dimension; must match embedder output. Default: 1024 (env: ANNO_RAG_EMBED_DIM)
+# embed_dim = 1024
 
 # Default number of results returned by search. Default: 10 (env: ANNO_RAG_DEFAULT_TOP_K)
 # default_top_k = 10
@@ -26,14 +26,14 @@
 # Chunk count above which IVF_HNSW_SQ index is built. Default: 1000 (env: ANNO_RAG_VECTOR_INDEX_THRESHOLD)
 # vector_index_threshold = 1000
 
-# HF Hub model ID to pre-warm on startup. Default: none (env: ANNO_RAG_NER_WARMUP_MODEL)
-# ner_warmup_model =  # (unset by default)
+# HF Hub model ID to pre-warm on startup. Default: fastino/gliner2-multi-v1 (env: ANNO_RAG_NER_WARMUP_MODEL)
+# ner_warmup_model = "fastino/gliner2-multi-v1"
 
 # MCP server name advertised on initialize. Default: anno-rag (env: ANNO_RAG_MCP_SERVER_NAME)
 # mcp_server_name = "anno-rag"
 
-# OCR mode: off|auto_embedded. Default: off (env: ANNO_RAG_OCR_MODE)
-# ocr_mode = "off"
+# OCR mode: off|auto_embedded. Default: auto_embedded (env: ANNO_RAG_OCR_MODE)
+# ocr_mode = "auto_embedded"
 
 # [DEPRECATED] Use --ocr-mode auto_embedded instead. Default: false (env: ANNO_RAG_ENABLE_OCR)
 # enable_ocr = false
@@ -92,8 +92,8 @@
 # LanceDB collection name for memories. Default: memories (env: ANNO_RAG_MEMORY_COLLECTION_NAME)
 # memory_collection_name = "memories"
 
-# Embedding dimension for memory vectors. Default: 384 (env: ANNO_RAG_MEMORY_EMBEDDING_DIM)
-# memory_embedding_dim = 384
+# Embedding dimension for memory vectors. Default: 1024 (env: ANNO_RAG_MEMORY_EMBEDDING_DIM)
+# memory_embedding_dim = 1024
 
 # NER mode for memory_save: disabled|async|sync. Default: async (env: ANNO_RAG_MEMORY_NER_MODE)
 # memory_ner_mode = "async"

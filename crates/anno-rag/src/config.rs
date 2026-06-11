@@ -44,7 +44,7 @@ pub enum OcrMode {
 }
 
 fn default_ocr_mode() -> OcrMode {
-    OcrMode::Off
+    OcrMode::AutoEmbedded
 }
 
 impl std::str::FromStr for OcrMode {
@@ -172,12 +172,16 @@ fn default_memory_ner_mode() -> MemoryNerMode {
     MemoryNerMode::Async
 }
 
+fn default_ner_warmup_model() -> Option<String> {
+    Some("fastino/gliner2-multi-v1".to_string())
+}
+
 fn default_embed_model() -> String {
-    "intfloat/multilingual-e5-small".to_string()
+    "OrdalieTech/Solon-embeddings-large-0.1".to_string()
 }
 
 fn default_embed_dim() -> usize {
-    384
+    1024
 }
 
 fn default_default_top_k() -> usize {
@@ -215,7 +219,7 @@ pub struct AnnoRagConfig {
     #[config_meta(
         env = "ANNO_RAG_EMBED_MODEL",
         cli = "--embed-model",
-        doc = "HuggingFace model ID for the embedder. Default: intfloat/multilingual-e5-small",
+        doc = "HuggingFace model ID for the embedder. Default: OrdalieTech/Solon-embeddings-large-0.1",
         since = "0.1"
     )]
     #[serde(default = "default_embed_model")]
@@ -224,7 +228,7 @@ pub struct AnnoRagConfig {
     #[config_meta(
         env = "ANNO_RAG_EMBED_DIM",
         cli = "--embed-dim",
-        doc = "Vector dimension; must match embedder output. Default: 384",
+        doc = "Vector dimension; must match embedder output. Default: 1024",
         since = "0.1"
     )]
     #[serde(default = "default_embed_dim")]
@@ -285,10 +289,10 @@ pub struct AnnoRagConfig {
     #[config_meta(
         env = "ANNO_RAG_NER_WARMUP_MODEL",
         cli = "--ner-warmup-model",
-        doc = "HF Hub model ID to pre-warm on startup. Default: none",
+        doc = "HF Hub model ID to pre-warm on startup. Default: SemplificaAI/gliner2-multi-v1-onnx",
         since = "0.6"
     )]
-    #[serde(default)]
+    #[serde(default = "default_ner_warmup_model")]
     pub ner_warmup_model: Option<String>,
 
     /// MCP server name advertised on `initialize`. Default: `"anno-rag"`.
@@ -522,7 +526,7 @@ pub struct AnnoRagConfig {
     #[config_meta(
         env = "ANNO_RAG_MEMORY_EMBEDDING_DIM",
         cli = "--memory-embedding-dim",
-        doc = "Embedding dimension for memory vectors. Default: 384",
+        doc = "Embedding dimension for memory vectors. Default: 1024",
         since = "0.8"
     )]
     #[serde(default = "default_memory_embedding_dim")]
@@ -624,7 +628,7 @@ fn default_memory_collection_name() -> String {
 }
 
 fn default_memory_embedding_dim() -> usize {
-    384
+    1024
 }
 
 fn default_compaction_interval_secs() -> u64 {
@@ -697,14 +701,14 @@ impl Default for AnnoRagConfig {
 
         Self {
             data_dir,
-            embed_model: "intfloat/multilingual-e5-small".to_string(),
-            embed_dim: 384,
+            embed_model: default_embed_model(),
+            embed_dim: default_embed_dim(),
             default_top_k: 10,
             chunk_max_chars: 2048,
             chunk_overlap: 256,
             gdpr_layers: GdprLayerSet::Defense,
             vector_index_threshold: default_vector_index_threshold(),
-            ner_warmup_model: None,
+            ner_warmup_model: default_ner_warmup_model(),
             mcp_server_name: default_mcp_server_name(),
             ocr_mode: default_ocr_mode(),
             enable_ocr: false,
@@ -1101,16 +1105,22 @@ mod tests {
         }"#;
         let c: AnnoRagConfig = serde_json::from_str(v01_json).expect("v0.1 config must parse");
         assert_eq!(c.vector_index_threshold, 1000);
-        assert!(c.ner_warmup_model.is_none());
+        // absent field → current default (fastino/gliner2-multi-v1)
+        assert_eq!(
+            c.ner_warmup_model.as_deref(),
+            Some("fastino/gliner2-multi-v1")
+        );
         assert_eq!(c.mcp_server_name, "anno-rag");
         assert!(!c.enable_ocr);
         assert!(c.tesseract_path.is_none());
-        assert_eq!(c.ocr_mode, OcrMode::Off);
-        assert_eq!(c.effective_ocr_mode(), OcrMode::Off);
+        // absent field → current default (auto_embedded)
+        assert_eq!(c.ocr_mode, OcrMode::AutoEmbedded);
+        assert_eq!(c.effective_ocr_mode(), OcrMode::AutoEmbedded);
         assert_eq!(c.ocr_batch_budget_secs, None);
         assert!(c.embedder_dtype.is_none());
         assert_eq!(c.memory_collection_name, "memories");
-        assert_eq!(c.memory_embedding_dim, 384);
+        // absent field → current default (1024 for Solon-large)
+        assert_eq!(c.memory_embedding_dim, 1024);
         assert!(c.ocr_cache_enabled);
         assert!(c.ocr_backend.is_none());
     }
@@ -1119,16 +1129,19 @@ mod tests {
     fn defaults_include_new_fields() {
         let c = AnnoRagConfig::default();
         assert_eq!(c.vector_index_threshold, 1000);
-        assert!(c.ner_warmup_model.is_none());
+        assert_eq!(
+            c.ner_warmup_model.as_deref(),
+            Some("fastino/gliner2-multi-v1")
+        );
         assert_eq!(c.mcp_server_name, "anno-rag");
-        assert_eq!(c.ocr_mode, OcrMode::Off);
-        assert_eq!(c.effective_ocr_mode(), OcrMode::Off);
+        assert_eq!(c.ocr_mode, OcrMode::AutoEmbedded);
+        assert_eq!(c.effective_ocr_mode(), OcrMode::AutoEmbedded);
         assert!(!c.enable_ocr);
         assert!(c.tesseract_path.is_none());
         assert_eq!(c.ocr_batch_budget_secs, None);
         assert!(c.embedder_dtype.is_none());
         assert_eq!(c.memory_collection_name, "memories");
-        assert_eq!(c.memory_embedding_dim, 384);
+        assert_eq!(c.memory_embedding_dim, 1024);
         assert_eq!(c.memory_ner_mode, MemoryNerMode::Async);
         assert!(c.ocr_cache_enabled);
         assert!(c.ocr_backend.is_none());
