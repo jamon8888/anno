@@ -39,6 +39,11 @@ impl EnrichmentStatusKind {
     }
 }
 
+fn is_lance_table_not_found(e: &lancedb::Error) -> bool {
+    let msg = e.to_string();
+    msg.contains("was not found") || msg.contains("not found") || msg.contains("does not exist")
+}
+
 /// Arrow schema for the enrichment status sidecar table.
 #[must_use]
 pub fn enrichment_status_schema() -> Arc<Schema> {
@@ -76,22 +81,20 @@ impl EnrichmentStatusStore {
             .execute()
             .await
             .map_err(|err| Error::Legal(format!("status connect: {err}")))?;
-        let names = conn
-            .table_names()
-            .execute()
-            .await
-            .map_err(|err| Error::Legal(format!("status list: {err}")))?;
         let schema = enrichment_status_schema();
-        let table = if names.iter().any(|name| name == ENRICHMENT_STATUS_TABLE) {
-            conn.open_table(ENRICHMENT_STATUS_TABLE).execute().await
-        } else {
-            let empty = RecordBatchIterator::new(std::iter::empty(), schema);
-            let reader: Box<dyn arrow_array::RecordBatchReader + Send> = Box::new(empty);
-            conn.create_table(ENRICHMENT_STATUS_TABLE, reader)
-                .execute()
-                .await
-        }
-        .map_err(|err| Error::Legal(format!("status open: {err}")))?;
+        let table = match conn.open_table(ENRICHMENT_STATUS_TABLE).execute().await {
+            Ok(t) => t,
+            Err(e) if is_lance_table_not_found(&e) => {
+                tracing::info!("enrichment_status table missing or corrupt — recreating");
+                let empty = RecordBatchIterator::new(std::iter::empty(), schema);
+                let reader: Box<dyn arrow_array::RecordBatchReader + Send> = Box::new(empty);
+                conn.create_table(ENRICHMENT_STATUS_TABLE, reader)
+                    .execute()
+                    .await
+                    .map_err(|err| Error::Legal(format!("status create: {err}")))?
+            }
+            Err(err) => return Err(Error::Legal(format!("status open: {err}"))),
+        };
 
         Ok(Self { table })
     }
@@ -326,5 +329,23 @@ mod tests {
             EnrichmentStatusKind::FailedMaxRetries.as_str(),
             "failed_max_retries"
         );
+    }
+
+    #[tokio::test]
+    async fn open_recovers_when_versions_dir_missing() {
+        let dir = tempfile::tempdir().unwrap();
+        let index_path = dir.path().join("index.lance");
+        std::fs::create_dir_all(&index_path).unwrap();
+
+        // Simulate corrupt table: directory exists but _versions/ is absent
+        let orphan = index_path.join("enrichment_status.lance");
+        std::fs::create_dir_all(orphan.join("_indices")).unwrap();
+
+        let cfg = crate::config::AnnoRagConfig {
+            data_dir: dir.path().to_path_buf(),
+            ..Default::default()
+        };
+        let result = EnrichmentStatusStore::open(&cfg).await;
+        assert!(result.is_ok(), "expected Ok, got: {:?}", result.err());
     }
 }
