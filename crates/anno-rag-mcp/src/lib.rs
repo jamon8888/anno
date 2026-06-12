@@ -4778,7 +4778,8 @@ mod lazy_tests {
         assert!(v.get("models").is_some());
         assert_eq!(v["knowledge"]["objects"], 0);
         assert_eq!(v["vault"]["available"], false);
-        assert_eq!(v["vault"]["reason"], "pipeline_not_initialized");
+        // No keyring entry in CI → vault_not_initialized (pipeline_not_yet_loaded when vault is set)
+        assert_eq!(v["vault"]["reason"], "vault_not_initialized");
         assert!(v["models"].get("inventory").is_some());
         assert_eq!(v["models"]["embedder_loaded"], false);
         assert_eq!(v["models"]["detector_loaded"], false);
