@@ -13,15 +13,19 @@ FROM rust:1.85-bookworm AS builder
 
 # System deps:
 #   protobuf-compiler + libprotobuf-dev — protoc + well-known protos (lance-encoding)
-#   libtesseract-dev libleptonica-dev — kreuzberg-tesseract build script
-#   clang — required by some -sys crates
+#   tesseract-ocr + libtesseract-dev + libleptonica-dev — kreuzberg-tesseract build.rs
+#     (build.rs executes the tesseract binary + links against libtesseract)
+#   libclang-dev — bindgen (used by some -sys crates)
+#   cmake — some C++ build scripts require it
 #   pkg-config libssl-dev ca-certificates — TLS + cargo https
 RUN apt-get update && apt-get install -y --no-install-recommends \
         protobuf-compiler \
         libprotobuf-dev \
+        tesseract-ocr \
         libtesseract-dev \
         libleptonica-dev \
-        clang \
+        libclang-dev \
+        cmake \
         pkg-config \
         libssl-dev \
         ca-certificates \
