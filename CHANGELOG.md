@@ -4,6 +4,16 @@ All notable changes to the `anno-rag` crate are documented here. Other crates in
 
 Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Semver: pre-1.0 minor versions may introduce breaking changes.
 
+## [Unreleased]
+
+### Fixed
+- **LanceDB table recovery** — `LegalStore::open()` and `EnrichmentStatusStore::open()` now use `match open_table { Err(not_found) => create_table }` instead of `table_names()` probe; orphan directories left by interrupted ingestion no longer cause `Table not found` errors on restart
+- **MCP cold-start timeout** — `serve_stdio_lazy` spawns a background `tokio::task` to pre-warm ONNX models (~970 MB) right after the MCP transport is ready; first tool call no longer blocks for ~78 s
+- **Vault key mismatch after `anno_init_vault`** — `AnnoRagServer::key` is now `Arc<RwLock<[u8; 32]>>`; re-derived and updated in the `anno_init_vault` handler so lazy-inited pipeline always uses the passphrase-based key
+- **`vault.available: false` in `status` before pipeline load** — `status_impl_routing` now reads the OS keyring directly when the pipeline `OnceCell` is not yet populated, matching the `anno_health` pattern
+
+---
+
 ## [0.13.0] — 2026-06-11
 
 ### Added
