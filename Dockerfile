@@ -11,11 +11,17 @@
 # ── Stage 1: Build ────────────────────────────────────────────────────────────
 FROM rust:1.85-bookworm AS builder
 
-# System deps: protoc + well-known protos (lance-encoding needs google/protobuf/empty.proto),
-# pkg-config, SSL.
+# System deps:
+#   protobuf-compiler + libprotobuf-dev — protoc + well-known protos (lance-encoding)
+#   libtesseract-dev libleptonica-dev — kreuzberg-tesseract build script
+#   clang — required by some -sys crates
+#   pkg-config libssl-dev ca-certificates — TLS + cargo https
 RUN apt-get update && apt-get install -y --no-install-recommends \
         protobuf-compiler \
         libprotobuf-dev \
+        libtesseract-dev \
+        libleptonica-dev \
+        clang \
         pkg-config \
         libssl-dev \
         ca-certificates \
@@ -75,6 +81,8 @@ FROM debian:bookworm-slim AS runtime
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
         libssl3 \
+        libtesseract5 \
+        liblept5 \
         ca-certificates \
     && rm -rf /var/lib/apt/lists/* \
     && useradd -ms /bin/sh -u 1000 anno
