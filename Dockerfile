@@ -105,7 +105,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
         liblept5 \
         ca-certificates \
     && rm -rf /var/lib/apt/lists/* \
-    && useradd -ms /bin/sh -u 1000 anno
+    && useradd -ms /bin/sh anno
 
 # Binary + ORT shared library
 COPY --from=builder /out/ /usr/local/bin/
