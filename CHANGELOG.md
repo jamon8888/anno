@@ -4,7 +4,7 @@ All notable changes to the `anno-rag` crate are documented here. Other crates in
 
 Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Semver: pre-1.0 minor versions may introduce breaking changes.
 
-## [Unreleased]
+## [0.13.1] — 2026-06-12
 
 ### Fixed
 - **LanceDB table recovery** — `LegalStore::open()` and `EnrichmentStatusStore::open()` now use `match open_table { Err(not_found) => create_table }` instead of `table_names()` probe; orphan directories left by interrupted ingestion no longer cause `Table not found` errors on restart
