@@ -11,9 +11,11 @@
 # ── Stage 1: Build ────────────────────────────────────────────────────────────
 FROM rust:1.85-bookworm AS builder
 
-# System deps: protoc (required by lance/prost), pkg-config, SSL
+# System deps: protoc + well-known protos (lance-encoding needs google/protobuf/empty.proto),
+# pkg-config, SSL.
 RUN apt-get update && apt-get install -y --no-install-recommends \
         protobuf-compiler \
+        libprotobuf-dev \
         pkg-config \
         libssl-dev \
         ca-certificates \
@@ -48,11 +50,10 @@ COPY . .
 RUN --mount=type=cache,target=/usr/local/cargo/registry \
     --mount=type=cache,target=/build/target \
     cargo build --release -p anno-rag-bin \
-    && install -Dm755 target/release/anno-rag /out/anno-rag \
-    && find target/release -maxdepth 1 -name "libonnxruntime*.so*" \
-         -exec install -Dm755 {} /out/ \; \
-    && find target/release/build -name "libonnxruntime*.so*" \
-         -exec install -Dm755 {} /out/ \; 2>/dev/null || true
+    && mkdir -p /out \
+    && cp target/release/anno-rag /out/anno-rag \
+    && (find target/release -maxdepth 1 -name "libonnxruntime*.so*" -exec cp {} /out/ \; || true) \
+    && (find target/release/build -name "libonnxruntime*.so*" -exec cp {} /out/ \; || true)
 
 # ── Stage 2: Model download ───────────────────────────────────────────────────
 FROM debian:bookworm-slim AS model-downloader
