@@ -51,7 +51,7 @@ pub struct AnnoRagServer {
     corpus: Arc<OnceCell<Arc<crate::corpus::CorpusService>>>,
     legal_maintenance: Arc<OnceCell<Arc<crate::legal_maintenance::LegalMaintenanceService>>>,
     cfg: Arc<AnnoRagConfig>,
-    key: [u8; 32],
+    key: Arc<RwLock<[u8; 32]>>,
     allowed_roots: AllowedRoots,
     tabular_storage: Arc<OnceCell<Arc<anno_rag_tabular::storage::StorageHandle>>>,
     extraction_status: Arc<RwLock<HashMap<anno_rag_tabular::ReviewId, ReviewExtractionStatus>>>,
@@ -66,8 +66,9 @@ impl AnnoRagServer {
         self.pipeline
             .get_or_try_init(|| {
                 let cfg = Arc::clone(&self.cfg);
-                let key = self.key;
+                let key_arc = Arc::clone(&self.key);
                 async move {
+                    let key = *key_arc.read().await;
                     let inventory =
                         crate::model_inventory::ModelInventoryService::new(&cfg).inspect();
                     if !inventory.ready {
@@ -271,7 +272,7 @@ impl AnnoRagServer {
             corpus: Arc::new(OnceCell::new()),
             legal_maintenance: Arc::new(OnceCell::new()),
             cfg: Arc::new(cfg),
-            key: [0u8; 32],
+            key: Arc::new(RwLock::new([0u8; 32])),
             allowed_roots: allowed_roots_from_env(),
             tabular_storage: Arc::new(OnceCell::new()),
             extraction_status: Arc::new(RwLock::new(HashMap::new())),
@@ -288,7 +289,7 @@ impl AnnoRagServer {
             corpus: Arc::new(OnceCell::new()),
             legal_maintenance: Arc::new(OnceCell::new()),
             cfg: Arc::new(cfg),
-            key,
+            key: Arc::new(RwLock::new(key)),
             allowed_roots: allowed_roots_from_env(),
             tabular_storage: Arc::new(OnceCell::new()),
             extraction_status: Arc::new(RwLock::new(HashMap::new())),
@@ -761,12 +762,21 @@ impl AnnoRagServer {
                     "categories": stats.categories,
                 })
             }
-            None => serde_json::json!({
-                "available": false,
-                "reason": "pipeline_not_initialized",
-                "total_mappings": null,
-                "categories": {},
-            }),
+            None => {
+                // Pipeline not yet loaded — read keyring directly so vault
+                // status is accurate even before the first tool call.
+                use anno_rag::vault::{KEYRING_ACCOUNT, KEYRING_SERVICE};
+                let initialized = keyring::Entry::new(KEYRING_SERVICE, KEYRING_ACCOUNT)
+                    .ok()
+                    .and_then(|e| e.get_password().ok())
+                    .is_some();
+                serde_json::json!({
+                    "available": initialized,
+                    "reason": if initialized { "pipeline_not_yet_loaded" } else { "vault_not_initialized" },
+                    "total_mappings": null,
+                    "categories": {},
+                })
+            }
         };
 
         let inventory =
@@ -2056,6 +2066,14 @@ impl AnnoRagServer {
     )]
     async fn anno_init_vault(&self, Parameters(params): Parameters<InitVaultParams>) -> String {
         let result = crate::health::init_vault_with_passphrase(&params.passphrase);
+        if result.ok {
+            // Re-derive so self.key reflects the passphrase-based key from now on.
+            // Any subsequent pipeline() call (lazy init) will use the correct key.
+            match anno_rag::vault::derive_key() {
+                Ok(new_key) => *self.key.write().await = new_key,
+                Err(e) => tracing::warn!("anno_init_vault: could not re-derive key: {e}"),
+            }
+        }
         serde_json::to_string_pretty(&result).unwrap_or_else(|e| format!("Error: {e}"))
     }
 
@@ -3649,10 +3667,20 @@ pub async fn serve_stdio_lazy(cfg: AnnoRagConfig, key: [u8; 32]) -> anno_rag::er
     tracing::info!("anno-rag MCP server starting (lazy) on stdio");
 
     let transport = rmcp::transport::stdio();
+    let warmup_server = server.clone();
     let service = server
         .serve(transport)
         .await
         .map_err(|e| anno_rag::error::Error::Detect(format!("MCP server failed to start: {e}")))?;
+
+    // Warm up models in background so first tool call doesn't block for ~78s.
+    tokio::spawn(async move {
+        tracing::info!("anno-rag: background model warmup starting");
+        match warmup_server.pipeline().await {
+            Ok(_) => tracing::info!("anno-rag: background model warmup complete"),
+            Err(e) => tracing::warn!("anno-rag: background model warmup skipped: {e}"),
+        }
+    });
 
     let cancel = service.cancellation_token();
     let signal_task = tokio::spawn(async move {
