@@ -101,8 +101,8 @@ FROM ubuntu:24.04 AS runtime
 ENV DEBIAN_FRONTEND=noninteractive
 RUN apt-get update && apt-get install -y --no-install-recommends \
         libssl3 \
-        libtesseract5t64 \
-        libleptonica6 \
+        libtesseract5 \
+        liblept5 \
         ca-certificates \
     && rm -rf /var/lib/apt/lists/* \
     && useradd -ms /bin/sh -u 1000 anno
