@@ -1,0 +1,22 @@
+# Build artifacts
+target/
+E:/cargo-target/
+
+# IDE / editor
+.idea/
+.vscode/
+*.iml
+
+# Test / CI artefacts
+.agent-harness/
+.gitnexus/
+docs/superpowers/plans/
+scripts/_*.ps1
+
+# Local data
+.env
+*.enc
+~/.anno-rag/
+
+# Git
+.git/
