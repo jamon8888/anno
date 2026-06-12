@@ -24,7 +24,7 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Semver: pre-1.
 - **`anno-rag config init|show|validate`** — copies bundled example, shows field sources (`[default]`/`[env: ...]`/`[file: ...]`), validates TOML
 - **CI `config-schema` job** — re-runs schema-gen and asserts `git diff --exit-code` on generated artifacts
 - **Release artifacts** — `config-schema.json` + `config.toml.example` bundled alongside binaries
-- **Comprehensive docs** — `docs/CONFIGURATION.md` + `docs/reference/configuration.md` with full field reference
+- **Comprehensive docs** — `docs/CONFIGURATION.md` + reference docs with full field reference
 
 ### Fixed
 - **Workspace-hack fix** — `candle-core/metal` moved to `[target.'cfg(target_os = "macos"')]`, `cuda` to Linux-only; prevents `objc2` compile error on Windows
