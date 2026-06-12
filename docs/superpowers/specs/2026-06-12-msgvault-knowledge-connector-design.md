@@ -251,7 +251,36 @@ synthetic rows.
 - Local loop: `scripts/test-local.ps1 -Package anno-source-msgvault`, then
   targeted packages per crate touched (never workspace-wide).
 
+## Distribution: how msgvault reaches the user's machine
+
+msgvault is never compiled, linked, or embedded into Anno binaries — at
+runtime Anno only knows the SQLite file. Distribution is a packaging
+concern, staged in three tiers that track Anno's own distribution channels.
+The end state is the desktop app (Tier 3).
+
+| Tier | Channel | Mechanism |
+|---|---|---|
+| 1 — Setup script (ships with connector v1) | Windows local / MCP server | `scripts/setup-msgvault.ps1`: downloads the **pinned** msgvault release, verifies SHA-256, places it on PATH, registers a Windows Scheduled Task for `msgvault sync`. Setup-time tooling only; Anno's runtime never invokes the binary. |
+| 2 — Baked into Docker | Docker / compose | Pinned msgvault binary as a separate compose **service** (`msgvault serve`, using its built-in scheduler), writing `~/.msgvault` on a shared volume that Anno mounts read-only. Process sidecar at deployment level; data path remains a file read. MIT license file included. |
+| 3 — Managed by the desktop app (end state) | Desktop app (Tauri track) | The app owns the msgvault lifecycle, following the existing `download_models` pattern: download pinned release on first use, verify checksum, store under the app's data dir, schedule syncs, and surface a guided account-setup flow (OAuth client secret import for Gmail, app password for IMAP). The connector code is identical — only acquisition management moves into the app. |
+
+Constraints common to all tiers:
+
+- **Version pinning** — each Anno release declares one tested msgvault
+  version; the setup script, Docker image, and desktop app install exactly
+  that version. The connector's runtime schema check is the backstop, the
+  pin is the guarantee (CI fixtures test that precise schema).
+- **OAuth reality** — msgvault embeds no Google OAuth credentials; Gmail
+  requires a user-supplied `client_secret.json` from Google Cloud Console
+  (IMAP needs only an app password). The Tier 3 setup flow must guide this;
+  Tiers 1–2 document it.
+- **Licensing** — msgvault is MIT; redistribution in Tiers 2–3 includes its
+  LICENSE file.
+
 ## Out of scope (v1)
+
+- Tier 2 Docker packaging and the Tier 3 desktop setup flow (separate
+  slices; v1 ships Tier 1 only).
 
 - Spawning or supervising the msgvault binary (acquisition stays external).
 - Reading `message_raw` MIME or msgvault's own FTS/vector tables.
