@@ -763,13 +763,10 @@ impl AnnoRagServer {
                 })
             }
             None => {
-                // Pipeline not yet loaded — read keyring directly so vault
-                // status is accurate even before the first tool call.
-                use anno_rag::vault::{KEYRING_ACCOUNT, KEYRING_SERVICE};
-                let initialized = keyring::Entry::new(KEYRING_SERVICE, KEYRING_ACCOUNT)
-                    .ok()
-                    .and_then(|e| e.get_password().ok())
-                    .is_some();
+                // Pipeline not yet loaded — check all key sources so vault
+                // status is accurate before the first tool call and in Docker
+                // where the OS keyring is unavailable.
+                let initialized = anno_rag::vault::is_vault_key_usable();
                 serde_json::json!({
                     "available": initialized,
                     "reason": if initialized { "pipeline_not_yet_loaded" } else { "vault_not_initialized" },
@@ -2089,12 +2086,9 @@ impl AnnoRagServer {
         let vault_initialized = if let Some(arc) = self.pipeline_arc() {
             arc.vault_is_initialized()
         } else {
-            // Pipeline not yet loaded — read keyring directly.
-            use anno_rag::vault::{KEYRING_ACCOUNT, KEYRING_SERVICE};
-            keyring::Entry::new(KEYRING_SERVICE, KEYRING_ACCOUNT)
-                .ok()
-                .and_then(|e| e.get_password().ok())
-                .is_some()
+            // Pipeline not yet loaded — check all key sources (env passphrase
+            // takes priority over keyring so Docker/CI always reports correctly).
+            anno_rag::vault::is_vault_key_usable()
         };
         let h = crate::health::EngineHealth {
             engine_version: env!("CARGO_PKG_VERSION").to_string(),

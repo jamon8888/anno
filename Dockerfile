@@ -66,7 +66,7 @@ COPY crates/anno/Cargo.toml                 crates/anno/Cargo.toml
 # Copy full source
 COPY . .
 
-# Build release binary.
+# Build release binary with Candle CPU backend for GLiNER2-Fastino.
 # ORT's download-binaries fetches a pre-built static libonnxruntime for the
 # target; copy-dylibs also places libonnxruntime.so next to the binary.
 RUN --mount=type=cache,target=/root/.cargo/registry \
@@ -89,9 +89,12 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 COPY --from=builder /out/ /usr/local/bin/
 RUN ldconfig
 
-# Download E5 (~470 MB) + GLiNER2 (~500 MB) into /models.
+# Download Ordalie (~1.3 GB) + GLiNER2 ONNX (~500 MB) + GLiNER2 Candle (~500 MB) into /models.
+# ANNO_RAG_EMBED_MODEL selects Ordalie instead of the old E5-small default.
 # --dir /models → data_dir=/ so models_cache()=/models.
 ENV ANNO_RAG_VAULT_PASSPHRASE=docker-build-placeholder \
+    ANNO_RAG_EMBED_MODEL=OrdalieTech/Solon-embeddings-large-0.1 \
+    ANNO_RAG_EMBED_DIM=1024 \
     LD_LIBRARY_PATH=/usr/local/bin
 RUN anno-rag download-models --dir /models
 
@@ -121,8 +124,12 @@ VOLUME ["/data"]
 # ANNO_RAG_VAULT_PASSPHRASE  REQUIRED at runtime — set in docker-compose.yml
 # ANNO_DATA_DIR              Persistent data (index + vault)
 # ANNO_MODELS_DIR            Points to baked models; no download at startup
+# ANNO_RAG_EMBED_MODEL       Ordalie embedder (1024d, French-optimized)
+# ANNO_RAG_EMBED_DIM         Must match Ordalie output dimension
 ENV ANNO_DATA_DIR=/data \
     ANNO_MODELS_DIR=/models \
+    ANNO_RAG_EMBED_MODEL=OrdalieTech/Solon-embeddings-large-0.1 \
+    ANNO_RAG_EMBED_DIM=1024 \
     LD_LIBRARY_PATH=/usr/local/bin
 
 USER anno

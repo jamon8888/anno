@@ -428,6 +428,27 @@ impl VaultKeySource {
     }
 }
 
+/// Returns `true` if a usable vault key source is currently configured.
+///
+/// Checks in priority order:
+/// 1. `ANNO_RAG_VAULT_PASSPHRASE` env var — always usable when set (Docker, CI).
+/// 2. OS keyring entry `anno-rag:vault-key` — used in interactive installs.
+///
+/// Unlike [`vault_key_status`], this function never fails and never touches
+/// DPAPI or the filesystem — it is safe to call on every MCP status poll.
+pub fn is_vault_key_usable() -> bool {
+    if std::env::var("ANNO_RAG_VAULT_PASSPHRASE")
+        .map(|v| !v.is_empty())
+        .unwrap_or(false)
+    {
+        return true;
+    }
+    keyring::Entry::new(KEYRING_SERVICE, KEYRING_ACCOUNT)
+        .ok()
+        .and_then(|e| e.get_password().ok())
+        .is_some()
+}
+
 /// Derive the 32-byte vault key from the environment. Thin wrapper around
 /// [`VaultKeySource::from_env`] + [`VaultKeySource::derive`] kept for
 /// backwards compatibility with v0.1–v0.3 call sites.

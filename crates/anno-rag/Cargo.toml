@@ -18,6 +18,9 @@ dev-integration = []
 gpu-metal = ["anno/gliner2-fastino-candle-metal", "anno/metal"]
 # Windows/Linux NVIDIA CUDA acceleration for ONNX-backed detector paths.
 gpu-cuda = ["anno/gliner2-fastino-cuda"]
+# CPU-only Candle backend for the GLiNER2-Fastino detector (no GPU required).
+# Enables the Candle DeBERTa encoder path on any x86_64/aarch64 host.
+gliner2-candle-cpu = ["anno/gliner2-fastino-candle"]
 # Cross-encoder reranker (BGE-reranker-v2-m3 INT8 ONNX, ~571 MB download on
 # first use). In default features so the distributed binary always reranks.
 rerank = ["dep:ort", "dep:ndarray", "dep:is-terminal"]
