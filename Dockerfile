@@ -83,7 +83,7 @@ FROM ubuntu:24.04 AS model-downloader
 
 ENV DEBIAN_FRONTEND=noninteractive
 RUN apt-get update && apt-get install -y --no-install-recommends \
-        ca-certificates libssl3 libtesseract5t64 libleptonica6 \
+        ca-certificates libssl3 libtesseract5 liblept5 \
     && rm -rf /var/lib/apt/lists/*
 
 COPY --from=builder /out/ /usr/local/bin/
