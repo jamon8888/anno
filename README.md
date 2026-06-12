@@ -273,6 +273,45 @@ Pour une installation depuis les binaires GitHub Releases, voir aussi [docs/rele
 
 GPU sidecar builds are documented in [docs/release/accelerated-gpu-builds.md](docs/release/accelerated-gpu-builds.md). The default release remains CPU-first; use the Metal or CUDA archives only on matching hardware.
 
+#### Docker (recommandé — modèles inclus, zéro build local)
+
+L'image Docker bake les modèles (~970 Mo) à la construction et expose anno-rag via MCP stdio. Aucun Rust ni aucune dépendance système requise sur la machine hôte.
+
+**Pré-requis** : Docker 24+ installé et en cours d'exécution.
+
+```bash
+# Récupérer l'image depuis GHCR (publiée automatiquement à chaque release)
+docker pull ghcr.io/jamon8888/anno-rag:latest
+
+# Ou construire depuis les sources
+docker build -t anno-rag .
+```
+
+**Claude Desktop / Cowork** — ajouter dans `claude_desktop_config.json` :
+
+Windows : `%APPDATA%\Claude\claude_desktop_config.json`
+macOS : `~/Library/Application Support/Claude/claude_desktop_config.json`
+
+```json
+{
+  "mcpServers": {
+    "anno-rag": {
+      "command": "docker",
+      "args": [
+        "run", "--rm", "-i",
+        "-v", "anno-data:/data",
+        "-e", "ANNO_RAG_VAULT_PASSPHRASE=votre-passphrase",
+        "ghcr.io/jamon8888/anno-rag:latest"
+      ]
+    }
+  }
+}
+```
+
+Redémarrer Claude Desktop. Première utilisation : appeler l'outil MCP `anno_init_vault` pour initialiser le coffre.
+
+Pour le déploiement serveur avec docker compose, voir [docs/DOCKER.md](docs/DOCKER.md).
+
 #### Windows 11
 
 Prérequis :
