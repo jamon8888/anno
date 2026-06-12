@@ -41,9 +41,7 @@ impl EnrichmentStatusKind {
 
 fn is_lance_table_not_found(e: &lancedb::Error) -> bool {
     let msg = e.to_string();
-    msg.contains("was not found")
-        || msg.contains("not found")
-        || msg.contains("does not exist")
+    msg.contains("was not found") || msg.contains("not found") || msg.contains("does not exist")
 }
 
 /// Arrow schema for the enrichment status sidecar table.

@@ -77,9 +77,7 @@ pub(crate) fn sql_string_lit(value: &str) -> String {
 
 fn is_lance_table_not_found(e: &lancedb::Error) -> bool {
     let msg = e.to_string();
-    msg.contains("was not found")
-        || msg.contains("not found")
-        || msg.contains("does not exist")
+    msg.contains("was not found") || msg.contains("not found") || msg.contains("does not exist")
 }
 
 /// LanceDB handle for legal enrichment.
