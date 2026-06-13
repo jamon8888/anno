@@ -285,10 +285,11 @@ fn push_eu_entity(
     }
 }
 
-/// Scan for EU-specific PII patterns: national IDs, GDPR Art. 9 special
-/// categories, tax identifiers, and EU vehicle license plates.
+/// Scan for EU-specific structured PII: national IDs, tax identifiers, and EU vehicle license plates.
+///
+/// Does NOT include GDPR Art. 9 keyword patterns — those are in [`scan_eu_art9_keywords`].
 #[cfg(feature = "pii-eu")]
-fn scan_eu_patterns(text: &str, results: &mut Vec<PiiEntity>) {
+fn scan_eu_structured(text: &str, results: &mut Vec<PiiEntity>) {
     use eu_patterns::*;
     use regex::Regex;
 
@@ -387,9 +388,19 @@ fn scan_eu_patterns(text: &str, results: &mut Vec<PiiEntity>) {
     for m in re.find_iter(text) {
         push_eu_entity(results, text, m, "LICENSE_PLATE_EU", "MEDIUM");
     }
+}
 
-    // --- GDPR Art. 9 Special Categories (keyword-based, Phase 1) ---
-    // Note: High false positive rate by design — Phase 2 will replace with GLiNER2 NER
+/// Scan for GDPR Art. 9 special category keywords (health, biometric, genetic, political,
+/// religion, union, criminal, sexual orientation, ethnic origin).
+///
+/// Preserved for `scan_patterns()` backward compatibility. For context-aware detection,
+/// use `scan_patterns_with_ner` instead.
+///
+/// Note: High false positive rate by design — Phase 2 will replace with GLiNER2 NER.
+#[cfg(feature = "pii-eu")]
+fn scan_eu_art9_keywords(text: &str, results: &mut Vec<PiiEntity>) {
+    use eu_patterns::*;
+    use regex::Regex;
 
     let re = HEALTH_KW.get_or_init(|| {
         Regex::new(r"(?i)\b(diagnosed\s+with|suffers?\s+from|allergic\s+to|medical\s+condition|hospital|surgery|treatment|disease|illness|cancer|diabetes|hypertension|asthma|depression|anxiety)\b")
@@ -462,6 +473,16 @@ fn scan_eu_patterns(text: &str, results: &mut Vec<PiiEntity>) {
     for m in re.find_iter(text) {
         push_eu_entity(results, text, m, "SPECIAL_CATEGORY_ETHNIC", "HIGH");
     }
+}
+
+/// Combined structured + keyword scan (backward-compatible wrapper).
+///
+/// Calls [`scan_eu_structured`] for national IDs, tax IDs, and license plates,
+/// then [`scan_eu_art9_keywords`] for GDPR Art. 9 special category keywords.
+#[cfg(feature = "pii-eu")]
+fn scan_eu_patterns(text: &str, results: &mut Vec<PiiEntity>) {
+    scan_eu_structured(text, results);
+    scan_eu_art9_keywords(text, results);
 }
 
 /// Generate a PII report from detected entities.
@@ -1289,5 +1310,28 @@ mod tests {
         }];
         let replaced = replace(text, &entities, |e| format!("<{}>", e.pii_type));
         assert_eq!(replaced, "SSN <ID_NUMBER> recorded.");
+    }
+
+    #[test]
+    #[cfg(feature = "pii-eu")]
+    fn scan_eu_structured_does_not_contain_keyword_match() {
+        // scan_eu_structured must NOT match "diabetes" — keywords are in scan_eu_art9_keywords
+        let mut results = Vec::new();
+        scan_eu_structured("Patient has diabetes", &mut results);
+        assert!(
+            !results.iter().any(|e| e.pii_type.starts_with("SPECIAL_CATEGORY")),
+            "scan_eu_structured must not run keyword patterns: {results:?}"
+        );
+    }
+
+    #[test]
+    #[cfg(feature = "pii-eu")]
+    fn scan_eu_art9_keywords_matches_health() {
+        let mut results = Vec::new();
+        scan_eu_art9_keywords("Patient has diabetes", &mut results);
+        assert!(
+            results.iter().any(|e| e.pii_type == "SPECIAL_CATEGORY_HEALTH"),
+            "scan_eu_art9_keywords must match health keywords: {results:?}"
+        );
     }
 }
