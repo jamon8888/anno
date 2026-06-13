@@ -69,8 +69,12 @@ tempfile = "3"
 criterion = { workspace = true }
 
 [features]
-default = ["onnx", "heuristic-fr"]
+default = ["onnx", "heuristic-fr", "pii-eu"]
 heuristic-fr = []
+pii-eu = []
+# EU PII detection with GLiNER2 zero-shot NER for GDPR Art. 9 special categories.
+# Enables `pii::scan_patterns_with_ner`. Requires model download (~400 MB).
+pii-eu-ner = ["pii-eu", "gliner2-fastino"]
 # Metrics-only analysis helpers (preferred for research / diagnostics).
 # Exposes `anno::metrics::*` (coref scoring metrics, cluster encoders).
 analysis = []
