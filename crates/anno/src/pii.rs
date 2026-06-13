@@ -214,6 +214,57 @@ pub fn scan_patterns(text: &str) -> Vec<PiiEntity> {
     results
 }
 
+/// Scan for EU structured PII and GDPR Art. 9 special categories using GLiNER2 zero-shot NER.
+///
+/// Unlike [`scan_patterns`] which uses keyword heuristics for Art. 9 detection (high false-positive
+/// rate), this function passes [`EU_ART9_TYPES`] to the model's bi-encoder for context-aware
+/// detection. Structured patterns (national IDs, tax IDs, license plates, SSN, IBAN, etc.) run
+/// unchanged.
+///
+/// # Arguments
+///
+/// * `text` — input text to scan
+/// * `model` — any [`crate::ZeroShotNER`] backend, e.g. `GLiNER2Fastino`
+/// * `threshold` — confidence threshold (0.0–1.0). Recommended: 0.4 recall, 0.5–0.6 precision.
+///
+/// # Errors
+///
+/// Returns `Err` if the NER backend fails (model load error, ONNX runtime error, etc.).
+#[cfg(all(feature = "pii-eu", feature = "gliner2-fastino"))]
+pub fn scan_patterns_with_ner<M>(
+    text: &str,
+    model: &M,
+    threshold: f32,
+) -> crate::Result<Vec<PiiEntity>>
+where
+    M: crate::ZeroShotNER,
+{
+    let mut results = Vec::new();
+    // Structured patterns run first to claim spans; NER overlap check respects them.
+    scan_eu_structured(text, &mut results);
+    scan_generic_patterns(text, &mut results);
+    // Context-aware Art. 9 detection — replaces keyword heuristics on this path.
+    let ner_entities = model.extract_with_types(text, EU_ART9_TYPES, threshold)?;
+    for entity in ner_entities {
+        let label = entity.entity_type.as_label().to_lowercase();
+        let pii_type = pii_type_from_art9_label(&label);
+        let risk = art9_risk_level(&label);
+        let start = entity.start();
+        let end = entity.end();
+        if !results.iter().any(|e: &PiiEntity| !(end <= e.start || start >= e.end)) {
+            results.push(PiiEntity {
+                text: entity.text.clone(),
+                pii_type: pii_type.to_string(),
+                start,
+                end,
+                risk_level: risk.to_string(),
+            });
+        }
+    }
+    dedup_overlapping(&mut results);
+    Ok(results)
+}
+
 /// Scan for generic structured PII patterns: SSN, credit card, IBAN, email, phone, address.
 ///
 /// These patterns are not EU-specific. Called by [`scan_patterns`] after EU-specific patterns
@@ -1409,5 +1460,133 @@ mod tests {
     #[cfg(feature = "pii-eu")]
     fn art9_risk_union_is_medium() {
         assert_eq!(art9_risk_level("trade union membership"), "MEDIUM");
+    }
+
+    #[cfg(all(test, feature = "pii-eu", feature = "gliner2-fastino"))]
+    mod ner_unit_tests {
+        use super::*;
+
+        /// Returns empty — tests that structured patterns still work without NER hits.
+        struct NullNer;
+        impl crate::ZeroShotNER for NullNer {
+            fn default_types(&self) -> &[&'static str] {
+                &[]
+            }
+            fn extract_with_types(
+                &self,
+                _text: &str,
+                _types: &[&str],
+                _threshold: f32,
+            ) -> crate::Result<Vec<crate::Entity>> {
+                Ok(vec![])
+            }
+            fn extract_with_descriptions(
+                &self,
+                _text: &str,
+                _descriptions: &[&str],
+                _threshold: f32,
+            ) -> crate::Result<Vec<crate::Entity>> {
+                Ok(vec![])
+            }
+        }
+
+        /// Returns the whole input text as one entity with the given label.
+        struct StubNer {
+            label: &'static str,
+        }
+        impl crate::ZeroShotNER for StubNer {
+            fn default_types(&self) -> &[&'static str] {
+                &[]
+            }
+            fn extract_with_types(
+                &self,
+                text: &str,
+                _types: &[&str],
+                _threshold: f32,
+            ) -> crate::Result<Vec<crate::Entity>> {
+                let char_len = text.chars().count();
+                Ok(vec![crate::Entity::builder(
+                    text.to_string(),
+                    crate::EntityType::custom(self.label, crate::EntityCategory::Misc),
+                )
+                .span(0, char_len)
+                .build()])
+            }
+            fn extract_with_descriptions(
+                &self,
+                _text: &str,
+                _descriptions: &[&str],
+                _threshold: f32,
+            ) -> crate::Result<Vec<crate::Entity>> {
+                Ok(vec![])
+            }
+        }
+
+        #[test]
+        fn null_ner_still_returns_national_id() {
+            let text = "PESEL: 80051501231";
+            let found = scan_patterns_with_ner(text, &NullNer, 0.5).expect("scan ok");
+            assert!(
+                found.iter().any(|e| e.pii_type == "NATIONAL_ID_PL"),
+                "structured patterns must run even with null NER: {found:?}"
+            );
+            assert!(
+                !found.iter().any(|e| e.pii_type.starts_with("SPECIAL_CATEGORY")),
+                "no Art.9 entities expected from NullNer: {found:?}"
+            );
+        }
+
+        #[test]
+        fn stub_ner_health_maps_to_special_category_health() {
+            let found =
+                scan_patterns_with_ner("diabetes", &StubNer { label: "health condition" }, 0.0)
+                    .expect("scan ok");
+            let health = found
+                .iter()
+                .find(|e| e.pii_type == "SPECIAL_CATEGORY_HEALTH");
+            assert!(health.is_some(), "expected SPECIAL_CATEGORY_HEALTH: {found:?}");
+            assert_eq!(health.unwrap().risk_level, "CRITICAL");
+        }
+
+        #[test]
+        fn stub_ner_religion_maps_to_special_category_religion() {
+            let found =
+                scan_patterns_with_ner("Muslim", &StubNer { label: "religious belief" }, 0.0)
+                    .expect("scan ok");
+            let rel = found
+                .iter()
+                .find(|e| e.pii_type == "SPECIAL_CATEGORY_RELIGION");
+            assert!(rel.is_some(), "expected SPECIAL_CATEGORY_RELIGION: {found:?}");
+            assert_eq!(rel.unwrap().risk_level, "HIGH");
+        }
+
+        #[test]
+        fn stub_ner_unknown_label_maps_to_generic_special_category() {
+            let found =
+                scan_patterns_with_ner("something", &StubNer { label: "unknown category" }, 0.0)
+                    .expect("scan ok");
+            assert!(
+                found.iter().any(|e| e.pii_type == "SPECIAL_CATEGORY"),
+                "unknown label must fall through to SPECIAL_CATEGORY: {found:?}"
+            );
+        }
+
+        #[test]
+        fn ner_entity_overlapping_structured_is_dropped() {
+            // Valid PESEL: StubNer would return an entity covering the same span.
+            // The structured pattern (NATIONAL_ID_PL) runs first and claims the span.
+            // The NER entity must be dropped by the overlap check.
+            let text = "80051501231";
+            let found =
+                scan_patterns_with_ner(text, &StubNer { label: "health condition" }, 0.0)
+                    .expect("scan ok");
+            // Only one entity covering [0, 11]
+            let at_zero: Vec<_> = found.iter().filter(|e| e.start == 0 && e.end == 11).collect();
+            assert_eq!(
+                at_zero.len(),
+                1,
+                "overlapping span must be deduped to one entity: {found:?}"
+            );
+        }
     }
 }
