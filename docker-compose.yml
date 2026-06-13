@@ -10,11 +10,31 @@ services:
       # Required: passphrase used to derive the vault encryption key.
       # Change this to a strong secret before using in production.
       ANNO_RAG_VAULT_PASSPHRASE: ${ANNO_RAG_VAULT_PASSPHRASE:?Set ANNO_RAG_VAULT_PASSPHRASE in .env or environment}
+      ANNO_RAG_EMBED_MODEL: OrdalieTech/Solon-embeddings-large-0.1
+      ANNO_RAG_EMBED_DIM: "1024"
     volumes:
       # Persistent data: LanceDB index, vault.enc, processed outputs.
-      # Named volume keeps data across container restarts.
       - anno-data:/data
+      # Models: host directory mounted read-only. Run the download-models
+      # service below once to populate it before starting anno-rag.
+      - ./models:/models:ro
     restart: unless-stopped
+
+  # One-shot model downloader — run once with:
+  #   docker compose run --rm model-downloader
+  model-downloader:
+    image: anno-rag:latest
+    build:
+      context: .
+      dockerfile: Dockerfile
+    environment:
+      ANNO_RAG_VAULT_PASSPHRASE: placeholder
+      ANNO_RAG_EMBED_MODEL: OrdalieTech/Solon-embeddings-large-0.1
+      ANNO_RAG_EMBED_DIM: "1024"
+    volumes:
+      - ./models:/models
+    entrypoint: ["anno-rag", "download-models", "--dir", "/models"]
+    profiles: ["tools"]
 
 volumes:
   anno-data:

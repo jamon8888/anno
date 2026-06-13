@@ -1,10 +1,24 @@
 # syntax=docker/dockerfile:1.7
 # ─────────────────────────────────────────────────────────────────────────────
-# anno-rag — self-contained Docker image with models baked in (~2 GB)
+# anno-rag — lightweight image (~500 MB binary only, no baked models)
 #
-# Build:  docker build -t anno-rag .
+# Models are downloaded to a host directory on first run via `download-models`.
+# This avoids a multi-GB COPY between Docker stages (extremely slow on
+# Windows/WSL2) and keeps the image fast to build and rebuild.
+#
+# Build:
+#   docker build -t anno-rag .
+#
+# Download models once (creates ./models/ on the host):
+#   docker run --rm -v "%cd%\models:/models" \
+#     -e ANNO_RAG_VAULT_PASSPHRASE=placeholder \
+#     -e ANNO_RAG_EMBED_MODEL=OrdalieTech/Solon-embeddings-large-0.1 \
+#     -e ANNO_RAG_EMBED_DIM=1024 \
+#     anno-rag download-models --dir /models
+#
 # Run MCP (stdio, used by Claude Desktop):
-#   docker run --rm -i -v anno-data:/data \
+#   docker run --rm -i \
+#     -v anno-data:/data -v "%cd%\models:/models" \
 #     -e ANNO_RAG_VAULT_PASSPHRASE=<your-passphrase> anno-rag
 # ─────────────────────────────────────────────────────────────────────────────
 
@@ -38,7 +52,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
         ca-certificates \
     && rm -rf /var/lib/apt/lists/*
 
-# Install Rust via rustup (repo pins 1.95 in rust-toolchain.toml)
+# Install Rust via rustup (repo pins version in rust-toolchain.toml)
 RUN curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | \
     sh -s -- -y --profile minimal --default-toolchain stable
 ENV PATH="/root/.cargo/bin:$PATH"
@@ -66,7 +80,7 @@ COPY crates/anno/Cargo.toml                 crates/anno/Cargo.toml
 # Copy full source
 COPY . .
 
-# Build release binary with Candle CPU backend for GLiNER2-Fastino.
+# Build release binary.
 # ORT's download-binaries fetches a pre-built static libonnxruntime for the
 # target; copy-dylibs also places libonnxruntime.so next to the binary.
 RUN --mount=type=cache,target=/root/.cargo/registry \
@@ -78,27 +92,7 @@ RUN --mount=type=cache,target=/root/.cargo/registry \
     && (find target/release/build -name "libonnxruntime*.so*" -exec cp {} /out/ \; || true) \
     && (find /root/.cache/ort.pyke.io -name "libonnxruntime*.so*" -exec cp {} /out/ \; || true)
 
-# ── Stage 2: Model download ───────────────────────────────────────────────────
-FROM ubuntu:24.04 AS model-downloader
-
-ENV DEBIAN_FRONTEND=noninteractive
-RUN apt-get update && apt-get install -y --no-install-recommends \
-        ca-certificates libssl3 libtesseract5 liblept5 \
-    && rm -rf /var/lib/apt/lists/*
-
-COPY --from=builder /out/ /usr/local/bin/
-RUN ldconfig
-
-# Download Ordalie (~1.3 GB) + GLiNER2 ONNX (~500 MB) + GLiNER2 Candle (~500 MB) into /models.
-# ANNO_RAG_EMBED_MODEL selects Ordalie instead of the old E5-small default.
-# --dir /models → data_dir=/ so models_cache()=/models.
-ENV ANNO_RAG_VAULT_PASSPHRASE=docker-build-placeholder \
-    ANNO_RAG_EMBED_MODEL=OrdalieTech/Solon-embeddings-large-0.1 \
-    ANNO_RAG_EMBED_DIM=1024 \
-    LD_LIBRARY_PATH=/usr/local/bin
-RUN anno-rag download-models --dir /models
-
-# ── Stage 3: Runtime ──────────────────────────────────────────────────────────
+# ── Stage 2: Runtime ──────────────────────────────────────────────────────────
 FROM ubuntu:24.04 AS runtime
 
 ENV DEBIAN_FRONTEND=noninteractive
@@ -114,18 +108,21 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 COPY --from=builder /out/ /usr/local/bin/
 RUN ldconfig
 
-# Baked models (~970 MB layer)
-COPY --from=model-downloader /models /models
-
 # Data volume: LanceDB index, vault.enc, processed outputs
 VOLUME ["/data"]
+
+# Models volume: mounted from host after running download-models once.
+# If ANNO_MODELS_DIR is set and the directory is populated, no download
+# happens at startup. If the volume is empty, anno-rag lazy-downloads on
+# first use (requires internet access at runtime).
+VOLUME ["/models"]
 
 # ── Environment ───────────────────────────────────────────────────────────────
 # ANNO_RAG_VAULT_PASSPHRASE  REQUIRED at runtime — set in docker-compose.yml
 # ANNO_DATA_DIR              Persistent data (index + vault)
-# ANNO_MODELS_DIR            Points to baked models; no download at startup
+# ANNO_MODELS_DIR            Host-mounted model weights directory
 # ANNO_RAG_EMBED_MODEL       Ordalie embedder (1024d, French-optimized)
-# ANNO_RAG_EMBED_DIM         Must match Ordalie output dimension
+# ANNO_RAG_EMBED_DIM         Must match embedder output dimension
 ENV ANNO_DATA_DIR=/data \
     ANNO_MODELS_DIR=/models \
     ANNO_RAG_EMBED_MODEL=OrdalieTech/Solon-embeddings-large-0.1 \
