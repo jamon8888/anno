@@ -12,10 +12,14 @@
 
 use anno::backends::gliner2_fastino::GLiNER2Fastino;
 use anno::pii;
+use std::sync::OnceLock;
 
-fn load_model() -> GLiNER2Fastino {
-    GLiNER2Fastino::from_pretrained("SemplificaAI/gliner2-multi-v1-onnx")
-        .expect("warm the HF cache first: SemplificaAI/gliner2-multi-v1-onnx")
+fn load_model() -> &'static GLiNER2Fastino {
+    static MODEL: OnceLock<GLiNER2Fastino> = OnceLock::new();
+    MODEL.get_or_init(|| {
+        GLiNER2Fastino::from_pretrained("SemplificaAI/gliner2-multi-v1-onnx")
+            .expect("warm the HF cache first: SemplificaAI/gliner2-multi-v1-onnx")
+    })
 }
 
 #[test]
@@ -23,7 +27,7 @@ fn load_model() -> GLiNER2Fastino {
 fn ner_detects_health_condition_in_clinical_sentence() {
     let model = load_model();
     let text = "The patient was diagnosed with type 2 diabetes last year.";
-    let found = pii::scan_patterns_with_ner(text, &model, 0.4).expect("scan ok");
+    let found = pii::scan_patterns_with_ner(text, model, 0.4).expect("scan ok");
     assert!(
         found
             .iter()
@@ -37,7 +41,7 @@ fn ner_detects_health_condition_in_clinical_sentence() {
 fn ner_detects_criminal_record_mention() {
     let model = load_model();
     let text = "He was convicted of fraud in 2019.";
-    let found = pii::scan_patterns_with_ner(text, &model, 0.4).expect("scan ok");
+    let found = pii::scan_patterns_with_ner(text, model, 0.4).expect("scan ok");
     assert!(
         found
             .iter()
@@ -51,7 +55,7 @@ fn ner_detects_criminal_record_mention() {
 fn ner_preserves_national_id_alongside_art9() {
     let model = load_model();
     let text = "PESEL: 80051501231. Patient diagnosed with type 2 diabetes.";
-    let found = pii::scan_patterns_with_ner(text, &model, 0.4).expect("scan ok");
+    let found = pii::scan_patterns_with_ner(text, model, 0.4).expect("scan ok");
     assert!(
         found.iter().any(|e| e.pii_type == "NATIONAL_ID_PL"),
         "structured PESEL must survive NER path: {found:?}"
@@ -71,7 +75,7 @@ fn ner_reduces_false_positives_vs_keywords() {
     // The keyword path fires on "Catholic"; NER at threshold 0.5 should not.
     let model = load_model();
     let text = "The Catholic church was built in 1832.";
-    let found = pii::scan_patterns_with_ner(text, &model, 0.5).expect("scan ok");
+    let found = pii::scan_patterns_with_ner(text, model, 0.5).expect("scan ok");
     assert!(
         !found
             .iter()

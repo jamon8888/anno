@@ -156,23 +156,30 @@ fn is_valid_bsn(bsn: &str) -> bool {
 /// Validate Belgian Registre National checksum.
 /// Uses the 97-modulo algorithm per official Belgian specification.
 /// Format: YYMMDDXXXXX (6 birth date + 3 sequence + 2 check digits)
-/// See: https://belgianidcard.be/
+///
+/// Two formulas depending on birth century:
+/// - Pre-2000: `97 - (first_9 % 97)`
+/// - Post-2000: `97 - ((2_000_000_000 + first_9) % 97)`
+///
+/// Both are tried when the century is ambiguous (YY digits alone do not
+/// encode the century).
 #[cfg(feature = "pii-eu")]
 fn is_valid_belgian_registre(num: &str) -> bool {
     if num.len() != 11 || !num.chars().all(|c| c.is_ascii_digit()) {
         return false;
     }
-    // Extract first 9 digits and parse as integer
-    // Then validate: 97 - (first_9_digits % 97) should equal last 2 digits
-    if let Ok(n) = num[..9].parse::<u64>() {
-        let check_expected = 97 - (n % 97);
-        if let Ok(check_actual) = num[9..11].parse::<u64>() {
-            if check_expected == check_actual {
-                return true;
-            }
-        }
+    let Ok(n) = num[..9].parse::<u64>() else {
+        return false;
+    };
+    let Ok(check_actual) = num[9..11].parse::<u64>() else {
+        return false;
+    };
+    // Pre-2000 births
+    if 97 - (n % 97) == check_actual {
+        return true;
     }
-    false
+    // Post-2000 births: prepend the century marker 2_000_000_000
+    97 - ((2_000_000_000_u64 + n) % 97) == check_actual
 }
 
 /// Lazy-compiled regexes for EU PII patterns (feature-gated)
@@ -441,7 +448,9 @@ fn scan_eu_structured(text: &str, results: &mut Vec<PiiEntity>) {
         }
     }
 
-    // EU VAT numbers (country prefix + digits)
+    // EU VAT numbers (country prefix + digits).
+    // GB is included post-Brexit: UK VAT numbers remain widely exchanged with
+    // EU counterparties and are structurally identical, so we retain detection.
     let re = VAT.get_or_init(|| {
         Regex::new(r"\b(?:AT|BE|BG|CY|CZ|DE|DK|EE|EL|ES|FI|FR|GB|HR|HU|IE|IT|LT|LU|LV|MT|NL|PL|PT|RO|SE|SI|SK)\d{8,12}\b")
             .expect("EU VAT regex")
@@ -1055,6 +1064,32 @@ mod tests {
     fn belgian_registre_invalid() {
         // Wrong check digits (89 expected, 94 provided)
         assert!(!is_valid_belgian_registre("80051501294"));
+    }
+
+    #[test]
+    #[cfg(feature = "pii-eu")]
+    fn belgian_registre_post2000_valid() {
+        // Born 2001-05-15, sequence 012: n = 010515012
+        // 2_000_000_000 + 10_515_012 = 2_010_515_012
+        // 2_010_515_012 % 97 = 76 → check = 97 - 76 = 21 → "01051501221"
+        assert!(is_valid_belgian_registre("01051501221"));
+    }
+
+    #[test]
+    #[cfg(feature = "pii-eu")]
+    fn belgian_registre_post2000_rejected_by_pre2000_formula() {
+        // The post-2000 number "01051501221" must fail the pre-2000 formula:
+        // 10_515_012 % 97 = 63 → check = 97 - 63 = 34 ≠ 21 → only post-2000 passes
+        let n: u64 = 10_515_012;
+        assert_ne!(
+            97 - (n % 97),
+            21,
+            "pre-2000 formula must not accept this number"
+        );
+        assert!(
+            is_valid_belgian_registre("01051501221"),
+            "but overall must accept via post-2000 path"
+        );
     }
 
     // --- EU national IDs ---

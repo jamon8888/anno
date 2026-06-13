@@ -10,15 +10,18 @@
 #   docker build -t anno-rag .
 #
 # Download models once (creates ./models/ on the host):
-#   docker run --rm -v "%cd%\models:/models" \
+#   Windows CMD:  docker run --rm -v "%cd%\models:/models" ...
+#   PowerShell:   docker run --rm -v "${PWD}\models:/models" ...
+#   bash/Linux:   docker run --rm -v "$(pwd)/models:/models" ...
 #     -e ANNO_RAG_VAULT_PASSPHRASE=placeholder \
 #     -e ANNO_RAG_EMBED_MODEL=OrdalieTech/Solon-embeddings-large-0.1 \
 #     -e ANNO_RAG_EMBED_DIM=1024 \
 #     anno-rag download-models --dir /models
 #
 # Run MCP (stdio, used by Claude Desktop):
-#   docker run --rm -i \
-#     -v anno-data:/data -v "%cd%\models:/models" \
+#   Windows CMD:  docker run --rm -i -v anno-data:/data -v "%cd%\models:/models" ...
+#   PowerShell:   docker run --rm -i -v anno-data:/data -v "${PWD}\models:/models" ...
+#   bash/Linux:   docker run --rm -i -v anno-data:/data -v "$(pwd)/models:/models" ...
 #     -e ANNO_RAG_VAULT_PASSPHRASE=<your-passphrase> anno-rag
 # ─────────────────────────────────────────────────────────────────────────────
 
@@ -112,9 +115,15 @@ RUN ldconfig
 VOLUME ["/data"]
 
 # Models volume: mounted from host after running download-models once.
-# If ANNO_MODELS_DIR is set and the directory is populated, no download
-# happens at startup. If the volume is empty, anno-rag lazy-downloads on
-# first use (requires internet access at runtime).
+# The /models directory MUST be pre-populated via the download-models service
+# before starting anno-rag — the compose service mounts it read-only.
+# Without models, startup will fail. Run download-models first:
+#   docker compose --profile tools run --rm model-downloader
+#
+# NOTE: if you change ANNO_RAG_EMBED_MODEL or ANNO_RAG_EMBED_DIM, the
+# existing LanceDB index at /data is incompatible (different vector dimension).
+# Drop and recreate the anno-data volume:
+#   docker compose down -v && docker compose up -d
 VOLUME ["/models"]
 
 # ── Environment ───────────────────────────────────────────────────────────────

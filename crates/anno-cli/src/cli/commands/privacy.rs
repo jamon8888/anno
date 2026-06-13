@@ -355,7 +355,9 @@ fn generate_pii_report(entities: &[PIIEntity]) -> PIIReport {
             "DOB" => date_count += 1,
             "ADDRESS" => location_count += 1,
             "CONTACT" => contact_count += 1,
-            "ID_NUMBER" => id_number_count += 1,
+            "ID_NUMBER" | "NATIONAL_ID_FR" | "NATIONAL_ID_ES" | "NATIONAL_ID_IT"
+            | "NATIONAL_ID_PL" | "NATIONAL_ID_NL" | "NATIONAL_ID_BE" | "TAX_ID_SIRET"
+            | "TAX_ID_SIREN" | "TAX_ID_VAT" | "LICENSE_PLATE_EU" => id_number_count += 1,
             _ => {}
         }
     }
