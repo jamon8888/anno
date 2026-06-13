@@ -1069,25 +1069,25 @@ mod tests {
     #[test]
     #[cfg(feature = "pii-eu")]
     fn belgian_registre_post2000_valid() {
-        // Born 2001-05-15, sequence 012: n = 010515012
-        // 2_000_000_000 + 10_515_012 = 2_010_515_012
-        // 2_010_515_012 % 97 = 76 → check = 97 - 76 = 21 → "01051501221"
-        assert!(is_valid_belgian_registre("01051501221"));
+        // Born 2001-05-15, sequence 012: n = 010515012 = 10_515_012
+        // 2_000_000_000 % 97 = 68; 10_515_012 % 97 = 18
+        // (68 + 18) % 97 = 86 → check = 97 - 86 = 11 → "01051501211"
+        assert!(is_valid_belgian_registre("01051501211"));
     }
 
     #[test]
     #[cfg(feature = "pii-eu")]
     fn belgian_registre_post2000_rejected_by_pre2000_formula() {
-        // The post-2000 number "01051501221" must fail the pre-2000 formula:
-        // 10_515_012 % 97 = 63 → check = 97 - 63 = 34 ≠ 21 → only post-2000 passes
+        // "01051501211": pre-2000 check = 97 - (10_515_012 % 97) = 97 - 18 = 79 ≠ 11
+        // so only the post-2000 path accepts it
         let n: u64 = 10_515_012;
         assert_ne!(
             97 - (n % 97),
-            21,
+            11,
             "pre-2000 formula must not accept this number"
         );
         assert!(
-            is_valid_belgian_registre("01051501221"),
+            is_valid_belgian_registre("01051501211"),
             "but overall must accept via post-2000 path"
         );
     }
