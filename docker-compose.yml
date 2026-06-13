@@ -30,7 +30,10 @@ services:
       context: .
       dockerfile: Dockerfile
     environment:
-      ANNO_RAG_VAULT_PASSPHRASE: placeholder
+      # The download-models subcommand does not open the vault, so any
+      # non-empty placeholder satisfies the startup check. Do NOT reuse
+      # this value in the anno-rag service above.
+      ANNO_RAG_VAULT_PASSPHRASE: download-only-placeholder
       ANNO_RAG_EMBED_MODEL: OrdalieTech/Solon-embeddings-large-0.1
       ANNO_RAG_EMBED_DIM: "1024"
     volumes:

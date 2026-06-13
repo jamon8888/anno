@@ -430,26 +430,14 @@ impl VaultKeySource {
 
 /// Returns `true` if a usable vault key source is currently configured.
 ///
-/// Checks in priority order:
-/// 1. `ANNO_RAG_VAULT_PASSPHRASE` env var — reports usable when set and non-empty.
-/// 2. OS keyring entry `anno-rag:vault-key` — reports usable when the entry can be
-///    read. Note: the keyring backend may access DPAPI or the filesystem depending
-///    on the platform.
-///
-/// This is a fast availability check, not a cryptographic validation. A `true`
-/// result means key material appears to be present; the key may still fail to
-/// derive if the stored value is malformed or the keyring is locked.
+/// Delegates to [`vault_key_status`] so the check agrees with the real key
+/// derivation logic — the same passphrase validation, keyring hex parsing,
+/// and DPAPI fallback path that [`derive_key`] uses. Returns `false` if
+/// status resolution itself fails.
 pub fn is_vault_key_usable() -> bool {
-    if std::env::var("ANNO_RAG_VAULT_PASSPHRASE")
-        .map(|v| !v.is_empty())
+    vault_key_status()
+        .map(|s| s.usable)
         .unwrap_or(false)
-    {
-        return true;
-    }
-    keyring::Entry::new(KEYRING_SERVICE, KEYRING_ACCOUNT)
-        .ok()
-        .and_then(|e| e.get_password().ok())
-        .is_some()
 }
 
 /// Derive the 32-byte vault key from the environment. Thin wrapper around
