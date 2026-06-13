@@ -428,6 +428,16 @@ impl VaultKeySource {
     }
 }
 
+/// Returns `true` if a usable vault key source is currently configured.
+///
+/// Delegates to [`vault_key_status`] so the check agrees with the real key
+/// derivation logic — the same passphrase validation, keyring hex parsing,
+/// and DPAPI fallback path that [`derive_key`] uses. Returns `false` if
+/// status resolution itself fails.
+pub fn is_vault_key_usable() -> bool {
+    vault_key_status().map(|s| s.usable).unwrap_or(false)
+}
+
 /// Derive the 32-byte vault key from the environment. Thin wrapper around
 /// [`VaultKeySource::from_env`] + [`VaultKeySource::derive`] kept for
 /// backwards compatibility with v0.1–v0.3 call sites.

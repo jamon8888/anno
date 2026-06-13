@@ -8,8 +8,8 @@ use std::path::{Path, PathBuf};
 
 /// NER model HuggingFace repo id.
 const NER_MODEL_ID: &str = "SemplificaAI/gliner2-multi-v1-onnx";
-/// Candle/PyTorch GLiNER2 repo used by Metal sidecars.
-#[cfg(feature = "gpu-metal")]
+/// Candle/PyTorch GLiNER2 repo used by Candle backends (Metal, CPU).
+#[cfg(any(feature = "gpu-metal", feature = "gliner2-candle-cpu"))]
 const CANDLE_NER_MODEL_ID: &str = "fastino/gliner2-multi-v1";
 
 /// The eight base names of GLiNER2-Fastino's ONNX graphs (fp32_v2 layout).
@@ -37,7 +37,7 @@ pub async fn download(cfg: &AnnoRagConfig) -> Result<PathBuf> {
     let models_dir = cfg.models_cache();
     download_embedder(&models_dir, &cfg.embed_model).await?;
     download_ner(&models_dir).await?;
-    #[cfg(feature = "gpu-metal")]
+    #[cfg(any(feature = "gpu-metal", feature = "gliner2-candle-cpu"))]
     download_candle_ner(&models_dir).await?;
     Ok(models_dir)
 }
@@ -105,7 +105,7 @@ async fn download_ner(models_dir: &Path) -> Result<()> {
         .map_err(|e| Error::Detect(format!("spawn_blocking panic: {e}")))?
 }
 
-#[cfg(feature = "gpu-metal")]
+#[cfg(any(feature = "gpu-metal", feature = "gliner2-candle-cpu"))]
 async fn download_candle_ner(models_dir: &Path) -> Result<()> {
     let candle_dir = models_dir.join("gliner2-multi-v1-candle");
     tokio::fs::create_dir_all(&candle_dir).await?;
