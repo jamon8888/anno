@@ -12,6 +12,10 @@ pub const E5_REQUIRED_FILES: &[&str] = &[
 ];
 
 /// Required GLiNER model files relative to the effective models directory.
+#[deprecated(
+    since = "0.12.0",
+    note = "use gliner_onnx_required_files(dir) instead"
+)]
 pub const GLINER_REQUIRED_FILES: &[&str] = &[
     "gliner2-multi-v1-onnx/fp32_v2/classifier_fp32.onnx",
     "gliner2-multi-v1-onnx/fp32_v2/count_lstm_fixed_fp32.onnx",
@@ -25,6 +29,10 @@ pub const GLINER_REQUIRED_FILES: &[&str] = &[
 ];
 
 /// Required Candle GLiNER files relative to the effective models directory.
+#[deprecated(
+    since = "0.12.0",
+    note = "use candle_gliner_required_files(dir) instead"
+)]
 pub const CANDLE_GLINER_REQUIRED_FILES: &[&str] = &[
     "gliner2-multi-v1-candle/tokenizer.json",
     "gliner2-multi-v1-candle/config.json",
@@ -42,6 +50,26 @@ const GLINER_ONNX_BASES: &[&str] = &[
     "span_rep",
     "token_gather",
 ];
+
+/// Generate required ONNX GLiNER file paths (fp32_v2 layout) relative to the models directory.
+pub fn gliner_onnx_required_files(ner_onnx_dir: &str) -> Vec<String> {
+    let mut files: Vec<String> = GLINER_ONNX_BASES
+        .iter()
+        .map(|base| format!("{ner_onnx_dir}/fp32_v2/{base}_fp32.onnx"))
+        .collect();
+    files.push(format!("{ner_onnx_dir}/fp32_v2/tokenizer.json"));
+    files
+}
+
+/// Generate required Candle GLiNER file paths relative to the models directory.
+pub fn candle_gliner_required_files(candle_dir: &str) -> Vec<String> {
+    vec![
+        format!("{candle_dir}/tokenizer.json"),
+        format!("{candle_dir}/config.json"),
+        format!("{candle_dir}/encoder_config/config.json"),
+        format!("{candle_dir}/model.safetensors"),
+    ]
+}
 
 /// Effective models directory plus whether it came from `ANNO_MODELS_DIR`.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -118,6 +146,8 @@ pub struct ModelInventory {
 pub struct ModelInventoryService {
     effective: EffectiveModelsDir,
     detector_kind: DetectorInventoryKind,
+    ner_onnx_dir: String,
+    ner_candle_dir: String,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -133,6 +163,8 @@ impl ModelInventoryService {
         Self {
             effective: effective_models_dir(cfg),
             detector_kind: detector_inventory_kind(cfg),
+            ner_onnx_dir: cfg.ner_onnx_dir(),
+            ner_candle_dir: cfg.ner_candle_dir(),
         }
     }
 
@@ -143,12 +175,12 @@ impl ModelInventoryService {
         let downloading = path.join(".download-lock").exists();
         let e5 = inspect_family(&path, "multilingual-e5-small", E5_REQUIRED_FILES);
         let gliner = match self.detector_kind {
-            DetectorInventoryKind::Onnx => inspect_onnx_gliner_family(&path),
-            DetectorInventoryKind::Candle => inspect_family(
-                &path,
-                "gliner2-multi-v1-candle",
-                CANDLE_GLINER_REQUIRED_FILES,
-            ),
+            DetectorInventoryKind::Onnx => inspect_onnx_gliner_family(&path, &self.ner_onnx_dir),
+            DetectorInventoryKind::Candle => {
+                let required = candle_gliner_required_files(&self.ner_candle_dir);
+                let refs: Vec<&str> = required.iter().map(String::as_str).collect();
+                inspect_family(&path, &self.ner_candle_dir, &refs)
+            }
         };
         let ready = e5.ready && gliner.ready;
         let state = if ready {
@@ -227,15 +259,15 @@ fn inspect_family(root: &Path, name: &str, required_files: &[&str]) -> ModelFami
     }
 }
 
-fn inspect_onnx_gliner_family(root: &Path) -> ModelFamilyStatus {
+fn inspect_onnx_gliner_family(root: &Path, ner_onnx_dir: &str) -> ModelFamilyStatus {
     for (variant_dir, suffix) in [("fp32_v2", "fp32"), ("fp16_v2", "fp16")] {
         let graph_files = GLINER_ONNX_BASES
             .iter()
-            .map(|base| format!("gliner2-multi-v1-onnx/{variant_dir}/{base}_{suffix}.onnx"))
+            .map(|base| format!("{ner_onnx_dir}/{variant_dir}/{base}_{suffix}.onnx"))
             .collect::<Vec<_>>();
         let tokenizer_candidates = [
-            format!("gliner2-multi-v1-onnx/{variant_dir}/tokenizer.json"),
-            "gliner2-multi-v1-onnx/tokenizer.json".to_string(),
+            format!("{ner_onnx_dir}/{variant_dir}/tokenizer.json"),
+            format!("{ner_onnx_dir}/tokenizer.json"),
         ];
         let graphs_ready = graph_files
             .iter()
@@ -245,14 +277,16 @@ fn inspect_onnx_gliner_family(root: &Path) -> ModelFamilyStatus {
             .any(|relative| root.join(relative).is_file());
         if graphs_ready && tokenizer_ready {
             return ModelFamilyStatus {
-                name: "gliner2-multi-v1-onnx".to_string(),
-                path: root.join("gliner2-multi-v1-onnx").display().to_string(),
+                name: ner_onnx_dir.to_string(),
+                path: root.join(ner_onnx_dir).display().to_string(),
                 missing_files: Vec::new(),
                 ready: true,
             };
         }
     }
-    inspect_family(root, "gliner2-multi-v1-onnx", GLINER_REQUIRED_FILES)
+    let required = gliner_onnx_required_files(ner_onnx_dir);
+    let refs: Vec<&str> = required.iter().map(String::as_str).collect();
+    inspect_family(root, ner_onnx_dir, &refs)
 }
 
 #[cfg(test)]
