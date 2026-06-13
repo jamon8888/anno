@@ -1117,6 +1117,19 @@ impl AnnoRagConfig {
             .unwrap_or(&self.ner_candle_model_id);
         format!("{slug}-candle")
     }
+
+    /// Last path segment of `embed_model` — used as the local embedder directory name.
+    ///
+    /// Example: `"intfloat/multilingual-e5-small"` → `"multilingual-e5-small"`
+    /// Example: `"OrdalieTech/Solon-embeddings-large-0.1"` → `"Solon-embeddings-large-0.1"`
+    #[must_use]
+    pub fn embedder_dir(&self) -> String {
+        self.embed_model
+            .split('/')
+            .next_back()
+            .unwrap_or(&self.embed_model)
+            .to_string()
+    }
 }
 
 #[cfg(test)]
@@ -1542,5 +1555,27 @@ mod tests {
         let mut cfg = AnnoRagConfig::default();
         cfg.ner_candle_model_id = "myorg/my-gliner-pt".to_string();
         assert_eq!(cfg.ner_candle_dir(), "my-gliner-pt-candle");
+    }
+
+    #[test]
+    fn embedder_dir_is_last_segment_of_embed_model() {
+        let cfg = AnnoRagConfig::default();
+        // default embed_model ends with "multilingual-e5-small" or similar — check default_embed_model()
+        let expected = cfg.embed_model.split('/').next_back().unwrap().to_string();
+        assert_eq!(cfg.embedder_dir(), expected);
+    }
+
+    #[test]
+    fn embedder_dir_uses_custom_embed_model() {
+        let mut cfg = AnnoRagConfig::default();
+        cfg.embed_model = "OrdalieTech/Solon-embeddings-large-0.1".to_string();
+        assert_eq!(cfg.embedder_dir(), "Solon-embeddings-large-0.1");
+    }
+
+    #[test]
+    fn embedder_dir_no_slash_returns_whole_string() {
+        let mut cfg = AnnoRagConfig::default();
+        cfg.embed_model = "local-model".to_string();
+        assert_eq!(cfg.embedder_dir(), "local-model");
     }
 }
