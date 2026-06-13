@@ -329,9 +329,10 @@ mod mcp_autodetect_tests {
             models.join("multilingual-e5-small").file_name().unwrap(),
             "multilingual-e5-small"
         );
+        let ner_dir = cfg.ner_onnx_dir();
         assert_eq!(
-            models.join("gliner2-multi-v1-onnx").file_name().unwrap(),
-            "gliner2-multi-v1-onnx"
+            models.join(&ner_dir).file_name().unwrap(),
+            ner_dir.as_str()
         );
     }
 }
