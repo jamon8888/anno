@@ -29,6 +29,12 @@
 # HF Hub model ID to pre-warm on startup. Default: fastino/gliner2-multi-v1 (env: ANNO_RAG_NER_WARMUP_MODEL)
 # ner_warmup_model = "fastino/gliner2-multi-v1"
 
+# HuggingFace model ID for the ONNX NER detector. Default: SemplificaAI/gliner2-multi-v1-onnx (env: ANNO_RAG_NER_MODEL)
+# ner_model_id = "SemplificaAI/gliner2-multi-v1-onnx"
+
+# HuggingFace model ID for the Candle NER detector. Default: fastino/gliner2-multi-v1 (env: ANNO_RAG_NER_CANDLE_MODEL)
+# ner_candle_model_id = "fastino/gliner2-multi-v1"
+
 # MCP server name advertised on initialize. Default: anno-rag (env: ANNO_RAG_MCP_SERVER_NAME)
 # mcp_server_name = "anno-rag"
 
