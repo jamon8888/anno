@@ -60,7 +60,7 @@ Guarded by a `models_dir/.cache-v2` marker — no-op if the marker exists.
 Migration logic per model (ONNX NER, Candle NER, embedder):
 
 1. `canonical = models_dir.join(cfg.ner_onnx_dir())`  — new two-level path
-2. `legacy    = models_dir.join(last_segment(&cfg.ner_model_id))`  — old basename
+2. `legacy    = models_dir.join(last_segment(&cfg.ner_model_id))`  — old basename, where `last_segment(id) = id.split('/').next_back().unwrap_or(id)`
 3. If `canonical` does not exist AND `legacy` does:
    - `fs::create_dir_all(canonical.parent())`
    - `fs::rename(legacy, canonical)`
@@ -70,7 +70,9 @@ Migration logic per model (ONNX NER, Candle NER, embedder):
 
 If `legacy == canonical` (model ID has no `/`), skip — nothing to rename.
 
-**Called from** `download_models::download()` before any download logic, so it covers both explicit `anno-rag download-models` and first-run pipeline startup.
+**Called from two places:**
+- `download_models::download()` — covers explicit `anno-rag download-models`
+- `Pipeline::new()` — covers the common case where a user upgrades anno-rag and the pipeline starts with models already present in the legacy location; without this call, inventory would report models absent even though the files exist under the old basename dirs
 
 ---
 
@@ -108,6 +110,7 @@ All tests that hardcode `"gliner2-multi-v1-onnx"`, `"gliner2-multi-v1-candle"`, 
 | `crates/anno-rag/src/model_cache.rs` | New module: `migrate_legacy_cache` + 6 unit tests |
 | `crates/anno-rag/src/lib.rs` | `pub mod model_cache;` |
 | `crates/anno-rag/src/download_models.rs` | Call `migrate_legacy_cache` at top of `download()` |
+| `crates/anno-rag/src/pipeline.rs` | Call `migrate_legacy_cache` at top of `Pipeline::new()` |
 | `crates/anno-rag-mcp/src/lib.rs` | Update test fixtures |
 | `crates/anno-rag-bin/src/main.rs` | Update test fixtures |
 
