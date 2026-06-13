@@ -4116,6 +4116,7 @@ mod lazy_tests {
         let cfg = AnnoRagConfig::default();
         let e = cfg.embedder_dir();
         let n = cfg.ner_onnx_dir();
+        let c = cfg.ner_candle_dir();
         let rels: Vec<String> = vec![
             format!("{e}/config.json"),
             format!("{e}/model.safetensors"),
@@ -4129,6 +4130,10 @@ mod lazy_tests {
             format!("{n}/fp32_v2/span_rep_fp32.onnx"),
             format!("{n}/fp32_v2/token_gather_fp32.onnx"),
             format!("{n}/fp32_v2/tokenizer.json"),
+            format!("{c}/tokenizer.json"),
+            format!("{c}/config.json"),
+            format!("{c}/encoder_config/config.json"),
+            format!("{c}/model.safetensors"),
         ];
         for rel in &rels {
             let path = models_dir.join(rel);
@@ -4775,18 +4780,20 @@ mod lazy_tests {
         assert!(v.get("vault").is_some());
         assert!(v.get("models").is_some());
         assert_eq!(v["knowledge"]["objects"], 0);
-        // vault["available"] depends on the local keyring / ANNO_RAG_VAULT_PASSPHRASE env var;
-        // assert the shape and that "reason" is one of the two expected pre-pipeline values.
-        assert!(
-            v["vault"].get("available").is_some(),
-            "vault.available must be present"
-        );
+        // vault state depends on the local keyring / ANNO_RAG_VAULT_PASSPHRASE env var;
+        // assert the paired (available, reason) relationship rather than each field independently.
+        let available = v["vault"]["available"]
+            .as_bool()
+            .expect("vault.available must be a bool");
         let reason = v["vault"]["reason"]
             .as_str()
             .expect("vault.reason must be a string");
         assert!(
-            reason == "vault_not_initialized" || reason == "pipeline_not_yet_loaded",
-            "unexpected vault reason: {reason}"
+            matches!(
+                (available, reason),
+                (false, "vault_not_initialized") | (true, "pipeline_not_yet_loaded")
+            ),
+            "unexpected vault state: available={available}, reason={reason}"
         );
         assert!(v["models"].get("inventory").is_some());
         assert_eq!(v["models"]["embedder_loaded"], false);

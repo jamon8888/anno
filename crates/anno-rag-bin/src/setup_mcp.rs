@@ -516,7 +516,10 @@ pub async fn run(args: SetupMcpArgs) -> anyhow::Result<()> {
 
     let models_dir = args.models_dir.unwrap_or_else(default_models_dir);
     validate_absolute_path(&models_dir).map_err(|e| anyhow!(e))?;
-    let cfg = AnnoRagConfig::default();
+    let cfg = AnnoRagConfig::load(None).unwrap_or_else(|e| {
+        tracing::warn!("config load error: {e}; using defaults");
+        AnnoRagConfig::default()
+    });
     let models_verified = if args.target == SetupTarget::Manual {
         model_cache_verified(&models_dir, &cfg.embedder_dir(), &cfg.ner_onnx_dir())
     } else {

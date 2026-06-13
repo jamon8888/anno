@@ -942,6 +942,12 @@ impl AnnoRagConfig {
         if let Some(v) = ov.ner_warmup_model.clone() {
             self.ner_warmup_model = Some(v);
         }
+        if let Some(v) = ov.ner_model_id.clone() {
+            self.ner_model_id = v;
+        }
+        if let Some(v) = ov.ner_candle_model_id.clone() {
+            self.ner_candle_model_id = v;
+        }
         if let Some(v) = ov.mcp_server_name.clone() {
             self.mcp_server_name = v;
         }
