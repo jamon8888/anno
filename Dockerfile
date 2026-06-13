@@ -120,9 +120,10 @@ VOLUME ["/data"]
 # Without models, startup will fail. Run download-models first:
 #   docker compose --profile tools run --rm model-downloader
 #
-# NOTE: if you change ANNO_RAG_EMBED_MODEL or ANNO_RAG_EMBED_DIM, the
-# existing LanceDB index at /data is incompatible (different vector dimension).
-# Drop and recreate the anno-data volume:
+# NOTE: if you change ANNO_RAG_EMBED_MODEL or ANNO_RAG_EMBED_DIM — or
+# otherwise swap the embedder in any way — the existing LanceDB index at
+# /data is incompatible (different vector dimension or token space).
+# Drop and recreate the anno-data volume before restarting:
 #   docker compose down -v && docker compose up -d
 VOLUME ["/models"]
 
