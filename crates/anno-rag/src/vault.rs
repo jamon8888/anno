@@ -431,11 +431,14 @@ impl VaultKeySource {
 /// Returns `true` if a usable vault key source is currently configured.
 ///
 /// Checks in priority order:
-/// 1. `ANNO_RAG_VAULT_PASSPHRASE` env var — always usable when set (Docker, CI).
-/// 2. OS keyring entry `anno-rag:vault-key` — used in interactive installs.
+/// 1. `ANNO_RAG_VAULT_PASSPHRASE` env var — reports usable when set and non-empty.
+/// 2. OS keyring entry `anno-rag:vault-key` — reports usable when the entry can be
+///    read. Note: the keyring backend may access DPAPI or the filesystem depending
+///    on the platform.
 ///
-/// Unlike [`vault_key_status`], this function never fails and never touches
-/// DPAPI or the filesystem — it is safe to call on every MCP status poll.
+/// This is a fast availability check, not a cryptographic validation. A `true`
+/// result means key material appears to be present; the key may still fail to
+/// derive if the stored value is malformed or the keyring is locked.
 pub fn is_vault_key_usable() -> bool {
     if std::env::var("ANNO_RAG_VAULT_PASSPHRASE")
         .map(|v| !v.is_empty())

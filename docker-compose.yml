@@ -23,6 +23,8 @@ services:
   # One-shot model downloader — run once with:
   #   docker compose run --rm model-downloader
   model-downloader:
+    # Runs as root so it can write to ./models on a fresh host directory.
+    user: "0:0"
     image: anno-rag:latest
     build:
       context: .

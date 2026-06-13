@@ -200,11 +200,11 @@ pub fn detect_patterns(text: &str) -> Vec<DetectedEntity> {
 /// behaviour against a specific model version.
 pub const NER_MODEL_ID: &str = "SemplificaAI/gliner2-multi-v1-onnx";
 
-/// Candle/PyTorch GLiNER2 repo used for Apple Metal detector acceleration.
+/// Candle/PyTorch GLiNER2 repo used for Metal and CPU Candle detector backends.
 pub const CANDLE_NER_MODEL_ID: &str = "fastino/gliner2-multi-v1";
 
 /// Local subdirectory name where the Candle GLiNER2 model is cached on disk.
-#[cfg(feature = "gpu-metal")]
+#[cfg(any(feature = "gpu-metal", feature = "gliner2-candle-cpu"))]
 const CANDLE_NER_MODEL_DIR: &str = "gliner2-multi-v1-candle";
 
 /// GDPR-coverage NER labels: (label, description sent to the model, per-label threshold).
@@ -354,7 +354,7 @@ fn static_label_ref(label: &str) -> Option<&'static str> {
 /// Aggregate PII detector: FR regex pack + anno NER.
 enum NerBackend {
     Onnx(GLiNER2Fastino),
-    #[cfg(feature = "gpu-metal")]
+    #[cfg(any(feature = "gpu-metal", feature = "gliner2-candle-cpu"))]
     Candle(anno::backends::gliner2_fastino_candle::GLiNER2FastinoCandle),
 }
 
@@ -367,7 +367,7 @@ impl NerBackend {
     ) -> anno::Result<Vec<anno::Entity>> {
         match self {
             Self::Onnx(model) => model.extract_with_types(text, labels, threshold),
-            #[cfg(feature = "gpu-metal")]
+            #[cfg(any(feature = "gpu-metal", feature = "gliner2-candle-cpu"))]
             Self::Candle(model) => model.extract_with_types(text, labels, threshold),
         }
     }
@@ -379,7 +379,7 @@ impl NerBackend {
     ) -> anno::Result<Vec<anno::Entity>> {
         match self {
             Self::Onnx(model) => model.extract_with_label_thresholds(text, label_thresholds),
-            #[cfg(feature = "gpu-metal")]
+            #[cfg(any(feature = "gpu-metal", feature = "gliner2-candle-cpu"))]
             Self::Candle(model) => model.extract_with_label_thresholds(text, label_thresholds),
         }
     }
@@ -392,7 +392,7 @@ impl NerBackend {
     ) -> anno::Result<Vec<anno::Entity>> {
         match self {
             Self::Onnx(model) => model.extract_with_label_descriptions(text, labeled, threshold),
-            #[cfg(feature = "gpu-metal")]
+            #[cfg(any(feature = "gpu-metal", feature = "gliner2-candle-cpu"))]
             Self::Candle(model) => model.extract_with_label_descriptions(text, labeled, threshold),
         }
     }
@@ -418,6 +418,17 @@ impl Detector {
             crate::accelerator::SelectedAccelerator::Metal
         ) {
             return Self::new_candle_metal(cfg, &decision);
+        }
+
+        // CPU Candle path: when gliner2-candle-cpu is compiled in and the accelerator
+        // resolved to CPU, use the Candle backend instead of ONNX so the feature flag
+        // actually changes runtime behaviour.
+        #[cfg(feature = "gliner2-candle-cpu")]
+        if matches!(
+            decision.selected,
+            crate::accelerator::SelectedAccelerator::Cpu
+        ) {
+            return Self::new_candle_cpu(cfg);
         }
 
         let model_cfg = detector_model_config_for(cfg.accelerator)?;
@@ -501,6 +512,40 @@ impl Detector {
         Err(Error::Config(
             "ANNO_ACCELERATOR=metal requires a binary built with feature gpu-metal".into(),
         ))
+    }
+
+    #[cfg(feature = "gliner2-candle-cpu")]
+    fn new_candle_cpu(cfg: &crate::config::AnnoRagConfig) -> Result<Self> {
+        let device = candle_core::Device::Cpu;
+        let model_root = std::env::var_os("ANNO_MODELS_DIR")
+            .filter(|value| !value.is_empty())
+            .map(PathBuf::from)
+            .unwrap_or_else(|| cfg.models_cache());
+        let model_path = model_root.join(CANDLE_NER_MODEL_DIR);
+        if model_path.exists() {
+            let ner = anno::backends::gliner2_fastino_candle::GLiNER2FastinoCandle::from_local_with_device(
+                &model_path,
+                &device,
+            )
+            .map_err(|e| Error::Detect(format!("gliner2_fastino_candle load (local cpu): {e}")))?;
+            return Ok(Self {
+                ner: NerBackend::Candle(ner),
+                #[cfg(feature = "heuristic-fr")]
+                heuristic_fr: anno::backends::heuristic_fr::HeuristicFrNer::new(),
+                gdpr_layers: cfg.gdpr_layers,
+            });
+        }
+        let ner = anno::backends::gliner2_fastino_candle::GLiNER2FastinoCandle::from_pretrained_with_device(
+            CANDLE_NER_MODEL_ID,
+            &device,
+        )
+        .map_err(|e| Error::Detect(format!("gliner2_fastino_candle load (cpu): {e}")))?;
+        Ok(Self {
+            ner: NerBackend::Candle(ner),
+            #[cfg(feature = "heuristic-fr")]
+            heuristic_fr: anno::backends::heuristic_fr::HeuristicFrNer::new(),
+            gdpr_layers: cfg.gdpr_layers,
+        })
     }
 
     /// Detect entities in `text`. Returns spans sorted by start, deduplicated

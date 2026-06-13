@@ -119,11 +119,11 @@ VOLUME ["/models"]
 
 # ── Environment ───────────────────────────────────────────────────────────────
 # ANNO_RAG_VAULT_PASSPHRASE  REQUIRED at runtime — set in docker-compose.yml
-# ANNO_DATA_DIR              Persistent data (index + vault)
+# ANNO_RAG_DATA_DIR          Persistent data (index + vault)
 # ANNO_MODELS_DIR            Host-mounted model weights directory
 # ANNO_RAG_EMBED_MODEL       Ordalie embedder (1024d, French-optimized)
 # ANNO_RAG_EMBED_DIM         Must match embedder output dimension
-ENV ANNO_DATA_DIR=/data \
+ENV ANNO_RAG_DATA_DIR=/data \
     ANNO_MODELS_DIR=/models \
     ANNO_RAG_EMBED_MODEL=OrdalieTech/Solon-embeddings-large-0.1 \
     ANNO_RAG_EMBED_DIM=1024 \

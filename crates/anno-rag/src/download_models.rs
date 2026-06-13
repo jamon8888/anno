@@ -8,7 +8,7 @@ use std::path::{Path, PathBuf};
 
 /// NER model HuggingFace repo id.
 const NER_MODEL_ID: &str = "SemplificaAI/gliner2-multi-v1-onnx";
-/// Candle/PyTorch GLiNER2 repo used by Candle backends (Metal, CUDA, CPU).
+/// Candle/PyTorch GLiNER2 repo used by Candle backends (Metal, CPU).
 #[cfg(any(feature = "gpu-metal", feature = "gliner2-candle-cpu"))]
 const CANDLE_NER_MODEL_ID: &str = "fastino/gliner2-multi-v1";
 
