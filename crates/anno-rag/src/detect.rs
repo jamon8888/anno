@@ -208,7 +208,10 @@ pub const NER_MODEL_ID: &str = "SemplificaAI/gliner2-multi-v1-onnx";
 ///
 /// # Deprecated
 /// Prefer [`crate::config::AnnoRagConfig::ner_candle_model_id`].
-#[deprecated(since = "0.12.0", note = "use AnnoRagConfig::ner_candle_model_id instead")]
+#[deprecated(
+    since = "0.12.0",
+    note = "use AnnoRagConfig::ner_candle_model_id instead"
+)]
 pub const CANDLE_NER_MODEL_ID: &str = "fastino/gliner2-multi-v1";
 
 /// GDPR-coverage NER labels: (label, description sent to the model, per-label threshold).
@@ -760,7 +763,12 @@ impl Detector {
 /// Emit the AI Act Art. 12 / Art. 72 detector audit event. Cleartext-free:
 /// only counts, durations, and model ids. Deployers pipe the
 /// `anno_rag::detect::audit` target to their SIEM / Art. 30 register.
-fn emit_detect_audit(input_chars: usize, elapsed_us: u64, out: &[DetectedEntity], ner_model_id: &str) {
+fn emit_detect_audit(
+    input_chars: usize,
+    elapsed_us: u64,
+    out: &[DetectedEntity],
+    ner_model_id: &str,
+) {
     use std::collections::BTreeMap;
     let mut per_category: BTreeMap<String, usize> = BTreeMap::new();
     let mut from_pattern: usize = 0;

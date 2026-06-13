@@ -4113,20 +4113,24 @@ mod lazy_tests {
     use std::path::Path;
 
     fn create_required_model_files(models_dir: &Path) {
-        for rel in [
-            "multilingual-e5-small/config.json",
-            "multilingual-e5-small/model.safetensors",
-            "multilingual-e5-small/tokenizer.json",
-            "gliner2-multi-v1-onnx/fp32_v2/classifier_fp32.onnx",
-            "gliner2-multi-v1-onnx/fp32_v2/count_lstm_fixed_fp32.onnx",
-            "gliner2-multi-v1-onnx/fp32_v2/count_pred_argmax_fp32.onnx",
-            "gliner2-multi-v1-onnx/fp32_v2/encoder_fp32.onnx",
-            "gliner2-multi-v1-onnx/fp32_v2/schema_gather_fp32.onnx",
-            "gliner2-multi-v1-onnx/fp32_v2/scorer_fp32.onnx",
-            "gliner2-multi-v1-onnx/fp32_v2/span_rep_fp32.onnx",
-            "gliner2-multi-v1-onnx/fp32_v2/token_gather_fp32.onnx",
-            "gliner2-multi-v1-onnx/fp32_v2/tokenizer.json",
-        ] {
+        let cfg = AnnoRagConfig::default();
+        let e = cfg.embedder_dir();
+        let n = cfg.ner_onnx_dir();
+        let rels: Vec<String> = vec![
+            format!("{e}/config.json"),
+            format!("{e}/model.safetensors"),
+            format!("{e}/tokenizer.json"),
+            format!("{n}/fp32_v2/classifier_fp32.onnx"),
+            format!("{n}/fp32_v2/count_lstm_fixed_fp32.onnx"),
+            format!("{n}/fp32_v2/count_pred_argmax_fp32.onnx"),
+            format!("{n}/fp32_v2/encoder_fp32.onnx"),
+            format!("{n}/fp32_v2/schema_gather_fp32.onnx"),
+            format!("{n}/fp32_v2/scorer_fp32.onnx"),
+            format!("{n}/fp32_v2/span_rep_fp32.onnx"),
+            format!("{n}/fp32_v2/token_gather_fp32.onnx"),
+            format!("{n}/fp32_v2/tokenizer.json"),
+        ];
+        for rel in &rels {
             let path = models_dir.join(rel);
             std::fs::create_dir_all(path.parent().expect("required file parent")).unwrap();
             std::fs::write(path, b"test model file").unwrap();
@@ -4814,13 +4818,12 @@ mod lazy_tests {
     async fn download_models_tool_rejects_empty_dirs() {
         let dir = tempfile::tempdir().expect("tempdir");
         let models_dir = dir.path().join("models");
-        std::fs::create_dir_all(models_dir.join("multilingual-e5-small")).unwrap();
-        std::fs::create_dir_all(models_dir.join("gliner2-multi-v1-onnx")).unwrap();
-
         let cfg = AnnoRagConfig {
             data_dir: dir.path().to_path_buf(),
             ..Default::default()
         };
+        std::fs::create_dir_all(models_dir.join(cfg.embedder_dir())).unwrap();
+        std::fs::create_dir_all(models_dir.join(cfg.ner_onnx_dir())).unwrap();
         let _models_env = ScopedAnnoModelsDir::set(&models_dir);
 
         let server = AnnoRagServer::new_lazy(cfg, [0u8; 32]);

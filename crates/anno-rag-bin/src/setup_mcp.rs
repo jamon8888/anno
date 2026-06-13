@@ -330,11 +330,7 @@ const GLINER_ONNX_BASES: &[&str] = &[
     "token_gather",
 ];
 
-pub fn model_cache_verified(
-    models_dir: &Path,
-    embedder_dir: &str,
-    ner_onnx_dir: &str,
-) -> bool {
+pub fn model_cache_verified(models_dir: &Path, embedder_dir: &str, ner_onnx_dir: &str) -> bool {
     let embedder_files = anno_rag_mcp::model_inventory::embedder_required_files(embedder_dir);
     let embedder_refs: Vec<&str> = embedder_files.iter().map(String::as_str).collect();
     required_files_present(models_dir, &embedder_refs)
@@ -1194,17 +1190,15 @@ mod tests {
             anno_rag_mcp::model_inventory::GLINER_REQUIRED_FILES,
         );
 
-        assert!(
-            ensure_models(
-                &models,
-                false,
-                false,
-                "Solon-embeddings-large-0.1",
-                "gliner2-multi-v1-onnx"
-            )
-            .await
-            .expect("ensure")
-        );
+        assert!(ensure_models(
+            &models,
+            false,
+            false,
+            "Solon-embeddings-large-0.1",
+            "gliner2-multi-v1-onnx"
+        )
+        .await
+        .expect("ensure"));
     }
 
     #[tokio::test]
@@ -1212,17 +1206,15 @@ mod tests {
         let dir = tempfile::tempdir().expect("tempdir");
         let models = dir.path().join("models");
 
-        assert!(
-            !ensure_models(
-                &models,
-                false,
-                true,
-                "Solon-embeddings-large-0.1",
-                "gliner2-multi-v1-onnx"
-            )
-            .await
-            .expect("ensure")
-        );
+        assert!(!ensure_models(
+            &models,
+            false,
+            true,
+            "Solon-embeddings-large-0.1",
+            "gliner2-multi-v1-onnx"
+        )
+        .await
+        .expect("ensure"));
     }
 
     #[tokio::test]
@@ -1230,17 +1222,15 @@ mod tests {
         let dir = tempfile::tempdir().expect("tempdir");
         let models = dir.path().join("models");
 
-        assert!(
-            !ensure_models(
-                &models,
-                true,
-                false,
-                "Solon-embeddings-large-0.1",
-                "gliner2-multi-v1-onnx"
-            )
-            .await
-            .expect("ensure")
-        );
+        assert!(!ensure_models(
+            &models,
+            true,
+            false,
+            "Solon-embeddings-large-0.1",
+            "gliner2-multi-v1-onnx"
+        )
+        .await
+        .expect("ensure"));
     }
 
     #[tokio::test]

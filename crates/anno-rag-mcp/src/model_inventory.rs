@@ -27,10 +27,7 @@ pub fn embedder_required_files(dir: &str) -> Vec<String> {
 }
 
 /// Required GLiNER model files relative to the effective models directory.
-#[deprecated(
-    since = "0.12.0",
-    note = "use gliner_onnx_required_files(dir) instead"
-)]
+#[deprecated(since = "0.12.0", note = "use gliner_onnx_required_files(dir) instead")]
 pub const GLINER_REQUIRED_FILES: &[&str] = &[
     "gliner2-multi-v1-onnx/fp32_v2/classifier_fp32.onnx",
     "gliner2-multi-v1-onnx/fp32_v2/count_lstm_fixed_fp32.onnx",
