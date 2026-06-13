@@ -209,6 +209,16 @@ pub fn scan_patterns(text: &str) -> Vec<PiiEntity> {
     #[cfg(feature = "pii-eu")]
     scan_eu_patterns(text, &mut results);
 
+    scan_generic_patterns(text, &mut results);
+
+    results
+}
+
+/// Scan for generic structured PII patterns: SSN, credit card, IBAN, email, phone, address.
+///
+/// These patterns are not EU-specific. Called by [`scan_patterns`] after EU-specific patterns
+/// so that EU national IDs and tax IDs claim their spans first.
+fn scan_generic_patterns(text: &str, results: &mut Vec<PiiEntity>) {
     let patterns: &[(&str, &str, &str)] = &[
         (r"\b\d{3}-\d{2}-\d{4}\b", "ID_NUMBER", "CRITICAL"),
         (
@@ -259,8 +269,6 @@ pub fn scan_patterns(text: &str) -> Vec<PiiEntity> {
             }
         }
     }
-
-    results
 }
 
 /// Push a single match into results if it doesn't overlap an existing span.
@@ -472,6 +480,49 @@ fn scan_eu_art9_keywords(text: &str, results: &mut Vec<PiiEntity>) {
     });
     for m in re.find_iter(text) {
         push_eu_entity(results, text, m, "SPECIAL_CATEGORY_ETHNIC", "HIGH");
+    }
+}
+
+/// GDPR Art. 9 label strings for zero-shot NER with `extract_with_types`.
+///
+/// These labels are passed directly to the GLiNER2 bi-encoder — they are
+/// semantic queries, not fixed vocabulary. Use with [`scan_patterns_with_ner`].
+#[cfg(feature = "pii-eu")]
+pub const EU_ART9_TYPES: &[&str] = &[
+    "health condition",
+    "biometric data",
+    "genetic data",
+    "political opinion",
+    "religious belief",
+    "trade union membership",
+    "criminal record",
+    "sexual orientation",
+    "ethnic origin",
+];
+
+#[cfg(feature = "pii-eu")]
+fn pii_type_from_art9_label(label: &str) -> &'static str {
+    match label {
+        "health condition" => "SPECIAL_CATEGORY_HEALTH",
+        "biometric data" => "SPECIAL_CATEGORY_BIOMETRIC",
+        "genetic data" => "SPECIAL_CATEGORY_GENETIC",
+        "political opinion" => "SPECIAL_CATEGORY_POLITICAL",
+        "religious belief" => "SPECIAL_CATEGORY_RELIGION",
+        "trade union membership" => "SPECIAL_CATEGORY_UNION",
+        "criminal record" => "SPECIAL_CATEGORY_CRIMINAL",
+        "sexual orientation" => "SPECIAL_CATEGORY_SEXUAL_ORIENTATION",
+        "ethnic origin" => "SPECIAL_CATEGORY_ETHNIC",
+        _ => "SPECIAL_CATEGORY",
+    }
+}
+
+#[cfg(feature = "pii-eu")]
+fn art9_risk_level(label: &str) -> &'static str {
+    match label {
+        "health condition" | "biometric data" | "genetic data" | "criminal record" => "CRITICAL",
+        "political opinion" | "religious belief" | "sexual orientation" | "ethnic origin" => "HIGH",
+        "trade union membership" => "MEDIUM",
+        _ => "HIGH",
     }
 }
 
@@ -1333,5 +1384,30 @@ mod tests {
             results.iter().any(|e| e.pii_type == "SPECIAL_CATEGORY_HEALTH"),
             "scan_eu_art9_keywords must match health keywords: {results:?}"
         );
+    }
+
+    #[test]
+    fn scan_generic_patterns_detects_ssn() {
+        let mut results = Vec::new();
+        scan_generic_patterns("SSN: 123-45-6789", &mut results);
+        assert!(results.iter().any(|e| e.text == "123-45-6789"), "{results:?}");
+    }
+
+    #[test]
+    #[cfg(feature = "pii-eu")]
+    fn art9_type_mapping_health() {
+        assert_eq!(pii_type_from_art9_label("health condition"), "SPECIAL_CATEGORY_HEALTH");
+    }
+
+    #[test]
+    #[cfg(feature = "pii-eu")]
+    fn art9_risk_health_is_critical() {
+        assert_eq!(art9_risk_level("health condition"), "CRITICAL");
+    }
+
+    #[test]
+    #[cfg(feature = "pii-eu")]
+    fn art9_risk_union_is_medium() {
+        assert_eq!(art9_risk_level("trade union membership"), "MEDIUM");
     }
 }
