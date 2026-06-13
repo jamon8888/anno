@@ -108,12 +108,106 @@ pub fn classify_entity(entity: &Entity) -> Option<PiiEntity> {
     })
 }
 
+/// Validate PESEL checksum (Polish national ID).
+/// Uses mod-10 algorithm with official weights from Polish GUS.
+/// See: https://en.wikipedia.org/wiki/PESEL
+#[cfg(feature = "pii-eu")]
+fn is_valid_pesel(pesel: &str) -> bool {
+    if pesel.len() != 11 || !pesel.chars().all(|c| c.is_ascii_digit()) {
+        return false;
+    }
+    // Official weights for first 10 digits (per GUS specification)
+    let weights = [1, 3, 7, 9, 1, 3, 7, 9, 1, 3];
+    let mut sum = 0;
+    for (i, w) in weights.iter().enumerate() {
+        if let Some(d) = pesel.chars().nth(i).and_then(|c| c.to_digit(10)) {
+            sum += (d as usize) * w;
+        }
+    }
+    let check_digit = pesel.chars().nth(10).and_then(|c| c.to_digit(10)).unwrap_or(0) as usize;
+    let expected = (10 - (sum % 10)) % 10;
+    expected == check_digit
+}
+
+/// Validate BSN checksum (Dutch national ID).
+/// Uses mod-11 algorithm per official Dutch RvIG specification.
+/// Formula: 9*d1 + 8*d2 + 7*d3 + 6*d4 + 5*d5 + 4*d6 + 3*d7 + 2*d8 + (-1)*d9 ≡ 0 (mod 11)
+/// See: https://en.wikipedia.org/wiki/Burgerservicenummer
+#[cfg(feature = "pii-eu")]
+fn is_valid_bsn(bsn: &str) -> bool {
+    if bsn.len() != 9 || !bsn.chars().all(|c| c.is_ascii_digit()) {
+        return false;
+    }
+    // Official weights per RvIG: last digit gets weight -1
+    let weights: [i32; 9] = [9, 8, 7, 6, 5, 4, 3, 2, -1];
+    let mut sum: i32 = 0;
+    for (i, w) in weights.iter().enumerate() {
+        if let Some(d) = bsn.chars().nth(i).and_then(|c| c.to_digit(10)) {
+            sum += (d as i32) * w;
+        }
+    }
+    sum % 11 == 0
+}
+
+/// Validate Belgian Registre National checksum.
+/// Uses the 97-modulo algorithm per official Belgian specification.
+/// Format: YYMMDDXXXXX (6 birth date + 3 sequence + 2 check digits)
+/// See: https://belgianidcard.be/
+#[cfg(feature = "pii-eu")]
+fn is_valid_belgian_registre(num: &str) -> bool {
+    if num.len() != 11 || !num.chars().all(|c| c.is_ascii_digit()) {
+        return false;
+    }
+    // Extract first 9 digits and parse as integer
+    // Then validate: 97 - (first_9_digits % 97) should equal last 2 digits
+    if let Ok(n) = num[..9].parse::<u64>() {
+        let check_expected = 97 - (n % 97);
+        if let Ok(check_actual) = num[9..11].parse::<u64>() {
+            if check_expected == check_actual {
+                return true;
+            }
+        }
+    }
+    false
+}
+
+/// Lazy-compiled regexes for EU PII patterns (feature-gated)
+#[cfg(feature = "pii-eu")]
+mod eu_patterns {
+    use std::sync::OnceLock;
+    use regex::Regex;
+
+    pub static FR_INSEE: OnceLock<Regex> = OnceLock::new();
+    pub static ES_DNI: OnceLock<Regex> = OnceLock::new();
+    pub static IT_CODICE: OnceLock<Regex> = OnceLock::new();
+    pub static PL_PESEL: OnceLock<Regex> = OnceLock::new();
+    pub static NL_BSN: OnceLock<Regex> = OnceLock::new();
+    pub static BE_REGISTRE: OnceLock<Regex> = OnceLock::new();
+    pub static FR_SIRET: OnceLock<Regex> = OnceLock::new();
+    pub static FR_SIREN: OnceLock<Regex> = OnceLock::new();
+    pub static VAT: OnceLock<Regex> = OnceLock::new();
+    pub static LICENSE_PLATE: OnceLock<Regex> = OnceLock::new();
+    pub static HEALTH_KW: OnceLock<Regex> = OnceLock::new();
+    pub static BIOMETRIC_KW: OnceLock<Regex> = OnceLock::new();
+    pub static GENETIC_KW: OnceLock<Regex> = OnceLock::new();
+    pub static POLITICAL_KW: OnceLock<Regex> = OnceLock::new();
+    pub static RELIGION_KW: OnceLock<Regex> = OnceLock::new();
+    pub static UNION_KW: OnceLock<Regex> = OnceLock::new();
+    pub static CRIMINAL_KW: OnceLock<Regex> = OnceLock::new();
+    pub static SEXUAL_ORIENT_KW: OnceLock<Regex> = OnceLock::new();
+    pub static ETHNIC_KW: OnceLock<Regex> = OnceLock::new();
+}
+
 /// Scan text for structured PII patterns (SSN, credit card, IBAN, email, phone, address).
 ///
 /// This is independent of NER -- it catches structured PII via regex.
 /// Offsets are character offsets (Unicode scalar values), consistent with [`classify_entity`].
 pub fn scan_patterns(text: &str) -> Vec<PiiEntity> {
     let mut results = Vec::new();
+
+    // EU patterns run first to claim spans before the generic phone/digit patterns
+    #[cfg(feature = "pii-eu")]
+    scan_eu_patterns(text, &mut results);
 
     let patterns: &[(&str, &str, &str)] = &[
         (r"\b\d{3}-\d{2}-\d{4}\b", "ID_NUMBER", "CRITICAL"),
@@ -167,6 +261,207 @@ pub fn scan_patterns(text: &str) -> Vec<PiiEntity> {
     }
 
     results
+}
+
+/// Push a single match into results if it doesn't overlap an existing span.
+#[cfg(feature = "pii-eu")]
+fn push_eu_entity(
+    results: &mut Vec<PiiEntity>,
+    text: &str,
+    m: regex::Match<'_>,
+    pii_type: &str,
+    risk_level: &str,
+) {
+    let start = text[..m.start()].chars().count();
+    let end = text[..m.end()].chars().count();
+    if !results.iter().any(|e: &PiiEntity| !(end <= e.start || start >= e.end)) {
+        results.push(PiiEntity {
+            text: m.as_str().to_string(),
+            pii_type: pii_type.to_string(),
+            start,
+            end,
+            risk_level: risk_level.to_string(),
+        });
+    }
+}
+
+/// Scan for EU-specific PII patterns: national IDs, GDPR Art. 9 special
+/// categories, tax identifiers, and EU vehicle license plates.
+#[cfg(feature = "pii-eu")]
+fn scan_eu_patterns(text: &str, results: &mut Vec<PiiEntity>) {
+    use eu_patterns::*;
+    use regex::Regex;
+
+    // --- National IDs ---
+
+    // France: INSEE (13-digit social security number)
+    let re = FR_INSEE.get_or_init(|| {
+        Regex::new(r"\b[12]\d{2}(?:0[1-9]|1[0-2])\d{2}\d{3}\d{3}\d{2}\b")
+            .expect("FR INSEE regex")
+    });
+    for m in re.find_iter(text) {
+        push_eu_entity(results, text, m, "NATIONAL_ID_FR", "CRITICAL");
+    }
+
+    // Spain: DNI (8 digits + letter) or NIE (X/Y/Z + 7 digits + letter)
+    let re = ES_DNI.get_or_init(|| {
+        Regex::new(r"\b(?:[XYZ]\d{7}|\d{8})[A-Z]\b").expect("ES DNI regex")
+    });
+    for m in re.find_iter(text) {
+        push_eu_entity(results, text, m, "NATIONAL_ID_ES", "CRITICAL");
+    }
+
+    // Italy: Codice Fiscale (6 letters + 2 digits + letter + 2 digits + letter + 3 digits + letter)
+    let re = IT_CODICE.get_or_init(|| {
+        Regex::new(r"\b[A-Z]{6}\d{2}[A-Z]\d{2}[A-Z]\d{3}[A-Z]\b").expect("IT Codice regex")
+    });
+    for m in re.find_iter(text) {
+        push_eu_entity(results, text, m, "NATIONAL_ID_IT", "CRITICAL");
+    }
+
+    // Poland: PESEL (11-digit with mod-10 checksum)
+    let re = PL_PESEL.get_or_init(|| Regex::new(r"\b\d{11}\b").expect("PL PESEL regex"));
+    for m in re.find_iter(text) {
+        if is_valid_pesel(m.as_str()) {
+            push_eu_entity(results, text, m, "NATIONAL_ID_PL", "CRITICAL");
+        }
+    }
+
+    // Netherlands: BSN (9-digit with mod-11 checksum, weight -1 on last digit)
+    let re = NL_BSN.get_or_init(|| Regex::new(r"\b\d{9}\b").expect("NL BSN regex"));
+    for m in re.find_iter(text) {
+        if is_valid_bsn(m.as_str()) {
+            push_eu_entity(results, text, m, "NATIONAL_ID_NL", "CRITICAL");
+        }
+    }
+
+    // Belgium: Registre National (11-digit with 97-modulo checksum)
+    let re = BE_REGISTRE.get_or_init(|| {
+        Regex::new(r"\b\d{2}[0-1]\d[0-3]\d\d{5}\b").expect("BE Registre regex")
+    });
+    for m in re.find_iter(text) {
+        if is_valid_belgian_registre(m.as_str()) {
+            push_eu_entity(results, text, m, "NATIONAL_ID_BE", "CRITICAL");
+        }
+    }
+
+    // --- Tax Identifiers ---
+
+    // France: SIRET (14-digit business ID)
+    let re = FR_SIRET.get_or_init(|| {
+        Regex::new(r"\b\d{3}\s?\d{3}\s?\d{3}\s?\d{5}\b").expect("FR SIRET regex")
+    });
+    for m in re.find_iter(text) {
+        // Only flag 14+ digit matches as SIRET (not SIREN which is 9)
+        let digits: String = m.as_str().chars().filter(|c| c.is_ascii_digit()).collect();
+        if digits.len() == 14 {
+            push_eu_entity(results, text, m, "TAX_ID_SIRET", "HIGH");
+        }
+    }
+
+    // France: SIREN (9-digit company ID) — only when not already captured as SIRET
+    let re = FR_SIREN.get_or_init(|| {
+        Regex::new(r"\b\d{3}\s?\d{3}\s?\d{3}\b").expect("FR SIREN regex")
+    });
+    for m in re.find_iter(text) {
+        let digits: String = m.as_str().chars().filter(|c| c.is_ascii_digit()).collect();
+        if digits.len() == 9 {
+            push_eu_entity(results, text, m, "TAX_ID_SIREN", "HIGH");
+        }
+    }
+
+    // EU VAT numbers (country prefix + digits)
+    let re = VAT.get_or_init(|| {
+        Regex::new(r"\b(?:AT|BE|BG|CY|CZ|DE|DK|EE|EL|ES|FI|FR|GB|HR|HU|IE|IT|LT|LU|LV|MT|NL|PL|PT|RO|SE|SI|SK)\d{8,12}\b")
+            .expect("EU VAT regex")
+    });
+    for m in re.find_iter(text) {
+        push_eu_entity(results, text, m, "TAX_ID_VAT", "HIGH");
+    }
+
+    // EU License plates (country code + digits + letters, requires at least 1 digit)
+    let re = LICENSE_PLATE.get_or_init(|| {
+        Regex::new(r"\b(?:DE|FR|IT|ES|PL|NL|BE|PT|CZ|HU|SE|AT|CH|RO|BG|DK|FI|GR|IE|SK|SI|HR|LT|LV|EE|LU|MT|CY)\s?-?\d[\w-]{2,6}\b")
+            .expect("EU license plate regex")
+    });
+    for m in re.find_iter(text) {
+        push_eu_entity(results, text, m, "LICENSE_PLATE_EU", "MEDIUM");
+    }
+
+    // --- GDPR Art. 9 Special Categories (keyword-based, Phase 1) ---
+    // Note: High false positive rate by design — Phase 2 will replace with GLiNER2 NER
+
+    let re = HEALTH_KW.get_or_init(|| {
+        Regex::new(r"(?i)\b(diagnosed\s+with|suffers?\s+from|allergic\s+to|medical\s+condition|hospital|surgery|treatment|disease|illness|cancer|diabetes|hypertension|asthma|depression|anxiety)\b")
+            .expect("health keywords")
+    });
+    for m in re.find_iter(text) {
+        push_eu_entity(results, text, m, "SPECIAL_CATEGORY_HEALTH", "CRITICAL");
+    }
+
+    let re = BIOMETRIC_KW.get_or_init(|| {
+        Regex::new(r"(?i)\b(fingerprint|iris\s+scan|facial\s+recognition|biometric|face\s+scan|voice\s+recognition)\b")
+            .expect("biometric keywords")
+    });
+    for m in re.find_iter(text) {
+        push_eu_entity(results, text, m, "SPECIAL_CATEGORY_BIOMETRIC", "CRITICAL");
+    }
+
+    let re = GENETIC_KW.get_or_init(|| {
+        Regex::new(r"(?i)\b(genetic\s+data|DNA\s+test|genome|inherited\s+condition|hereditary)\b")
+            .expect("genetic keywords")
+    });
+    for m in re.find_iter(text) {
+        push_eu_entity(results, text, m, "SPECIAL_CATEGORY_GENETIC", "CRITICAL");
+    }
+
+    let re = POLITICAL_KW.get_or_init(|| {
+        Regex::new(r"(?i)\b(member\s+of\s+(?:the\s+)?(?:socialist|communist|conservative|liberal|democrat|republican)\s+party|party\s+affiliation|political\s+opinion)\b")
+            .expect("political keywords")
+    });
+    for m in re.find_iter(text) {
+        push_eu_entity(results, text, m, "SPECIAL_CATEGORY_POLITICAL", "HIGH");
+    }
+
+    let re = RELIGION_KW.get_or_init(|| {
+        Regex::new(r"(?i)\b(catholic|protestant|muslim|jewish|buddhist|hindu|sikh|atheist|agnostic)\b")
+            .expect("religion keywords")
+    });
+    for m in re.find_iter(text) {
+        push_eu_entity(results, text, m, "SPECIAL_CATEGORY_RELIGION", "HIGH");
+    }
+
+    let re = UNION_KW.get_or_init(|| {
+        Regex::new(r"(?i)\b(trade\s+union\s+member|union\s+membership|collective\s+bargaining)\b")
+            .expect("union keywords")
+    });
+    for m in re.find_iter(text) {
+        push_eu_entity(results, text, m, "SPECIAL_CATEGORY_UNION", "MEDIUM");
+    }
+
+    let re = CRIMINAL_KW.get_or_init(|| {
+        Regex::new(r"(?i)\b(convicted\s+of|arrested\s+for|charged\s+with|criminal\s+record|incarcerated|felony\s+conviction)\b")
+            .expect("criminal keywords")
+    });
+    for m in re.find_iter(text) {
+        push_eu_entity(results, text, m, "SPECIAL_CATEGORY_CRIMINAL", "CRITICAL");
+    }
+
+    let re = SEXUAL_ORIENT_KW.get_or_init(|| {
+        Regex::new(r"(?i)\b(gay|lesbian|bisexual|transgender|lgbtq\+?|homosexual|queer)\b")
+            .expect("sexual orientation keywords")
+    });
+    for m in re.find_iter(text) {
+        push_eu_entity(results, text, m, "SPECIAL_CATEGORY_SEXUAL_ORIENTATION", "HIGH");
+    }
+
+    let re = ETHNIC_KW.get_or_init(|| {
+        Regex::new(r"(?i)\b(ethnic\s+origin|racial\s+origin|Roma\s+community|indigenous\s+people)\b")
+            .expect("ethnic keywords")
+    });
+    for m in re.find_iter(text) {
+        push_eu_entity(results, text, m, "SPECIAL_CATEGORY_ETHNIC", "HIGH");
+    }
 }
 
 /// Generate a PII report from detected entities.
@@ -567,6 +862,142 @@ pub fn looks_like_id_number(text: &str) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    #[cfg(feature = "pii-eu")]
+    fn pesel_80051501231_valid() {
+        // Valid PESEL: sum(d*w for weights [1,3,7,9,1,3,7,9,1,3])=89, check=(10-9)%10=1
+        assert!(is_valid_pesel("80051501231"));
+    }
+
+    #[test]
+    #[cfg(feature = "pii-eu")]
+    fn pesel_80051501230_invalid() {
+        // Check digit should be 1, not 0
+        assert!(!is_valid_pesel("80051501230"));
+    }
+
+    #[test]
+    #[cfg(feature = "pii-eu")]
+    fn pesel_wrong_length_rejected() {
+        assert!(!is_valid_pesel("8005150123"));   // 10 digits
+        assert!(!is_valid_pesel("800515012345")); // 12 digits
+    }
+
+    #[test]
+    #[cfg(feature = "pii-eu")]
+    fn bsn_123456782_valid() {
+        // Example with valid mod-11 checksum
+        assert!(is_valid_bsn("123456782"));
+    }
+
+    #[test]
+    #[cfg(feature = "pii-eu")]
+    fn bsn_123456780_invalid() {
+        assert!(!is_valid_bsn("123456780"));
+    }
+
+    #[test]
+    #[cfg(feature = "pii-eu")]
+    fn belgian_registre_valid() {
+        // 800515012 % 97 = 8, check = 97 - 8 = 89 → "80051501289"
+        assert!(is_valid_belgian_registre("80051501289"));
+    }
+
+    #[test]
+    #[cfg(feature = "pii-eu")]
+    fn belgian_registre_invalid() {
+        // Wrong check digits (89 expected, 94 provided)
+        assert!(!is_valid_belgian_registre("80051501294"));
+    }
+
+    // --- EU national IDs ---
+
+    #[test]
+    #[cfg(feature = "pii-eu")]
+    fn scan_patterns_detects_fr_insee() {
+        let result = scan_patterns("INSEE: 185057511602324");
+        assert!(result.iter().any(|p| p.pii_type == "NATIONAL_ID_FR"), "{result:?}");
+    }
+
+    #[test]
+    #[cfg(feature = "pii-eu")]
+    fn scan_patterns_detects_pl_pesel_valid() {
+        let result = scan_patterns("PESEL: 80051501231");
+        assert!(result.iter().any(|p| p.pii_type == "NATIONAL_ID_PL"), "{result:?}");
+    }
+
+    #[test]
+    #[cfg(feature = "pii-eu")]
+    fn scan_patterns_rejects_pl_pesel_invalid_checksum() {
+        let result = scan_patterns("80051501230");
+        assert!(!result.iter().any(|p| p.pii_type == "NATIONAL_ID_PL"), "{result:?}");
+    }
+
+    #[test]
+    #[cfg(feature = "pii-eu")]
+    fn scan_patterns_detects_nl_bsn_valid() {
+        let result = scan_patterns("BSN: 123456782");
+        assert!(result.iter().any(|p| p.pii_type == "NATIONAL_ID_NL"), "{result:?}");
+    }
+
+    #[test]
+    #[cfg(feature = "pii-eu")]
+    fn scan_patterns_detects_es_dni() {
+        let result = scan_patterns("DNI: 12345678Z");
+        assert!(result.iter().any(|p| p.pii_type == "NATIONAL_ID_ES"), "{result:?}");
+    }
+
+    #[test]
+    #[cfg(feature = "pii-eu")]
+    fn scan_patterns_detects_it_codice_fiscale() {
+        let result = scan_patterns("Codice Fiscale: RSSMRA85T10A562S");
+        assert!(result.iter().any(|p| p.pii_type == "NATIONAL_ID_IT"), "{result:?}");
+    }
+
+    // --- GDPR Art. 9 special categories ---
+
+    #[test]
+    #[cfg(feature = "pii-eu")]
+    fn scan_patterns_detects_health_keyword() {
+        let result = scan_patterns("Patient diagnosed with diabetes");
+        assert!(result.iter().any(|p| p.pii_type == "SPECIAL_CATEGORY_HEALTH"), "{result:?}");
+    }
+
+    #[test]
+    #[cfg(feature = "pii-eu")]
+    fn scan_patterns_detects_religion_keyword() {
+        let result = scan_patterns("He is Catholic");
+        assert!(result.iter().any(|p| p.pii_type == "SPECIAL_CATEGORY_RELIGION"), "{result:?}");
+    }
+
+    #[test]
+    #[cfg(feature = "pii-eu")]
+    fn scan_patterns_detects_criminal_keyword() {
+        let result = scan_patterns("He was convicted of fraud");
+        assert!(result.iter().any(|p| p.pii_type == "SPECIAL_CATEGORY_CRIMINAL"), "{result:?}");
+    }
+
+    // --- Tax IDs ---
+
+    #[test]
+    #[cfg(feature = "pii-eu")]
+    fn scan_patterns_detects_fr_siret() {
+        let result = scan_patterns("SIRET: 73282932000074");
+        assert!(result.iter().any(|p| p.pii_type == "TAX_ID_SIRET"), "{result:?}");
+    }
+
+    // --- Integration: UTF-8 offsets ---
+
+    #[test]
+    #[cfg(feature = "pii-eu")]
+    fn eu_detection_uses_char_offsets() {
+        let text = "Café PESEL: 80051501231 end";
+        let result = scan_patterns(text);
+        let pesel = result.iter().find(|p| p.pii_type == "NATIONAL_ID_PL").expect("PESEL found");
+        let extracted: String = text.chars().skip(pesel.start).take(pesel.end - pesel.start).collect();
+        assert_eq!(extracted, "80051501231");
+    }
 
     #[test]
     fn ssn_detected_by_scan() {
