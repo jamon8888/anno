@@ -6,12 +6,6 @@
 use crate::{config::AnnoRagConfig, error::Result, Error};
 use std::path::{Path, PathBuf};
 
-/// NER model HuggingFace repo id.
-const NER_MODEL_ID: &str = "SemplificaAI/gliner2-multi-v1-onnx";
-/// Candle/PyTorch GLiNER2 repo used by Candle backends (Metal, CPU).
-#[cfg(any(feature = "gpu-metal", feature = "gliner2-candle-cpu"))]
-const CANDLE_NER_MODEL_ID: &str = "fastino/gliner2-multi-v1";
-
 /// The eight base names of GLiNER2-Fastino's ONNX graphs (fp32_v2 layout).
 const NER_ONNX_BASES: &[&str] = &[
     "encoder",
@@ -36,9 +30,9 @@ const NER_ONNX_BASES: &[&str] = &[
 pub async fn download(cfg: &AnnoRagConfig) -> Result<PathBuf> {
     let models_dir = cfg.models_cache();
     download_embedder(&models_dir, &cfg.embed_model).await?;
-    download_ner(&models_dir).await?;
+    download_ner(&models_dir, &cfg.ner_model_id, &cfg.ner_onnx_dir()).await?;
     #[cfg(any(feature = "gpu-metal", feature = "gliner2-candle-cpu"))]
-    download_candle_ner(&models_dir).await?;
+    download_candle_ner(&models_dir, &cfg.ner_candle_model_id, &cfg.ner_candle_dir()).await?;
     Ok(models_dir)
 }
 
@@ -94,24 +88,29 @@ async fn download_embedder(models_dir: &Path, model_id: &str) -> Result<()> {
     Ok(())
 }
 
-async fn download_ner(models_dir: &Path) -> Result<()> {
-    let ner_dir = models_dir.join("gliner2-multi-v1-onnx");
+async fn download_ner(models_dir: &Path, model_id: &str, ner_dir_name: &str) -> Result<()> {
+    let ner_dir = models_dir.join(ner_dir_name);
     tokio::fs::create_dir_all(&ner_dir).await?;
 
     // GLiNER2 uses the sync hf-hub API internally; run in spawn_blocking
     let ner_dir_clone = ner_dir.clone();
-    tokio::task::spawn_blocking(move || download_ner_sync(&ner_dir_clone))
+    let model_id = model_id.to_string();
+    tokio::task::spawn_blocking(move || download_ner_sync(&ner_dir_clone, &model_id))
         .await
         .map_err(|e| Error::Detect(format!("spawn_blocking panic: {e}")))?
 }
 
 #[cfg(any(feature = "gpu-metal", feature = "gliner2-candle-cpu"))]
-async fn download_candle_ner(models_dir: &Path) -> Result<()> {
-    let candle_dir = models_dir.join("gliner2-multi-v1-candle");
+async fn download_candle_ner(
+    models_dir: &Path,
+    model_id: &str,
+    candle_dir_name: &str,
+) -> Result<()> {
+    let candle_dir = models_dir.join(candle_dir_name);
     tokio::fs::create_dir_all(&candle_dir).await?;
     let api =
         hf_hub::api::tokio::Api::new().map_err(|e| Error::Detect(format!("hf-hub init: {e}")))?;
-    let repo = api.model(CANDLE_NER_MODEL_ID.to_string());
+    let repo = api.model(model_id.to_string());
     for file in [
         "tokenizer.json",
         "config.json",
@@ -132,11 +131,11 @@ async fn download_candle_ner(models_dir: &Path) -> Result<()> {
     Ok(())
 }
 
-fn download_ner_sync(ner_dir: &Path) -> Result<()> {
+fn download_ner_sync(ner_dir: &Path, model_id: &str) -> Result<()> {
     use hf_hub::api::sync::Api;
 
     let api = Api::new().map_err(|e| Error::Detect(format!("hf-hub init: {e}")))?;
-    let repo = api.model(NER_MODEL_ID.to_string());
+    let repo = api.model(model_id.to_string());
 
     // Tokenizer — try fp32_v2/ first (matches from_pretrained fallback order)
     let tokenizer_candidates = [
