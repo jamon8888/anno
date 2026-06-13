@@ -4775,9 +4775,14 @@ mod lazy_tests {
         assert!(v.get("vault").is_some());
         assert!(v.get("models").is_some());
         assert_eq!(v["knowledge"]["objects"], 0);
-        assert_eq!(v["vault"]["available"], false);
-        // No keyring entry in CI → vault_not_initialized (pipeline_not_yet_loaded when vault is set)
-        assert_eq!(v["vault"]["reason"], "vault_not_initialized");
+        // vault["available"] depends on the local keyring / ANNO_RAG_VAULT_PASSPHRASE env var;
+        // assert the shape and that "reason" is one of the two expected pre-pipeline values.
+        assert!(v["vault"].get("available").is_some(), "vault.available must be present");
+        let reason = v["vault"]["reason"].as_str().expect("vault.reason must be a string");
+        assert!(
+            reason == "vault_not_initialized" || reason == "pipeline_not_yet_loaded",
+            "unexpected vault reason: {reason}"
+        );
         assert!(v["models"].get("inventory").is_some());
         assert_eq!(v["models"]["embedder_loaded"], false);
         assert_eq!(v["models"]["detector_loaded"], false);
