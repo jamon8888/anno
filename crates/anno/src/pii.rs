@@ -124,7 +124,11 @@ fn is_valid_pesel(pesel: &str) -> bool {
             sum += (d as usize) * w;
         }
     }
-    let check_digit = pesel.chars().nth(10).and_then(|c| c.to_digit(10)).unwrap_or(0) as usize;
+    let check_digit = pesel
+        .chars()
+        .nth(10)
+        .and_then(|c| c.to_digit(10))
+        .unwrap_or(0) as usize;
     let expected = (10 - (sum % 10)) % 10;
     expected == check_digit
 }
@@ -174,8 +178,8 @@ fn is_valid_belgian_registre(num: &str) -> bool {
 /// Lazy-compiled regexes for EU PII patterns (feature-gated)
 #[cfg(feature = "pii-eu")]
 mod eu_patterns {
-    use std::sync::OnceLock;
     use regex::Regex;
+    use std::sync::OnceLock;
 
     pub static FR_INSEE: OnceLock<Regex> = OnceLock::new();
     pub static ES_DNI: OnceLock<Regex> = OnceLock::new();
@@ -230,6 +234,12 @@ pub fn scan_patterns(text: &str) -> Vec<PiiEntity> {
 /// # Errors
 ///
 /// Returns `Err` if the NER backend fails (model load error, ONNX runtime error, etc.).
+///
+/// # Note
+///
+/// This path does **not** run the keyword-based Art. 9 fallback ([`scan_eu_art9_keywords`]).
+/// If the NER model misses an entity (threshold too high, short text, undertrained label),
+/// no keyword fallback fires. For keyword-gated Art. 9 coverage, use [`scan_patterns`] instead.
 #[cfg(all(feature = "pii-eu", feature = "gliner2-fastino"))]
 pub fn scan_patterns_with_ner<M>(
     text: &str,
@@ -251,7 +261,10 @@ where
         let risk = art9_risk_level(&label);
         let start = entity.start();
         let end = entity.end();
-        if !results.iter().any(|e: &PiiEntity| !(end <= e.start || start >= e.end)) {
+        if !results
+            .iter()
+            .any(|e: &PiiEntity| !(end <= e.start || start >= e.end))
+        {
             results.push(PiiEntity {
                 text: entity.text.clone(),
                 pii_type: pii_type.to_string(),
@@ -333,7 +346,10 @@ fn push_eu_entity(
 ) {
     let start = text[..m.start()].chars().count();
     let end = text[..m.end()].chars().count();
-    if !results.iter().any(|e: &PiiEntity| !(end <= e.start || start >= e.end)) {
+    if !results
+        .iter()
+        .any(|e: &PiiEntity| !(end <= e.start || start >= e.end))
+    {
         results.push(PiiEntity {
             text: m.as_str().to_string(),
             pii_type: pii_type.to_string(),
@@ -356,17 +372,15 @@ fn scan_eu_structured(text: &str, results: &mut Vec<PiiEntity>) {
 
     // France: INSEE (13-digit social security number)
     let re = FR_INSEE.get_or_init(|| {
-        Regex::new(r"\b[12]\d{2}(?:0[1-9]|1[0-2])\d{2}\d{3}\d{3}\d{2}\b")
-            .expect("FR INSEE regex")
+        Regex::new(r"\b[12]\d{2}(?:0[1-9]|1[0-2])\d{2}\d{3}\d{3}\d{2}\b").expect("FR INSEE regex")
     });
     for m in re.find_iter(text) {
         push_eu_entity(results, text, m, "NATIONAL_ID_FR", "CRITICAL");
     }
 
     // Spain: DNI (8 digits + letter) or NIE (X/Y/Z + 7 digits + letter)
-    let re = ES_DNI.get_or_init(|| {
-        Regex::new(r"\b(?:[XYZ]\d{7}|\d{8})[A-Z]\b").expect("ES DNI regex")
-    });
+    let re =
+        ES_DNI.get_or_init(|| Regex::new(r"\b(?:[XYZ]\d{7}|\d{8})[A-Z]\b").expect("ES DNI regex"));
     for m in re.find_iter(text) {
         push_eu_entity(results, text, m, "NATIONAL_ID_ES", "CRITICAL");
     }
@@ -396,9 +410,8 @@ fn scan_eu_structured(text: &str, results: &mut Vec<PiiEntity>) {
     }
 
     // Belgium: Registre National (11-digit with 97-modulo checksum)
-    let re = BE_REGISTRE.get_or_init(|| {
-        Regex::new(r"\b\d{2}[0-1]\d[0-3]\d\d{5}\b").expect("BE Registre regex")
-    });
+    let re = BE_REGISTRE
+        .get_or_init(|| Regex::new(r"\b\d{2}[0-1]\d[0-3]\d\d{5}\b").expect("BE Registre regex"));
     for m in re.find_iter(text) {
         if is_valid_belgian_registre(m.as_str()) {
             push_eu_entity(results, text, m, "NATIONAL_ID_BE", "CRITICAL");
@@ -408,9 +421,8 @@ fn scan_eu_structured(text: &str, results: &mut Vec<PiiEntity>) {
     // --- Tax Identifiers ---
 
     // France: SIRET (14-digit business ID)
-    let re = FR_SIRET.get_or_init(|| {
-        Regex::new(r"\b\d{3}\s?\d{3}\s?\d{3}\s?\d{5}\b").expect("FR SIRET regex")
-    });
+    let re = FR_SIRET
+        .get_or_init(|| Regex::new(r"\b\d{3}\s?\d{3}\s?\d{3}\s?\d{5}\b").expect("FR SIRET regex"));
     for m in re.find_iter(text) {
         // Only flag 14+ digit matches as SIRET (not SIREN which is 9)
         let digits: String = m.as_str().chars().filter(|c| c.is_ascii_digit()).collect();
@@ -420,9 +432,8 @@ fn scan_eu_structured(text: &str, results: &mut Vec<PiiEntity>) {
     }
 
     // France: SIREN (9-digit company ID) — only when not already captured as SIRET
-    let re = FR_SIREN.get_or_init(|| {
-        Regex::new(r"\b\d{3}\s?\d{3}\s?\d{3}\b").expect("FR SIREN regex")
-    });
+    let re =
+        FR_SIREN.get_or_init(|| Regex::new(r"\b\d{3}\s?\d{3}\s?\d{3}\b").expect("FR SIREN regex"));
     for m in re.find_iter(text) {
         let digits: String = m.as_str().chars().filter(|c| c.is_ascii_digit()).collect();
         if digits.len() == 9 {
@@ -494,8 +505,10 @@ fn scan_eu_art9_keywords(text: &str, results: &mut Vec<PiiEntity>) {
     }
 
     let re = RELIGION_KW.get_or_init(|| {
-        Regex::new(r"(?i)\b(catholic|protestant|muslim|jewish|buddhist|hindu|sikh|atheist|agnostic)\b")
-            .expect("religion keywords")
+        Regex::new(
+            r"(?i)\b(catholic|protestant|muslim|jewish|buddhist|hindu|sikh|atheist|agnostic)\b",
+        )
+        .expect("religion keywords")
     });
     for m in re.find_iter(text) {
         push_eu_entity(results, text, m, "SPECIAL_CATEGORY_RELIGION", "HIGH");
@@ -522,12 +535,20 @@ fn scan_eu_art9_keywords(text: &str, results: &mut Vec<PiiEntity>) {
             .expect("sexual orientation keywords")
     });
     for m in re.find_iter(text) {
-        push_eu_entity(results, text, m, "SPECIAL_CATEGORY_SEXUAL_ORIENTATION", "HIGH");
+        push_eu_entity(
+            results,
+            text,
+            m,
+            "SPECIAL_CATEGORY_SEXUAL_ORIENTATION",
+            "HIGH",
+        );
     }
 
     let re = ETHNIC_KW.get_or_init(|| {
-        Regex::new(r"(?i)\b(ethnic\s+origin|racial\s+origin|Roma\s+community|indigenous\s+people)\b")
-            .expect("ethnic keywords")
+        Regex::new(
+            r"(?i)\b(ethnic\s+origin|racial\s+origin|Roma\s+community|indigenous\s+people)\b",
+        )
+        .expect("ethnic keywords")
     });
     for m in re.find_iter(text) {
         push_eu_entity(results, text, m, "SPECIAL_CATEGORY_ETHNIC", "HIGH");
@@ -601,7 +622,9 @@ pub fn report(entities: &[PiiEntity]) -> PiiReport {
             "DOB" => date_count += 1,
             "ADDRESS" => location_count += 1,
             "CONTACT" => contact_count += 1,
-            "ID_NUMBER" => id_number_count += 1,
+            "ID_NUMBER" | "NATIONAL_ID_FR" | "NATIONAL_ID_ES" | "NATIONAL_ID_IT"
+            | "NATIONAL_ID_PL" | "NATIONAL_ID_NL" | "NATIONAL_ID_BE" | "TAX_ID_SIRET"
+            | "TAX_ID_SIREN" | "TAX_ID_VAT" | "LICENSE_PLATE_EU" => id_number_count += 1,
             _ => {}
         }
     }
@@ -1003,7 +1026,7 @@ mod tests {
     #[test]
     #[cfg(feature = "pii-eu")]
     fn pesel_wrong_length_rejected() {
-        assert!(!is_valid_pesel("8005150123"));   // 10 digits
+        assert!(!is_valid_pesel("8005150123")); // 10 digits
         assert!(!is_valid_pesel("800515012345")); // 12 digits
     }
 
@@ -1040,42 +1063,60 @@ mod tests {
     #[cfg(feature = "pii-eu")]
     fn scan_patterns_detects_fr_insee() {
         let result = scan_patterns("INSEE: 185057511602324");
-        assert!(result.iter().any(|p| p.pii_type == "NATIONAL_ID_FR"), "{result:?}");
+        assert!(
+            result.iter().any(|p| p.pii_type == "NATIONAL_ID_FR"),
+            "{result:?}"
+        );
     }
 
     #[test]
     #[cfg(feature = "pii-eu")]
     fn scan_patterns_detects_pl_pesel_valid() {
         let result = scan_patterns("PESEL: 80051501231");
-        assert!(result.iter().any(|p| p.pii_type == "NATIONAL_ID_PL"), "{result:?}");
+        assert!(
+            result.iter().any(|p| p.pii_type == "NATIONAL_ID_PL"),
+            "{result:?}"
+        );
     }
 
     #[test]
     #[cfg(feature = "pii-eu")]
     fn scan_patterns_rejects_pl_pesel_invalid_checksum() {
         let result = scan_patterns("80051501230");
-        assert!(!result.iter().any(|p| p.pii_type == "NATIONAL_ID_PL"), "{result:?}");
+        assert!(
+            !result.iter().any(|p| p.pii_type == "NATIONAL_ID_PL"),
+            "{result:?}"
+        );
     }
 
     #[test]
     #[cfg(feature = "pii-eu")]
     fn scan_patterns_detects_nl_bsn_valid() {
         let result = scan_patterns("BSN: 123456782");
-        assert!(result.iter().any(|p| p.pii_type == "NATIONAL_ID_NL"), "{result:?}");
+        assert!(
+            result.iter().any(|p| p.pii_type == "NATIONAL_ID_NL"),
+            "{result:?}"
+        );
     }
 
     #[test]
     #[cfg(feature = "pii-eu")]
     fn scan_patterns_detects_es_dni() {
         let result = scan_patterns("DNI: 12345678Z");
-        assert!(result.iter().any(|p| p.pii_type == "NATIONAL_ID_ES"), "{result:?}");
+        assert!(
+            result.iter().any(|p| p.pii_type == "NATIONAL_ID_ES"),
+            "{result:?}"
+        );
     }
 
     #[test]
     #[cfg(feature = "pii-eu")]
     fn scan_patterns_detects_it_codice_fiscale() {
         let result = scan_patterns("Codice Fiscale: RSSMRA85T10A562S");
-        assert!(result.iter().any(|p| p.pii_type == "NATIONAL_ID_IT"), "{result:?}");
+        assert!(
+            result.iter().any(|p| p.pii_type == "NATIONAL_ID_IT"),
+            "{result:?}"
+        );
     }
 
     // --- GDPR Art. 9 special categories ---
@@ -1084,21 +1125,36 @@ mod tests {
     #[cfg(feature = "pii-eu")]
     fn scan_patterns_detects_health_keyword() {
         let result = scan_patterns("Patient diagnosed with diabetes");
-        assert!(result.iter().any(|p| p.pii_type == "SPECIAL_CATEGORY_HEALTH"), "{result:?}");
+        assert!(
+            result
+                .iter()
+                .any(|p| p.pii_type == "SPECIAL_CATEGORY_HEALTH"),
+            "{result:?}"
+        );
     }
 
     #[test]
     #[cfg(feature = "pii-eu")]
     fn scan_patterns_detects_religion_keyword() {
         let result = scan_patterns("He is Catholic");
-        assert!(result.iter().any(|p| p.pii_type == "SPECIAL_CATEGORY_RELIGION"), "{result:?}");
+        assert!(
+            result
+                .iter()
+                .any(|p| p.pii_type == "SPECIAL_CATEGORY_RELIGION"),
+            "{result:?}"
+        );
     }
 
     #[test]
     #[cfg(feature = "pii-eu")]
     fn scan_patterns_detects_criminal_keyword() {
         let result = scan_patterns("He was convicted of fraud");
-        assert!(result.iter().any(|p| p.pii_type == "SPECIAL_CATEGORY_CRIMINAL"), "{result:?}");
+        assert!(
+            result
+                .iter()
+                .any(|p| p.pii_type == "SPECIAL_CATEGORY_CRIMINAL"),
+            "{result:?}"
+        );
     }
 
     // --- Tax IDs ---
@@ -1107,7 +1163,10 @@ mod tests {
     #[cfg(feature = "pii-eu")]
     fn scan_patterns_detects_fr_siret() {
         let result = scan_patterns("SIRET: 73282932000074");
-        assert!(result.iter().any(|p| p.pii_type == "TAX_ID_SIRET"), "{result:?}");
+        assert!(
+            result.iter().any(|p| p.pii_type == "TAX_ID_SIRET"),
+            "{result:?}"
+        );
     }
 
     // --- Integration: UTF-8 offsets ---
@@ -1117,8 +1176,15 @@ mod tests {
     fn eu_detection_uses_char_offsets() {
         let text = "Café PESEL: 80051501231 end";
         let result = scan_patterns(text);
-        let pesel = result.iter().find(|p| p.pii_type == "NATIONAL_ID_PL").expect("PESEL found");
-        let extracted: String = text.chars().skip(pesel.start).take(pesel.end - pesel.start).collect();
+        let pesel = result
+            .iter()
+            .find(|p| p.pii_type == "NATIONAL_ID_PL")
+            .expect("PESEL found");
+        let extracted: String = text
+            .chars()
+            .skip(pesel.start)
+            .take(pesel.end - pesel.start)
+            .collect();
         assert_eq!(extracted, "80051501231");
     }
 
@@ -1421,7 +1487,9 @@ mod tests {
         let mut results = Vec::new();
         scan_eu_structured("Patient has diabetes", &mut results);
         assert!(
-            !results.iter().any(|e| e.pii_type.starts_with("SPECIAL_CATEGORY")),
+            !results
+                .iter()
+                .any(|e| e.pii_type.starts_with("SPECIAL_CATEGORY")),
             "scan_eu_structured must not run keyword patterns: {results:?}"
         );
     }
@@ -1432,7 +1500,9 @@ mod tests {
         let mut results = Vec::new();
         scan_eu_art9_keywords("Patient has diabetes", &mut results);
         assert!(
-            results.iter().any(|e| e.pii_type == "SPECIAL_CATEGORY_HEALTH"),
+            results
+                .iter()
+                .any(|e| e.pii_type == "SPECIAL_CATEGORY_HEALTH"),
             "scan_eu_art9_keywords must match health keywords: {results:?}"
         );
     }
@@ -1441,13 +1511,19 @@ mod tests {
     fn scan_generic_patterns_detects_ssn() {
         let mut results = Vec::new();
         scan_generic_patterns("SSN: 123-45-6789", &mut results);
-        assert!(results.iter().any(|e| e.text == "123-45-6789"), "{results:?}");
+        assert!(
+            results.iter().any(|e| e.text == "123-45-6789"),
+            "{results:?}"
+        );
     }
 
     #[test]
     #[cfg(feature = "pii-eu")]
     fn art9_type_mapping_health() {
-        assert_eq!(pii_type_from_art9_label("health condition"), "SPECIAL_CATEGORY_HEALTH");
+        assert_eq!(
+            pii_type_from_art9_label("health condition"),
+            "SPECIAL_CATEGORY_HEALTH"
+        );
     }
 
     #[test]
@@ -1460,6 +1536,87 @@ mod tests {
     #[cfg(feature = "pii-eu")]
     fn art9_risk_union_is_medium() {
         assert_eq!(art9_risk_level("trade union membership"), "MEDIUM");
+    }
+
+    #[test]
+    #[cfg(feature = "pii-eu")]
+    fn art9_type_mapping_remaining_labels() {
+        assert_eq!(
+            pii_type_from_art9_label("biometric data"),
+            "SPECIAL_CATEGORY_BIOMETRIC"
+        );
+        assert_eq!(
+            pii_type_from_art9_label("genetic data"),
+            "SPECIAL_CATEGORY_GENETIC"
+        );
+        assert_eq!(
+            pii_type_from_art9_label("political opinion"),
+            "SPECIAL_CATEGORY_POLITICAL"
+        );
+        assert_eq!(
+            pii_type_from_art9_label("religious belief"),
+            "SPECIAL_CATEGORY_RELIGION"
+        );
+        assert_eq!(
+            pii_type_from_art9_label("trade union membership"),
+            "SPECIAL_CATEGORY_UNION"
+        );
+        assert_eq!(
+            pii_type_from_art9_label("criminal record"),
+            "SPECIAL_CATEGORY_CRIMINAL"
+        );
+        assert_eq!(
+            pii_type_from_art9_label("sexual orientation"),
+            "SPECIAL_CATEGORY_SEXUAL_ORIENTATION"
+        );
+        assert_eq!(
+            pii_type_from_art9_label("ethnic origin"),
+            "SPECIAL_CATEGORY_ETHNIC"
+        );
+        assert_eq!(
+            pii_type_from_art9_label("unknown label"),
+            "SPECIAL_CATEGORY"
+        );
+    }
+
+    #[test]
+    #[cfg(feature = "pii-eu")]
+    fn art9_risk_critical_labels() {
+        assert_eq!(art9_risk_level("biometric data"), "CRITICAL");
+        assert_eq!(art9_risk_level("genetic data"), "CRITICAL");
+        assert_eq!(art9_risk_level("criminal record"), "CRITICAL");
+    }
+
+    #[test]
+    #[cfg(feature = "pii-eu")]
+    fn art9_risk_high_labels() {
+        assert_eq!(art9_risk_level("political opinion"), "HIGH");
+        assert_eq!(art9_risk_level("religious belief"), "HIGH");
+        assert_eq!(art9_risk_level("sexual orientation"), "HIGH");
+        assert_eq!(art9_risk_level("ethnic origin"), "HIGH");
+        assert_eq!(art9_risk_level("unknown label"), "HIGH");
+    }
+
+    #[test]
+    #[cfg(feature = "pii-eu")]
+    fn report_counts_eu_national_id_as_direct_identifier() {
+        let entities = vec![PiiEntity {
+            text: "80051501231".to_string(),
+            pii_type: "NATIONAL_ID_PL".to_string(),
+            start: 0,
+            end: 11,
+            risk_level: "CRITICAL".to_string(),
+        }];
+        let r = report(&entities);
+        assert_eq!(
+            r.id_number_count, 1,
+            "NATIONAL_ID_PL must count as id_number"
+        );
+        assert!(
+            r.k_anonymity_risk.starts_with("CRITICAL"),
+            "k_anonymity_risk must be CRITICAL when EU national ID present: {}",
+            r.k_anonymity_risk
+        );
     }
 
     #[cfg(all(test, feature = "pii-eu", feature = "gliner2-fastino"))]
@@ -1531,40 +1688,63 @@ mod tests {
                 "structured patterns must run even with null NER: {found:?}"
             );
             assert!(
-                !found.iter().any(|e| e.pii_type.starts_with("SPECIAL_CATEGORY")),
+                !found
+                    .iter()
+                    .any(|e| e.pii_type.starts_with("SPECIAL_CATEGORY")),
                 "no Art.9 entities expected from NullNer: {found:?}"
             );
         }
 
         #[test]
         fn stub_ner_health_maps_to_special_category_health() {
-            let found =
-                scan_patterns_with_ner("diabetes", &StubNer { label: "health condition" }, 0.0)
-                    .expect("scan ok");
+            let found = scan_patterns_with_ner(
+                "diabetes",
+                &StubNer {
+                    label: "health condition",
+                },
+                0.0,
+            )
+            .expect("scan ok");
             let health = found
                 .iter()
                 .find(|e| e.pii_type == "SPECIAL_CATEGORY_HEALTH");
-            assert!(health.is_some(), "expected SPECIAL_CATEGORY_HEALTH: {found:?}");
+            assert!(
+                health.is_some(),
+                "expected SPECIAL_CATEGORY_HEALTH: {found:?}"
+            );
             assert_eq!(health.unwrap().risk_level, "CRITICAL");
         }
 
         #[test]
         fn stub_ner_religion_maps_to_special_category_religion() {
-            let found =
-                scan_patterns_with_ner("Muslim", &StubNer { label: "religious belief" }, 0.0)
-                    .expect("scan ok");
+            let found = scan_patterns_with_ner(
+                "Muslim",
+                &StubNer {
+                    label: "religious belief",
+                },
+                0.0,
+            )
+            .expect("scan ok");
             let rel = found
                 .iter()
                 .find(|e| e.pii_type == "SPECIAL_CATEGORY_RELIGION");
-            assert!(rel.is_some(), "expected SPECIAL_CATEGORY_RELIGION: {found:?}");
+            assert!(
+                rel.is_some(),
+                "expected SPECIAL_CATEGORY_RELIGION: {found:?}"
+            );
             assert_eq!(rel.unwrap().risk_level, "HIGH");
         }
 
         #[test]
         fn stub_ner_unknown_label_maps_to_generic_special_category() {
-            let found =
-                scan_patterns_with_ner("something", &StubNer { label: "unknown category" }, 0.0)
-                    .expect("scan ok");
+            let found = scan_patterns_with_ner(
+                "something",
+                &StubNer {
+                    label: "unknown category",
+                },
+                0.0,
+            )
+            .expect("scan ok");
             assert!(
                 found.iter().any(|e| e.pii_type == "SPECIAL_CATEGORY"),
                 "unknown label must fall through to SPECIAL_CATEGORY: {found:?}"
@@ -1577,15 +1757,27 @@ mod tests {
             // The structured pattern (NATIONAL_ID_PL) runs first and claims the span.
             // The NER entity must be dropped by the overlap check.
             let text = "80051501231";
-            let found =
-                scan_patterns_with_ner(text, &StubNer { label: "health condition" }, 0.0)
-                    .expect("scan ok");
+            let found = scan_patterns_with_ner(
+                text,
+                &StubNer {
+                    label: "health condition",
+                },
+                0.0,
+            )
+            .expect("scan ok");
             // Only one entity covering [0, 11]
-            let at_zero: Vec<_> = found.iter().filter(|e| e.start == 0 && e.end == 11).collect();
+            let at_zero: Vec<_> = found
+                .iter()
+                .filter(|e| e.start == 0 && e.end == 11)
+                .collect();
             assert_eq!(
                 at_zero.len(),
                 1,
                 "overlapping span must be deduped to one entity: {found:?}"
+            );
+            assert_eq!(
+                at_zero[0].pii_type, "NATIONAL_ID_PL",
+                "structured pattern must win over NER on overlapping span: {found:?}"
             );
         }
     }

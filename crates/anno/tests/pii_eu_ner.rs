@@ -25,7 +25,9 @@ fn ner_detects_health_condition_in_clinical_sentence() {
     let text = "The patient was diagnosed with type 2 diabetes last year.";
     let found = pii::scan_patterns_with_ner(text, &model, 0.4).expect("scan ok");
     assert!(
-        found.iter().any(|e| e.pii_type == "SPECIAL_CATEGORY_HEALTH"),
+        found
+            .iter()
+            .any(|e| e.pii_type == "SPECIAL_CATEGORY_HEALTH"),
         "expected SPECIAL_CATEGORY_HEALTH for diabetes in clinical context, got: {found:?}"
     );
 }
@@ -37,7 +39,9 @@ fn ner_detects_criminal_record_mention() {
     let text = "He was convicted of fraud in 2019.";
     let found = pii::scan_patterns_with_ner(text, &model, 0.4).expect("scan ok");
     assert!(
-        found.iter().any(|e| e.pii_type == "SPECIAL_CATEGORY_CRIMINAL"),
+        found
+            .iter()
+            .any(|e| e.pii_type == "SPECIAL_CATEGORY_CRIMINAL"),
         "expected SPECIAL_CATEGORY_CRIMINAL: {found:?}"
     );
 }
@@ -53,7 +57,9 @@ fn ner_preserves_national_id_alongside_art9() {
         "structured PESEL must survive NER path: {found:?}"
     );
     assert!(
-        found.iter().any(|e| e.pii_type == "SPECIAL_CATEGORY_HEALTH"),
+        found
+            .iter()
+            .any(|e| e.pii_type == "SPECIAL_CATEGORY_HEALTH"),
         "health condition must be found by NER: {found:?}"
     );
 }
@@ -67,7 +73,9 @@ fn ner_reduces_false_positives_vs_keywords() {
     let text = "The Catholic church was built in 1832.";
     let found = pii::scan_patterns_with_ner(text, &model, 0.5).expect("scan ok");
     assert!(
-        !found.iter().any(|e| e.pii_type == "SPECIAL_CATEGORY_RELIGION"),
+        !found
+            .iter()
+            .any(|e| e.pii_type == "SPECIAL_CATEGORY_RELIGION"),
         "NER should not fire on historical church reference (false positive): {found:?}"
     );
 }
