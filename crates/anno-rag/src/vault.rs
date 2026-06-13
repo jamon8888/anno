@@ -435,9 +435,7 @@ impl VaultKeySource {
 /// and DPAPI fallback path that [`derive_key`] uses. Returns `false` if
 /// status resolution itself fails.
 pub fn is_vault_key_usable() -> bool {
-    vault_key_status()
-        .map(|s| s.usable)
-        .unwrap_or(false)
+    vault_key_status().map(|s| s.usable).unwrap_or(false)
 }
 
 /// Derive the 32-byte vault key from the environment. Thin wrapper around
