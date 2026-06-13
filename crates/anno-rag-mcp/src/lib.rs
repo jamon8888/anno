@@ -4777,8 +4777,13 @@ mod lazy_tests {
         assert_eq!(v["knowledge"]["objects"], 0);
         // vault["available"] depends on the local keyring / ANNO_RAG_VAULT_PASSPHRASE env var;
         // assert the shape and that "reason" is one of the two expected pre-pipeline values.
-        assert!(v["vault"].get("available").is_some(), "vault.available must be present");
-        let reason = v["vault"]["reason"].as_str().expect("vault.reason must be a string");
+        assert!(
+            v["vault"].get("available").is_some(),
+            "vault.available must be present"
+        );
+        let reason = v["vault"]["reason"]
+            .as_str()
+            .expect("vault.reason must be a string");
         assert!(
             reason == "vault_not_initialized" || reason == "pipeline_not_yet_loaded",
             "unexpected vault reason: {reason}"
