@@ -1,8 +1,8 @@
 //! Embed text via candle (default: `OrdalieTech/Solon-embeddings-large-0.1`).
 //!
 //! Weights are fetched from HuggingFace Hub on first use and cached under
-//! `cfg.models_cache()`. The local cache subdirectory is derived from the last
-//! component of `cfg.embed_model` (e.g. `Solon-embeddings-large-0.1/`).
+//! `cfg.models_cache()`. The local cache subdirectory is the full HF repo ID
+//! path (e.g. `OrdalieTech/Solon-embeddings-large-0.1/`).
 //!
 //! Following the e5 convention, every input is prefixed with `"passage: "`
 //! before tokenization. The final embedding is mean-pooled (weighted by the
@@ -40,12 +40,7 @@ impl Embedder {
             .filter(|value| !value.is_empty())
             .map(std::path::PathBuf::from)
             .unwrap_or_else(|| cfg.models_cache());
-        let model_subdir = cfg
-            .embed_model
-            .split('/')
-            .next_back()
-            .unwrap_or(cfg.embed_model.as_str());
-        let base = local_models_dir.join(model_subdir);
+        let base = local_models_dir.join(cfg.embedder_dir());
         let config_path = base.join("config.json");
         let tokenizer_path = base.join("tokenizer.json");
         let weights_path = base.join("model.safetensors");
@@ -321,12 +316,7 @@ mod tests {
         // error — proving the fast-path is taken when all 3 files are present.
         let dir = tempfile::tempdir().expect("tempdir");
         let cfg = crate::config::AnnoRagConfig::default();
-        let model_subdir = cfg
-            .embed_model
-            .split('/')
-            .next_back()
-            .unwrap_or(&cfg.embed_model);
-        let embed_dir = dir.path().join(model_subdir);
+        let embed_dir = dir.path().join(cfg.embedder_dir());
         std::fs::create_dir_all(&embed_dir).expect("mkdir");
         std::fs::write(embed_dir.join("config.json"), b"not json").expect("config");
         std::fs::write(embed_dir.join("tokenizer.json"), b"not json").expect("tok");
@@ -353,12 +343,7 @@ mod tests {
             data_dir: dir.path().to_path_buf(),
             ..Default::default()
         };
-        let model_subdir = cfg
-            .embed_model
-            .split('/')
-            .next_back()
-            .unwrap_or(&cfg.embed_model);
-        let embed_dir = cfg.models_cache().join(model_subdir);
+        let embed_dir = cfg.models_cache().join(cfg.embedder_dir());
         std::fs::create_dir_all(&embed_dir).expect("mkdir");
         std::fs::write(embed_dir.join("config.json"), b"not json").expect("config");
         std::fs::write(embed_dir.join("tokenizer.json"), b"not json").expect("tok");
@@ -386,12 +371,7 @@ mod tests {
         // check logic compiles correctly and the fast-path condition is false.
         let dir = tempfile::tempdir().expect("tempdir");
         let cfg = crate::config::AnnoRagConfig::default();
-        let model_subdir = cfg
-            .embed_model
-            .split('/')
-            .next_back()
-            .unwrap_or(&cfg.embed_model);
-        let embed_dir = dir.path().join(model_subdir);
+        let embed_dir = dir.path().join(cfg.embedder_dir());
         std::fs::create_dir_all(&embed_dir).expect("mkdir");
         // Exactly 0 of the 3 files exist → fast-path must not trigger
         let has_all = embed_dir.join("config.json").exists()

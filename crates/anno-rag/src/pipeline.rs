@@ -162,6 +162,7 @@ impl Pipeline {
     /// losing pseudonymisation mappings breaks rehydration.
     pub async fn new(cfg: AnnoRagConfig, vault_key: [u8; 32]) -> Result<Self> {
         std::fs::create_dir_all(&cfg.data_dir).map_err(Error::from)?;
+        crate::model_cache::migrate_legacy_cache(&cfg.models_cache(), &cfg);
         let vault = match Vault::open(&cfg.vault_path(), vault_key) {
             Ok(v) => v,
             Err(Error::Vault(ref msg)) if msg.contains("Decryption failed") => {

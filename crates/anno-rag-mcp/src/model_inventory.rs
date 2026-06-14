@@ -370,19 +370,9 @@ mod tests {
     use anno_rag::config::AnnoRagConfig;
     use std::path::Path;
 
-    fn create_required_model_files(models_dir: &Path, embedder_dir: &str) {
+    fn create_required_model_files(models_dir: &Path, embedder_dir: &str, ner_onnx_dir: &str) {
         let mut rels: Vec<String> = embedder_required_files(embedder_dir);
-        rels.extend([
-            "gliner2-multi-v1-onnx/fp32_v2/classifier_fp32.onnx".to_string(),
-            "gliner2-multi-v1-onnx/fp32_v2/count_lstm_fixed_fp32.onnx".to_string(),
-            "gliner2-multi-v1-onnx/fp32_v2/count_pred_argmax_fp32.onnx".to_string(),
-            "gliner2-multi-v1-onnx/fp32_v2/encoder_fp32.onnx".to_string(),
-            "gliner2-multi-v1-onnx/fp32_v2/schema_gather_fp32.onnx".to_string(),
-            "gliner2-multi-v1-onnx/fp32_v2/scorer_fp32.onnx".to_string(),
-            "gliner2-multi-v1-onnx/fp32_v2/span_rep_fp32.onnx".to_string(),
-            "gliner2-multi-v1-onnx/fp32_v2/token_gather_fp32.onnx".to_string(),
-            "gliner2-multi-v1-onnx/fp32_v2/tokenizer.json".to_string(),
-        ]);
+        rels.extend(gliner_onnx_required_files(ner_onnx_dir));
         for rel in &rels {
             let path = models_dir.join(rel);
             std::fs::create_dir_all(path.parent().expect("required file parent")).unwrap();
@@ -400,7 +390,7 @@ mod tests {
             ..Default::default()
         };
         std::fs::create_dir_all(models_dir.join(cfg.embedder_dir())).unwrap();
-        std::fs::create_dir_all(models_dir.join("gliner2-multi-v1-onnx")).unwrap();
+        std::fs::create_dir_all(models_dir.join(cfg.ner_onnx_dir())).unwrap();
         let _models_env = test_env::ScopedAnnoModelsDir::unset();
 
         let inventory = ModelInventoryService::new(&cfg).inspect();
@@ -421,7 +411,11 @@ mod tests {
             accelerator: AcceleratorPreference::Cpu,
             ..Default::default()
         };
-        create_required_model_files(&tmp.path().join("models"), &cfg.embedder_dir());
+        create_required_model_files(
+            &tmp.path().join("models"),
+            &cfg.embedder_dir(),
+            &cfg.ner_onnx_dir(),
+        );
         let _models_env = test_env::ScopedAnnoModelsDir::unset();
 
         let inventory = ModelInventoryService::new(&cfg).inspect();
@@ -445,18 +439,24 @@ mod tests {
             ..Default::default()
         };
         let embedder_dir = cfg.embedder_dir();
+        let ner_onnx_dir = cfg.ner_onnx_dir();
         let mut rels: Vec<String> = embedder_required_files(&embedder_dir);
-        rels.extend([
-            "gliner2-multi-v1-onnx/fp16_v2/classifier_fp16.onnx".to_string(),
-            "gliner2-multi-v1-onnx/fp16_v2/count_lstm_fixed_fp16.onnx".to_string(),
-            "gliner2-multi-v1-onnx/fp16_v2/count_pred_argmax_fp16.onnx".to_string(),
-            "gliner2-multi-v1-onnx/fp16_v2/encoder_fp16.onnx".to_string(),
-            "gliner2-multi-v1-onnx/fp16_v2/schema_gather_fp16.onnx".to_string(),
-            "gliner2-multi-v1-onnx/fp16_v2/scorer_fp16.onnx".to_string(),
-            "gliner2-multi-v1-onnx/fp16_v2/span_rep_fp16.onnx".to_string(),
-            "gliner2-multi-v1-onnx/fp16_v2/token_gather_fp16.onnx".to_string(),
-            "gliner2-multi-v1-onnx/fp16_v2/tokenizer.json".to_string(),
-        ]);
+        let fp16_bases = [
+            "classifier",
+            "count_lstm_fixed",
+            "count_pred_argmax",
+            "encoder",
+            "schema_gather",
+            "scorer",
+            "span_rep",
+            "token_gather",
+        ];
+        rels.extend(
+            fp16_bases
+                .iter()
+                .map(|b| format!("{ner_onnx_dir}/fp16_v2/{b}_fp16.onnx")),
+        );
+        rels.push(format!("{ner_onnx_dir}/fp16_v2/tokenizer.json"));
         for rel in &rels {
             let path = models_dir.join(rel);
             std::fs::create_dir_all(path.parent().expect("required file parent")).unwrap();

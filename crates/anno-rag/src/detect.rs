@@ -1197,27 +1197,29 @@ mod tests {
 
     #[test]
     fn anno_models_dir_missing_ner_dir_does_not_satisfy_local_fast_path() {
-        // ANNO_MODELS_DIR is set but gliner2-multi-v1-onnx/ does NOT exist.
+        // ANNO_MODELS_DIR is set but the NER dir does NOT exist.
         // Verify the local readiness condition without calling Detector::new,
         // because the fallback path may touch Hugging Face cache/network.
         let dir = tempfile::tempdir().expect("tempdir");
-        // deliberately do NOT create dir.path()/gliner2-multi-v1-onnx
+        let cfg = crate::config::AnnoRagConfig::default();
+        // deliberately do NOT create dir.path()/<ner_onnx_dir>
 
         let _models_dir = crate::env_guard::ScopedAnnoModelsDir::set(dir.path());
         let model_root = std::env::var_os("ANNO_MODELS_DIR")
             .filter(|value| !value.is_empty())
             .map(PathBuf::from)
-            .unwrap_or_else(|| crate::config::AnnoRagConfig::default().models_cache());
-        assert!(!model_root.join("gliner2-multi-v1-onnx").exists());
+            .unwrap_or_else(|| cfg.models_cache());
+        assert!(!model_root.join(cfg.ner_onnx_dir()).exists());
     }
 
     #[test]
     fn anno_models_dir_local_path_entered_when_ner_dir_exists() {
-        // When ANNO_MODELS_DIR/gliner2-multi-v1-onnx/ exists (even empty),
+        // When ANNO_MODELS_DIR/<ner_onnx_dir>/ exists (even empty),
         // the fast-path IS taken and from_local errors with a typed error.
         // This proves the branch is entered without requiring real model files.
         let dir = tempfile::tempdir().expect("tempdir");
-        let ner_dir = dir.path().join("gliner2-multi-v1-onnx");
+        let cfg = crate::config::AnnoRagConfig::default();
+        let ner_dir = dir.path().join(cfg.ner_onnx_dir());
         std::fs::create_dir_all(&ner_dir).expect("mkdir");
 
         let _models_dir = crate::env_guard::ScopedAnnoModelsDir::set(dir.path());
@@ -1242,7 +1244,7 @@ mod tests {
             data_dir: dir.path().to_path_buf(),
             ..Default::default()
         };
-        let ner_dir = cfg.models_cache().join("gliner2-multi-v1-onnx");
+        let ner_dir = cfg.models_cache().join(cfg.ner_onnx_dir());
         std::fs::create_dir_all(&ner_dir).expect("mkdir");
 
         let _models_dir = crate::env_guard::ScopedAnnoModelsDir::unset();
@@ -1264,11 +1266,11 @@ mod tests {
         // Verifies that ner_onnx_dir() from config drives the directory
         // that Detector::new() would join to model_root.
         let cfg = crate::config::AnnoRagConfig::default();
-        assert_eq!(cfg.ner_onnx_dir(), "gliner2-multi-v1-onnx");
-        assert_eq!(cfg.ner_candle_dir(), "gliner2-multi-v1-candle");
+        assert_eq!(cfg.ner_onnx_dir(), "SemplificaAI/gliner2-multi-v1-onnx");
+        assert_eq!(cfg.ner_candle_dir(), "fastino/gliner2-multi-v1-candle");
         let mut custom = cfg.clone();
         custom.ner_model_id = "org/my-ner-onnx".to_string();
-        assert_eq!(custom.ner_onnx_dir(), "my-ner-onnx");
+        assert_eq!(custom.ner_onnx_dir(), "org/my-ner-onnx");
     }
 
     #[test]
