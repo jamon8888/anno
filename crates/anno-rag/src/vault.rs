@@ -891,9 +891,6 @@ mod tests {
     use super::*;
     use cloakpipe_core::{DetectedEntity, DetectionSource, EntityCategory};
     use std::ffi::OsString;
-    use std::sync::Mutex as StdMutex;
-
-    static ENV_LOCK: StdMutex<()> = StdMutex::new(());
 
     fn email_entity(text: &str, start: usize) -> DetectedEntity {
         DetectedEntity {
@@ -1048,7 +1045,7 @@ mod tests {
 
     #[test]
     fn argon2_passphrase_yields_deterministic_key() {
-        let _guard = ENV_LOCK.lock().expect("env lock");
+        let _guard = crate::env_guard::lock_env();
         let previous_passphrase = std::env::var_os("ANNO_RAG_VAULT_PASSPHRASE");
         unsafe {
             std::env::set_var("ANNO_RAG_VAULT_PASSPHRASE", "test-passphrase-deterministic");
@@ -1111,7 +1108,7 @@ mod tests {
 
     #[test]
     fn vault_key_status_prefers_env_passphrase() {
-        let _guard = ENV_LOCK.lock().expect("env lock");
+        let _guard = crate::env_guard::lock_env();
         let previous_passphrase = std::env::var_os("ANNO_RAG_VAULT_PASSPHRASE");
         let previous_kms_provider = std::env::var_os("ANNO_RAG_VAULT_KMS_PROVIDER");
         let previous_kms_key_id = std::env::var_os("ANNO_RAG_VAULT_KMS_KEY_ID");
