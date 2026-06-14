@@ -39,6 +39,7 @@ pub mod knowledge_privacy;
 pub mod layers;
 pub mod legal;
 pub mod memory;
+pub mod model_cache;
 pub mod pii_eval;
 pub mod pipeline;
 pub mod privacy_artifacts;
