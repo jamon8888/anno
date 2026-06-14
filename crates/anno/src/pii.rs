@@ -567,7 +567,8 @@ fn scan_eu_art9_keywords(text: &str, results: &mut Vec<PiiEntity>) {
 /// GDPR Art. 9 label strings for zero-shot NER with `extract_with_types`.
 ///
 /// These labels are passed directly to the GLiNER2 bi-encoder — they are
-/// semantic queries, not fixed vocabulary. Use with [`scan_patterns_with_ner`].
+/// semantic queries, not fixed vocabulary. Use with `scan_patterns_with_ner`
+/// (requires both `pii-eu` and `gliner2-fastino` features).
 #[cfg(feature = "pii-eu")]
 pub const EU_ART9_TYPES: &[&str] = &[
     "health condition",
