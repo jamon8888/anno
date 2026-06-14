@@ -1099,42 +1099,29 @@ impl AnnoRagConfig {
         self.data_dir.join("outputs")
     }
 
-    /// Last path segment of `ner_model_id` — used as the local ONNX model directory name.
+    /// Full HF repo ID used as a two-level cache path.
     ///
-    /// Example: `"SemplificaAI/gliner2-multi-v1-onnx"` → `"gliner2-multi-v1-onnx"`
+    /// Example: `"SemplificaAI/gliner2-multi-v1-onnx"` → `"SemplificaAI/gliner2-multi-v1-onnx"`
+    /// Edge case: `"local-model"` (no `/`) → `"local-model"` (single-level, unchanged)
     #[must_use]
     pub fn ner_onnx_dir(&self) -> String {
-        self.ner_model_id
-            .split('/')
-            .next_back()
-            .unwrap_or(&self.ner_model_id)
-            .to_string()
+        self.ner_model_id.clone()
     }
 
-    /// Local directory name for the Candle NER model: last segment of `ner_candle_model_id` + `"-candle"`.
+    /// Full candle model ID with `"-candle"` appended.
     ///
-    /// Example: `"fastino/gliner2-multi-v1"` → `"gliner2-multi-v1-candle"`
+    /// Example: `"fastino/gliner2-multi-v1"` → `"fastino/gliner2-multi-v1-candle"`
     #[must_use]
     pub fn ner_candle_dir(&self) -> String {
-        let slug = self
-            .ner_candle_model_id
-            .split('/')
-            .next_back()
-            .unwrap_or(&self.ner_candle_model_id);
-        format!("{slug}-candle")
+        format!("{}-candle", self.ner_candle_model_id)
     }
 
-    /// Last path segment of `embed_model` — used as the local embedder directory name.
+    /// Full embed model ID used as a two-level cache path.
     ///
-    /// Example: `"intfloat/multilingual-e5-small"` → `"multilingual-e5-small"`
-    /// Example: `"OrdalieTech/Solon-embeddings-large-0.1"` → `"Solon-embeddings-large-0.1"`
+    /// Example: `"OrdalieTech/Solon-embeddings-large-0.1"` → `"OrdalieTech/Solon-embeddings-large-0.1"`
     #[must_use]
     pub fn embedder_dir(&self) -> String {
-        self.embed_model
-            .split('/')
-            .next_back()
-            .unwrap_or(&self.embed_model)
-            .to_string()
+        self.embed_model.clone()
     }
 }
 
@@ -1538,44 +1525,42 @@ mod tests {
     }
 
     #[test]
-    fn ner_onnx_dir_is_last_segment_of_model_id() {
+    fn ner_onnx_dir_is_full_model_id() {
         let cfg = AnnoRagConfig::default();
-        assert_eq!(cfg.ner_onnx_dir(), "gliner2-multi-v1-onnx");
+        assert_eq!(cfg.ner_onnx_dir(), "SemplificaAI/gliner2-multi-v1-onnx");
     }
 
     #[test]
-    fn ner_candle_dir_appends_candle_suffix() {
+    fn ner_candle_dir_is_full_model_id_with_candle_suffix() {
         let cfg = AnnoRagConfig::default();
-        assert_eq!(cfg.ner_candle_dir(), "gliner2-multi-v1-candle");
+        assert_eq!(cfg.ner_candle_dir(), "fastino/gliner2-multi-v1-candle");
     }
 
     #[test]
     fn ner_onnx_dir_uses_custom_model_id() {
         let mut cfg = AnnoRagConfig::default();
         cfg.ner_model_id = "myorg/my-gliner-onnx".to_string();
-        assert_eq!(cfg.ner_onnx_dir(), "my-gliner-onnx");
+        assert_eq!(cfg.ner_onnx_dir(), "myorg/my-gliner-onnx");
     }
 
     #[test]
     fn ner_candle_dir_uses_custom_candle_model_id() {
         let mut cfg = AnnoRagConfig::default();
         cfg.ner_candle_model_id = "myorg/my-gliner-pt".to_string();
-        assert_eq!(cfg.ner_candle_dir(), "my-gliner-pt-candle");
+        assert_eq!(cfg.ner_candle_dir(), "myorg/my-gliner-pt-candle");
     }
 
     #[test]
-    fn embedder_dir_is_last_segment_of_embed_model() {
+    fn embedder_dir_is_full_embed_model_id() {
         let cfg = AnnoRagConfig::default();
-        // default embed_model ends with "multilingual-e5-small" or similar — check default_embed_model()
-        let expected = cfg.embed_model.split('/').next_back().unwrap().to_string();
-        assert_eq!(cfg.embedder_dir(), expected);
+        assert_eq!(cfg.embedder_dir(), cfg.embed_model.clone());
     }
 
     #[test]
     fn embedder_dir_uses_custom_embed_model() {
         let mut cfg = AnnoRagConfig::default();
         cfg.embed_model = "OrdalieTech/Solon-embeddings-large-0.1".to_string();
-        assert_eq!(cfg.embedder_dir(), "Solon-embeddings-large-0.1");
+        assert_eq!(cfg.embedder_dir(), "OrdalieTech/Solon-embeddings-large-0.1");
     }
 
     #[test]
