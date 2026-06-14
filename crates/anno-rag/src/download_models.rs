@@ -37,8 +37,7 @@ pub async fn download(cfg: &AnnoRagConfig) -> Result<PathBuf> {
 }
 
 async fn download_embedder(models_dir: &Path, model_id: &str) -> Result<()> {
-    let subdir = model_id.split('/').next_back().unwrap_or(model_id);
-    let embed_dir = models_dir.join(subdir);
+    let embed_dir = models_dir.join(model_id);
     tokio::fs::create_dir_all(&embed_dir).await?;
 
     let api =
