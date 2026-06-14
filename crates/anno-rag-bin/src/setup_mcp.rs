@@ -394,7 +394,11 @@ pub async fn ensure_models(
         .map(Path::to_path_buf)
         .context("--models-dir must have a parent directory")?;
     anno_rag::download_models::download(&download_cfg).await?;
-    Ok(model_cache_verified(models_dir, &embedder_dir, &ner_onnx_dir))
+    Ok(model_cache_verified(
+        models_dir,
+        &embedder_dir,
+        &ner_onnx_dir,
+    ))
 }
 
 pub fn jsonrpc_line(id: u64, method: &str, params: Value) -> String {
@@ -524,8 +528,7 @@ pub async fn run(args: SetupMcpArgs) -> anyhow::Result<()> {
     let models_verified = if args.target == SetupTarget::Manual {
         model_cache_verified(&models_dir, &cfg.embedder_dir(), &cfg.ner_onnx_dir())
     } else {
-        ensure_models(&models_dir, args.skip_models, args.dry_run, &cfg)
-            .await?
+        ensure_models(&models_dir, args.skip_models, args.dry_run, &cfg).await?
     };
 
     let mut summary = Vec::<String>::new();
@@ -1188,9 +1191,11 @@ mod tests {
             anno_rag_mcp::model_inventory::GLINER_REQUIRED_FILES,
         );
 
-        assert!(ensure_models(&models, false, false, &AnnoRagConfig::default())
-            .await
-            .expect("ensure"));
+        assert!(
+            ensure_models(&models, false, false, &AnnoRagConfig::default())
+                .await
+                .expect("ensure")
+        );
     }
 
     #[tokio::test]
@@ -1198,9 +1203,11 @@ mod tests {
         let dir = tempfile::tempdir().expect("tempdir");
         let models = dir.path().join("models");
 
-        assert!(!ensure_models(&models, false, true, &AnnoRagConfig::default())
-            .await
-            .expect("ensure"));
+        assert!(
+            !ensure_models(&models, false, true, &AnnoRagConfig::default())
+                .await
+                .expect("ensure")
+        );
     }
 
     #[tokio::test]
@@ -1208,9 +1215,11 @@ mod tests {
         let dir = tempfile::tempdir().expect("tempdir");
         let models = dir.path().join("models");
 
-        assert!(!ensure_models(&models, true, false, &AnnoRagConfig::default())
-            .await
-            .expect("ensure"));
+        assert!(
+            !ensure_models(&models, true, false, &AnnoRagConfig::default())
+                .await
+                .expect("ensure")
+        );
     }
 
     #[tokio::test]
