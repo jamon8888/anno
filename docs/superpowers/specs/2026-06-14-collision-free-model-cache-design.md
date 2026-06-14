@@ -8,7 +8,7 @@ Replace the basename-only local cache key with the full HuggingFace repo ID as a
 
 Currently `ner_onnx_dir()`, `ner_candle_dir()`, and `embedder_dir()` return only the last segment of the repo ID:
 
-```
+```text
 SemplificaAI/gliner2-multi-v1-onnx  →  models/gliner2-multi-v1-onnx/
 org-b/gliner2-multi-v1-onnx         →  models/gliner2-multi-v1-onnx/   ← collision
 ```
@@ -70,9 +70,10 @@ Migration logic per model (ONNX NER, Candle NER, embedder):
 
 If `legacy == canonical` (model ID has no `/`), skip — nothing to rename.
 
-**Called from two places:**
+**Called from three places:**
 - `download_models::download()` — covers explicit `anno-rag download-models`
 - `Pipeline::new()` — covers the common case where a user upgrades anno-rag and the pipeline starts with models already present in the legacy location; without this call, inventory would report models absent even though the files exist under the old basename dirs
+- `setup_mcp::ensure_models()` — covers the `anno-rag-bin` startup path when `--models-dir` is overridden; migration is skipped during `--dry-run` and `--skip-models` to avoid filesystem mutations
 
 ---
 
@@ -113,8 +114,9 @@ All tests that hardcode `"gliner2-multi-v1-onnx"`, `"gliner2-multi-v1-candle"`, 
 | `crates/anno-rag/src/pipeline.rs` | Call `migrate_legacy_cache` at top of `Pipeline::new()` |
 | `crates/anno-rag-mcp/src/lib.rs` | Update test fixtures |
 | `crates/anno-rag-bin/src/main.rs` | Update test fixtures |
+| `crates/anno-rag-bin/src/setup_mcp.rs` | Call `migrate_legacy_cache` in `ensure_models()`, guarded by `!skip_models && !dry_run` |
 
-No changes to `detect.rs`, `model_inventory.rs`, or `setup_mcp.rs` — all use `cfg.*_dir()` via `PathBuf::join` which handles multi-level paths transparently.
+`setup_mcp.rs` receives `migrate_legacy_cache` call inside `ensure_models()`, guarded by `!skip_models && !dry_run`. `detect.rs` and `model_inventory.rs` are unchanged.
 
 ---
 

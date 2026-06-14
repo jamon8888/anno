@@ -1,6 +1,19 @@
 use crate::config::AnnoRagConfig;
 use std::path::Path;
 
+/// Returns `true` if `model_id` is safe to use as a sub-path joined to `models_dir`.
+///
+/// Rejects absolute paths, empty segments, `.`, and `..` — any of which could escape the cache
+/// directory when passed to [`Path::join`].
+pub(crate) fn is_valid_model_subpath(model_id: &str) -> bool {
+    if std::path::Path::new(model_id).is_absolute() {
+        return false;
+    }
+    model_id
+        .split('/')
+        .all(|seg| !seg.is_empty() && seg != "." && seg != "..")
+}
+
 /// Renames legacy basename model dirs to the full `org/model` two-level layout.
 ///
 /// Guarded by `models_dir/.cache-v2` — no-op if the marker already exists.
@@ -33,6 +46,11 @@ pub fn migrate_legacy_cache(models_dir: &Path, cfg: &AnnoRagConfig) {
         if canonical_rel == legacy_rel {
             continue; // model ID has no '/'; nothing to rename
         }
+        if !is_valid_model_subpath(canonical_rel) {
+            tracing::warn!("migrate_legacy_cache: skipping unsafe model path: {canonical_rel:?}");
+            any_failed = true;
+            continue;
+        }
         let canonical = models_dir.join(canonical_rel);
         let legacy = models_dir.join(legacy_rel);
         if !canonical.exists() && legacy.exists() {
@@ -64,7 +82,7 @@ pub fn migrate_legacy_cache(models_dir: &Path, cfg: &AnnoRagConfig) {
         }
     }
 
-    if !any_failed {
+    if !any_failed && models_dir.exists() {
         if let Err(e) = std::fs::write(&marker, b"") {
             tracing::warn!(
                 "migrate_legacy_cache: write marker {}: {e}",

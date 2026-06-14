@@ -29,6 +29,15 @@ const NER_ONNX_BASES: &[&str] = &[
 /// [`Error::Io`] on filesystem errors.
 pub async fn download(cfg: &AnnoRagConfig) -> Result<PathBuf> {
     let models_dir = cfg.models_cache();
+    for (model_id, label) in [
+        (cfg.embed_model.as_str(), "embed_model"),
+        (cfg.ner_model_id.as_str(), "ner_model_id"),
+        (cfg.ner_candle_model_id.as_str(), "ner_candle_model_id"),
+    ] {
+        if !crate::model_cache::is_valid_model_subpath(model_id) {
+            return Err(Error::Embed(format!("unsafe {label} value: {model_id:?}")));
+        }
+    }
     migrate_legacy_cache(&models_dir, cfg);
     download_embedder(&models_dir, &cfg.embed_model).await?;
     download_ner(&models_dir, &cfg.ner_model_id, &cfg.ner_onnx_dir()).await?;

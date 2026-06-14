@@ -376,7 +376,9 @@ pub async fn ensure_models(
     let embedder_dir = cfg.embedder_dir();
     let ner_onnx_dir = cfg.ner_onnx_dir();
     validate_absolute_path(models_dir).map_err(|e| anyhow!(e))?;
-    anno_rag::model_cache::migrate_legacy_cache(models_dir, cfg);
+    if !skip_models && !dry_run {
+        anno_rag::model_cache::migrate_legacy_cache(models_dir, cfg);
+    }
     if model_cache_verified(models_dir, &embedder_dir, &ner_onnx_dir) {
         return Ok(true);
     }
