@@ -15,6 +15,8 @@ Precedence (lowest → highest): defaults → `~/.anno-rag/config.toml` → env 
 | `gdpr_layers` | `ANNO_GDPR_LAYERS` | `--gdpr-layers` | `"defense"` | 0.10 | PII detection layer set: basic\|defense\|shadow\|full. Default: defense |
 | `vector_index_threshold` | `ANNO_RAG_VECTOR_INDEX_THRESHOLD` | `--vector-index-threshold` | `1000` | 0.5 | Chunk count above which IVF_HNSW_SQ index is built. Default: 1000 |
 | `ner_warmup_model` | `ANNO_RAG_NER_WARMUP_MODEL` | `--ner-warmup-model` | `"fastino/gliner2-multi-v1"` | 0.6 | HF Hub model ID to pre-warm on startup. Default: fastino/gliner2-multi-v1 |
+| `ner_model_id` | `ANNO_RAG_NER_MODEL` | `--ner-model` | `"SemplificaAI/gliner2-multi-v1-onnx"` | 0.12 | HuggingFace model ID for the ONNX NER detector. Default: SemplificaAI/gliner2-multi-v1-onnx |
+| `ner_candle_model_id` | `ANNO_RAG_NER_CANDLE_MODEL` | `--ner-candle-model` | `"fastino/gliner2-multi-v1"` | 0.12 | HuggingFace model ID for the Candle NER detector. Default: fastino/gliner2-multi-v1 |
 | `mcp_server_name` | `ANNO_RAG_MCP_SERVER_NAME` | `--mcp-server-name` | `"anno-rag"` | 0.3 | MCP server name advertised on initialize. Default: anno-rag |
 | `ocr_mode` | `ANNO_RAG_OCR_MODE` | `--ocr-mode` | `"auto_embedded"` | 0.11 | OCR mode: off\|auto_embedded. Default: auto_embedded |
 | `enable_ocr` | `ANNO_RAG_ENABLE_OCR` | `--enable-ocr` | `false` | 0.4 | [DEPRECATED] Use --ocr-mode auto_embedded instead. Default: false |
