@@ -12,9 +12,19 @@ pub fn migrate_legacy_cache(models_dir: &Path, cfg: &AnnoRagConfig) {
     }
 
     let migrations = [
-        (cfg.ner_onnx_dir(),   last_segment(&cfg.ner_model_id).to_string()),
-        (cfg.ner_candle_dir(), format!("{}-candle", last_segment(&cfg.ner_candle_model_id))),
-        (cfg.embedder_dir(),   last_segment(&cfg.embed_model).to_string()),
+        (
+            cfg.ner_onnx_dir(),
+            last_segment(&cfg.ner_model_id).to_string(),
+        ),
+        // Legacy candle dir was "<basename>-candle"; ner_candle_dir() now returns "org/<basename>-candle".
+        (
+            cfg.ner_candle_dir(),
+            format!("{}-candle", last_segment(&cfg.ner_candle_model_id)),
+        ),
+        (
+            cfg.embedder_dir(),
+            last_segment(&cfg.embed_model).to_string(),
+        ),
     ];
 
     for (canonical_rel, legacy_rel) in &migrations {
@@ -26,7 +36,10 @@ pub fn migrate_legacy_cache(models_dir: &Path, cfg: &AnnoRagConfig) {
         if !canonical.exists() && legacy.exists() {
             if let Some(parent) = canonical.parent() {
                 if let Err(e) = std::fs::create_dir_all(parent) {
-                    tracing::warn!("migrate_legacy_cache: create_dir_all {}: {e}", parent.display());
+                    tracing::warn!(
+                        "migrate_legacy_cache: create_dir_all {}: {e}",
+                        parent.display()
+                    );
                     continue;
                 }
             }
@@ -46,7 +59,10 @@ pub fn migrate_legacy_cache(models_dir: &Path, cfg: &AnnoRagConfig) {
     }
 
     if let Err(e) = std::fs::write(&marker, b"") {
-        tracing::warn!("migrate_legacy_cache: write marker {}: {e}", marker.display());
+        tracing::warn!(
+            "migrate_legacy_cache: write marker {}: {e}",
+            marker.display()
+        );
     }
 }
 
@@ -78,13 +94,28 @@ mod tests {
         migrate_legacy_cache(models, &cfg);
 
         // New two-level paths exist
-        assert!(models.join(&cfg.ner_onnx_dir()).exists(), "onnx canonical missing");
-        assert!(models.join(&cfg.ner_candle_dir()).exists(), "candle canonical missing");
-        assert!(models.join(&cfg.embedder_dir()).exists(), "embedder canonical missing");
+        assert!(
+            models.join(&cfg.ner_onnx_dir()).exists(),
+            "onnx canonical missing"
+        );
+        assert!(
+            models.join(&cfg.ner_candle_dir()).exists(),
+            "candle canonical missing"
+        );
+        assert!(
+            models.join(&cfg.embedder_dir()).exists(),
+            "embedder canonical missing"
+        );
 
         // Legacy dirs gone
-        assert!(!models.join(last_segment(&cfg.ner_model_id)).exists(), "legacy onnx still present");
-        assert!(!models.join(last_segment(&cfg.embed_model)).exists(), "legacy embedder still present");
+        assert!(
+            !models.join(last_segment(&cfg.ner_model_id)).exists(),
+            "legacy onnx still present"
+        );
+        assert!(
+            !models.join(last_segment(&cfg.embed_model)).exists(),
+            "legacy embedder still present"
+        );
 
         // Marker written
         assert!(models.join(".cache-v2").exists());
@@ -131,7 +162,10 @@ mod tests {
 
         migrate_legacy_cache(models, &cfg);
 
-        assert!(models.join(&cfg.ner_onnx_dir()).exists(), "onnx canonical missing");
+        assert!(
+            models.join(&cfg.ner_onnx_dir()).exists(),
+            "onnx canonical missing"
+        );
         assert!(models.join(".cache-v2").exists());
     }
 
