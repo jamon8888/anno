@@ -4515,7 +4515,7 @@ fn test_muxer_prior_prefers_facet_matched_history() {
 }
 
 #[cfg(test)]
-fn env_lock() -> std::sync::MutexGuard<'static, ()> {
+pub(crate) fn env_lock() -> std::sync::MutexGuard<'static, ()> {
     static LOCK: OnceLock<Mutex<()>> = OnceLock::new();
     LOCK.get_or_init(|| Mutex::new(()))
         .lock()

@@ -4557,6 +4557,12 @@ mod tests {
             move |_text, _lang| Ok(vec![Entity::new("boom", ty.clone(), 0, 4, 1.0)]),
         );
 
+        // Serialise against tests in muxer_matrix that temporarily set
+        // ANNO_CACHE_DIR=/my/cache; DatasetLoader::new() reads that var and would
+        // try to create /my/cache/datasets (permission denied on CI).
+        #[cfg(feature = "eval")]
+        let _env = crate::muxer_matrix::env_lock();
+
         let eval = TaskEvaluator::new().expect("TaskEvaluator::new");
         let metrics = eval
             .evaluate_ner_task(
