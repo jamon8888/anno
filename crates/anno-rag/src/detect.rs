@@ -1294,13 +1294,13 @@ mod tests {
     // Phase A integration: validators + heuristics + layers
     #[test]
     fn layer_basic_disables_validators() {
-        std::env::set_var("ANNO_GDPR_LAYERS", "basic");
+        let _env = crate::env_guard::ScopedEnvVar::set("ANNO_GDPR_LAYERS", "basic");
         assert!(!crate::layers::GdprLayerSet::from_env().includes_validators());
     }
 
     #[test]
     fn layer_defense_enables_validators() {
-        std::env::set_var("ANNO_GDPR_LAYERS", "defense");
+        let _env = crate::env_guard::ScopedEnvVar::set("ANNO_GDPR_LAYERS", "defense");
         assert!(crate::layers::GdprLayerSet::from_env().includes_validators());
         assert!(crate::layers::GdprLayerSet::from_env().includes_heuristics());
     }
