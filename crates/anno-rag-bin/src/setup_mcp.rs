@@ -1080,8 +1080,8 @@ mod tests {
         }
     }
 
-    fn write_fp16_gliner_files(root: &Path) {
-        let gliner = root.join("gliner2-multi-v1-onnx");
+    fn write_fp16_gliner_files(root: &Path, ner_onnx_dir: &str) {
+        let gliner = root.join(ner_onnx_dir);
         std::fs::create_dir_all(gliner.join("fp16_v2")).expect("create fp16");
         for base in GLINER_ONNX_BASES {
             std::fs::write(
@@ -1095,110 +1095,100 @@ mod tests {
 
     #[test]
     fn model_cache_verified_when_expected_families_exist() {
+        let cfg = AnnoRagConfig::default();
         let dir = tempfile::tempdir().expect("tempdir");
         let models = dir.path().join("models");
         let embedder_files =
-            anno_rag_mcp::model_inventory::embedder_required_files("Solon-embeddings-large-0.1");
+            anno_rag_mcp::model_inventory::embedder_required_files(&cfg.embedder_dir());
         let embedder_refs: Vec<&str> = embedder_files.iter().map(String::as_str).collect();
         write_required_files(&models, &embedder_refs);
-        #[allow(deprecated)]
-        write_required_files(
-            &models,
-            anno_rag_mcp::model_inventory::GLINER_REQUIRED_FILES,
-        );
+        let gliner_files =
+            anno_rag_mcp::model_inventory::gliner_onnx_required_files(&cfg.ner_onnx_dir());
+        let gliner_refs: Vec<&str> = gliner_files.iter().map(String::as_str).collect();
+        write_required_files(&models, &gliner_refs);
 
         assert!(model_cache_verified(
             &models,
-            "Solon-embeddings-large-0.1",
-            "gliner2-multi-v1-onnx"
+            &cfg.embedder_dir(),
+            &cfg.ner_onnx_dir()
         ));
     }
 
     #[test]
     fn model_cache_verified_with_fp16_gliner_variant() {
+        let cfg = AnnoRagConfig::default();
         let dir = tempfile::tempdir().expect("tempdir");
         let models = dir.path().join("models");
         let embedder_files =
-            anno_rag_mcp::model_inventory::embedder_required_files("Solon-embeddings-large-0.1");
+            anno_rag_mcp::model_inventory::embedder_required_files(&cfg.embedder_dir());
         let embedder_refs: Vec<&str> = embedder_files.iter().map(String::as_str).collect();
         write_required_files(&models, &embedder_refs);
-        write_fp16_gliner_files(&models);
+        write_fp16_gliner_files(&models, &cfg.ner_onnx_dir());
 
         assert!(model_cache_verified(
             &models,
-            "Solon-embeddings-large-0.1",
-            "gliner2-multi-v1-onnx"
+            &cfg.embedder_dir(),
+            &cfg.ner_onnx_dir()
         ));
     }
 
     #[test]
     fn model_cache_not_verified_when_gliner_missing() {
+        let cfg = AnnoRagConfig::default();
         let dir = tempfile::tempdir().expect("tempdir");
         let models = dir.path().join("models");
         let embedder_files =
-            anno_rag_mcp::model_inventory::embedder_required_files("Solon-embeddings-large-0.1");
+            anno_rag_mcp::model_inventory::embedder_required_files(&cfg.embedder_dir());
         let embedder_refs: Vec<&str> = embedder_files.iter().map(String::as_str).collect();
         write_required_files(&models, &embedder_refs);
 
         assert!(!model_cache_verified(
             &models,
-            "Solon-embeddings-large-0.1",
-            "gliner2-multi-v1-onnx"
+            &cfg.embedder_dir(),
+            &cfg.ner_onnx_dir()
         ));
     }
 
     #[test]
     fn model_cache_not_verified_when_embedder_weights_missing() {
+        let cfg = AnnoRagConfig::default();
         let dir = tempfile::tempdir().expect("tempdir");
         let models = dir.path().join("models");
         // Write config.json and tokenizer.json but NOT model.safetensors — incomplete embedder.
-        std::fs::create_dir_all(models.join("Solon-embeddings-large-0.1")).expect("embedder dir");
-        std::fs::write(
-            models
-                .join("Solon-embeddings-large-0.1")
-                .join("config.json"),
-            "{}",
-        )
-        .expect("embedder config");
-        std::fs::write(
-            models
-                .join("Solon-embeddings-large-0.1")
-                .join("tokenizer.json"),
-            "{}",
-        )
-        .expect("embedder tokenizer");
-        #[allow(deprecated)]
-        write_required_files(
-            &models,
-            anno_rag_mcp::model_inventory::GLINER_REQUIRED_FILES,
-        );
+        std::fs::create_dir_all(models.join(cfg.embedder_dir())).expect("embedder dir");
+        std::fs::write(models.join(cfg.embedder_dir()).join("config.json"), "{}")
+            .expect("embedder config");
+        std::fs::write(models.join(cfg.embedder_dir()).join("tokenizer.json"), "{}")
+            .expect("embedder tokenizer");
+        let gliner_files =
+            anno_rag_mcp::model_inventory::gliner_onnx_required_files(&cfg.ner_onnx_dir());
+        let gliner_refs: Vec<&str> = gliner_files.iter().map(String::as_str).collect();
+        write_required_files(&models, &gliner_refs);
 
         assert!(!model_cache_verified(
             &models,
-            "Solon-embeddings-large-0.1",
-            "gliner2-multi-v1-onnx"
+            &cfg.embedder_dir(),
+            &cfg.ner_onnx_dir()
         ));
     }
 
     #[tokio::test]
     async fn ensure_models_returns_true_when_cache_verified() {
+        let cfg = AnnoRagConfig::default();
         let dir = tempfile::tempdir().expect("tempdir");
         let models = dir.path().join("models");
         let embedder_files =
-            anno_rag_mcp::model_inventory::embedder_required_files("Solon-embeddings-large-0.1");
+            anno_rag_mcp::model_inventory::embedder_required_files(&cfg.embedder_dir());
         let embedder_refs: Vec<&str> = embedder_files.iter().map(String::as_str).collect();
         write_required_files(&models, &embedder_refs);
-        #[allow(deprecated)]
-        write_required_files(
-            &models,
-            anno_rag_mcp::model_inventory::GLINER_REQUIRED_FILES,
-        );
+        let gliner_files =
+            anno_rag_mcp::model_inventory::gliner_onnx_required_files(&cfg.ner_onnx_dir());
+        let gliner_refs: Vec<&str> = gliner_files.iter().map(String::as_str).collect();
+        write_required_files(&models, &gliner_refs);
 
-        assert!(
-            ensure_models(&models, false, false, &AnnoRagConfig::default())
-                .await
-                .expect("ensure")
-        );
+        assert!(ensure_models(&models, false, false, &cfg)
+            .await
+            .expect("ensure"));
     }
 
     #[tokio::test]
