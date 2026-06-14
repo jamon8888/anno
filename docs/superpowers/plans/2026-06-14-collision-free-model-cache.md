@@ -286,7 +286,7 @@ pub fn embedder_dir(&self) -> String {
 }
 ```
 
-- [ ] **Step 2: Update the six unit tests in `config.rs`**
+- [ ] **Step 2: Update the seven unit tests in `config.rs`**
 
 Find and replace the six affected tests (around lines 1540–1587):
 
