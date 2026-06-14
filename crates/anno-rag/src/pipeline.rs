@@ -25,6 +25,7 @@ use uuid::Uuid;
 /// those spans.
 struct PreDetectedLegalExtractor;
 
+#[allow(deprecated)] // NER_MODEL_ID is deprecated; LegalEntityExtractor::model_id must return &'static str
 impl LegalEntityExtractor for PreDetectedLegalExtractor {
     fn extract(
         &self,
@@ -2675,6 +2676,7 @@ mod tests {
     }
 
     #[test]
+    #[allow(deprecated)] // NER_MODEL_ID kept for backward compat; test verifies the static value
     fn predetected_legal_extractor_reports_gliner_model_id() {
         let extractor = PreDetectedLegalExtractor;
         assert_eq!(extractor.model_id(), crate::detect::NER_MODEL_ID);

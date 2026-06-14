@@ -198,14 +198,21 @@ pub fn detect_patterns(text: &str) -> Vec<DetectedEntity> {
 /// HuggingFace id of the NER model loaded by [`Detector::new`]. Surfaced
 /// in the detector audit event so operators can reconcile observed
 /// behaviour against a specific model version.
+///
+/// # Deprecated
+/// Prefer [`crate::config::AnnoRagConfig::ner_model_id`].
+#[deprecated(since = "0.12.0", note = "use AnnoRagConfig::ner_model_id instead")]
 pub const NER_MODEL_ID: &str = "SemplificaAI/gliner2-multi-v1-onnx";
 
 /// Candle/PyTorch GLiNER2 repo used for Metal and CPU Candle detector backends.
+///
+/// # Deprecated
+/// Prefer [`crate::config::AnnoRagConfig::ner_candle_model_id`].
+#[deprecated(
+    since = "0.12.0",
+    note = "use AnnoRagConfig::ner_candle_model_id instead"
+)]
 pub const CANDLE_NER_MODEL_ID: &str = "fastino/gliner2-multi-v1";
-
-/// Local subdirectory name where the Candle GLiNER2 model is cached on disk.
-#[cfg(any(feature = "gpu-metal", feature = "gliner2-candle-cpu"))]
-const CANDLE_NER_MODEL_DIR: &str = "gliner2-multi-v1-candle";
 
 /// GDPR-coverage NER labels: (label, description sent to the model, per-label threshold).
 ///
@@ -405,6 +412,9 @@ pub struct Detector {
     #[cfg(feature = "heuristic-fr")]
     heuristic_fr: anno::backends::heuristic_fr::HeuristicFrNer,
     gdpr_layers: GdprLayerSet,
+    /// HuggingFace model ID used by the active NER backend — surfaced in
+    /// audit events so operators can reconcile behaviour against a model version.
+    ner_model_id: String,
 }
 
 impl Detector {
@@ -438,7 +448,7 @@ impl Detector {
             .filter(|value| !value.is_empty())
             .map(PathBuf::from)
             .unwrap_or_else(|| cfg.models_cache());
-        let model_path = model_root.join("gliner2-multi-v1-onnx");
+        let model_path = model_root.join(cfg.ner_onnx_dir());
         if model_path.exists() {
             let ner = anno::backends::gliner2_fastino::GLiNER2Fastino::from_local_with_config(
                 &model_path,
@@ -450,16 +460,18 @@ impl Detector {
                 #[cfg(feature = "heuristic-fr")]
                 heuristic_fr: anno::backends::heuristic_fr::HeuristicFrNer::new(),
                 gdpr_layers: cfg.gdpr_layers,
+                ner_model_id: cfg.ner_model_id.clone(),
             });
         }
         // ─────────────────────────────────────────────────────────────────────
-        let ner = GLiNER2Fastino::from_pretrained_with_config(NER_MODEL_ID, model_cfg)
+        let ner = GLiNER2Fastino::from_pretrained_with_config(&cfg.ner_model_id, model_cfg)
             .map_err(|e| Error::Detect(format!("gliner2_fastino load: {e}")))?;
         Ok(Self {
             ner: NerBackend::Onnx(ner),
             #[cfg(feature = "heuristic-fr")]
             heuristic_fr: anno::backends::heuristic_fr::HeuristicFrNer::new(),
             gdpr_layers: cfg.gdpr_layers,
+            ner_model_id: cfg.ner_model_id.clone(),
         })
     }
 
@@ -473,7 +485,7 @@ impl Detector {
             .filter(|value| !value.is_empty())
             .map(PathBuf::from)
             .unwrap_or_else(|| _cfg.models_cache());
-        let model_path = model_root.join(CANDLE_NER_MODEL_DIR);
+        let model_path = model_root.join(_cfg.ner_candle_dir());
         if model_path.exists() {
             let ner =
                 anno::backends::gliner2_fastino_candle::GLiNER2FastinoCandle::from_local_with_device(
@@ -488,11 +500,12 @@ impl Detector {
                 #[cfg(feature = "heuristic-fr")]
                 heuristic_fr: anno::backends::heuristic_fr::HeuristicFrNer::new(),
                 gdpr_layers: _cfg.gdpr_layers,
+                ner_model_id: _cfg.ner_candle_model_id.clone(),
             });
         }
         let ner =
             anno::backends::gliner2_fastino_candle::GLiNER2FastinoCandle::from_pretrained_with_device(
-                CANDLE_NER_MODEL_ID,
+                &_cfg.ner_candle_model_id,
                 &device,
             )
             .map_err(|e| Error::Detect(format!("gliner2_fastino_candle load: {e}")))?;
@@ -501,6 +514,7 @@ impl Detector {
             #[cfg(feature = "heuristic-fr")]
             heuristic_fr: anno::backends::heuristic_fr::HeuristicFrNer::new(),
             gdpr_layers: _cfg.gdpr_layers,
+            ner_model_id: _cfg.ner_candle_model_id.clone(),
         })
     }
 
@@ -521,7 +535,7 @@ impl Detector {
             .filter(|value| !value.is_empty())
             .map(PathBuf::from)
             .unwrap_or_else(|| cfg.models_cache());
-        let model_path = model_root.join(CANDLE_NER_MODEL_DIR);
+        let model_path = model_root.join(cfg.ner_candle_dir());
         if model_path.exists() {
             let ner = anno::backends::gliner2_fastino_candle::GLiNER2FastinoCandle::from_local_with_device(
                 &model_path,
@@ -533,10 +547,11 @@ impl Detector {
                 #[cfg(feature = "heuristic-fr")]
                 heuristic_fr: anno::backends::heuristic_fr::HeuristicFrNer::new(),
                 gdpr_layers: cfg.gdpr_layers,
+                ner_model_id: cfg.ner_candle_model_id.clone(),
             });
         }
         let ner = anno::backends::gliner2_fastino_candle::GLiNER2FastinoCandle::from_pretrained_with_device(
-            CANDLE_NER_MODEL_ID,
+            &cfg.ner_candle_model_id,
             &device,
         )
         .map_err(|e| Error::Detect(format!("gliner2_fastino_candle load (cpu): {e}")))?;
@@ -545,6 +560,7 @@ impl Detector {
             #[cfg(feature = "heuristic-fr")]
             heuristic_fr: anno::backends::heuristic_fr::HeuristicFrNer::new(),
             gdpr_layers: cfg.gdpr_layers,
+            ner_model_id: cfg.ner_candle_model_id.clone(),
         })
     }
 
@@ -562,7 +578,7 @@ impl Detector {
         let input_chars = text.chars().count();
         let out = self.detect_inner(text)?;
         let elapsed_us = u64::try_from(started.elapsed().as_micros()).unwrap_or(u64::MAX);
-        emit_detect_audit(input_chars, elapsed_us, &out);
+        emit_detect_audit(input_chars, elapsed_us, &out, &self.ner_model_id);
         Ok(out)
     }
 
@@ -581,7 +597,7 @@ impl Detector {
         let input_chars = text.chars().count();
         let out = self.detect_inner_with(text, labels, threshold)?;
         let elapsed_us = u64::try_from(started.elapsed().as_micros()).unwrap_or(u64::MAX);
-        emit_detect_audit(input_chars, elapsed_us, &out);
+        emit_detect_audit(input_chars, elapsed_us, &out, &self.ner_model_id);
         Ok(out)
     }
 
@@ -739,7 +755,7 @@ impl Detector {
             raw_model_spans,
         };
         let elapsed_us = u64::try_from(started.elapsed().as_micros()).unwrap_or(u64::MAX);
-        emit_detect_audit(input_chars, elapsed_us, &out.pii);
+        emit_detect_audit(input_chars, elapsed_us, &out.pii, &self.ner_model_id);
         Ok(out)
     }
 }
@@ -747,7 +763,12 @@ impl Detector {
 /// Emit the AI Act Art. 12 / Art. 72 detector audit event. Cleartext-free:
 /// only counts, durations, and model ids. Deployers pipe the
 /// `anno_rag::detect::audit` target to their SIEM / Art. 30 register.
-fn emit_detect_audit(input_chars: usize, elapsed_us: u64, out: &[DetectedEntity]) {
+fn emit_detect_audit(
+    input_chars: usize,
+    elapsed_us: u64,
+    out: &[DetectedEntity],
+    ner_model_id: &str,
+) {
     use std::collections::BTreeMap;
     let mut per_category: BTreeMap<String, usize> = BTreeMap::new();
     let mut from_pattern: usize = 0;
@@ -772,7 +793,7 @@ fn emit_detect_audit(input_chars: usize, elapsed_us: u64, out: &[DetectedEntity]
         target: "anno_rag::detect::audit",
         event = "detect",
         detector_version = env!("CARGO_PKG_VERSION"),
-        ner_model_id = NER_MODEL_ID,
+        ner_model_id = ner_model_id,
         input_chars = input_chars,
         elapsed_us = elapsed_us,
         spans_total = out.len(),
@@ -1236,6 +1257,18 @@ mod tests {
             msg.contains("(local)"),
             "error must come from default local path, got: {msg}"
         );
+    }
+
+    #[test]
+    fn detector_new_uses_cfg_ner_onnx_dir() {
+        // Verifies that ner_onnx_dir() from config drives the directory
+        // that Detector::new() would join to model_root.
+        let cfg = crate::config::AnnoRagConfig::default();
+        assert_eq!(cfg.ner_onnx_dir(), "gliner2-multi-v1-onnx");
+        assert_eq!(cfg.ner_candle_dir(), "gliner2-multi-v1-candle");
+        let mut custom = cfg.clone();
+        custom.ner_model_id = "org/my-ner-onnx".to_string();
+        assert_eq!(custom.ner_onnx_dir(), "my-ner-onnx");
     }
 
     #[test]

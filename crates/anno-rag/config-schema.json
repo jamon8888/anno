@@ -81,6 +81,24 @@
     "type_name": "Option<String>"
   },
   {
+    "name": "ner_model_id",
+    "env_var": "ANNO_RAG_NER_MODEL",
+    "cli_flag": "--ner-model",
+    "doc": "HuggingFace model ID for the ONNX NER detector. Default: SemplificaAI/gliner2-multi-v1-onnx",
+    "default_value": "\"SemplificaAI/gliner2-multi-v1-onnx\"",
+    "since": "0.12",
+    "type_name": "String"
+  },
+  {
+    "name": "ner_candle_model_id",
+    "env_var": "ANNO_RAG_NER_CANDLE_MODEL",
+    "cli_flag": "--ner-candle-model",
+    "doc": "HuggingFace model ID for the Candle NER detector. Default: fastino/gliner2-multi-v1",
+    "default_value": "\"fastino/gliner2-multi-v1\"",
+    "since": "0.12",
+    "type_name": "String"
+  },
+  {
     "name": "mcp_server_name",
     "env_var": "ANNO_RAG_MCP_SERVER_NAME",
     "cli_flag": "--mcp-server-name",

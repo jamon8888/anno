@@ -5,13 +5,29 @@ use serde::Serialize;
 use std::path::{Path, PathBuf};
 
 /// Required E5 model files relative to the effective models directory.
+///
+/// # Deprecated
+/// Prefer [`embedder_required_files`] — this const is retained for backward compatibility.
+#[deprecated(since = "0.12.0", note = "use embedder_required_files(dir) instead")]
 pub const E5_REQUIRED_FILES: &[&str] = &[
     "multilingual-e5-small/config.json",
     "multilingual-e5-small/model.safetensors",
     "multilingual-e5-small/tokenizer.json",
 ];
 
+/// Generate required embedder file paths relative to the models directory.
+///
+/// The `dir` argument is the last segment of `embed_model`, i.e. `AnnoRagConfig::embedder_dir()`.
+pub fn embedder_required_files(dir: &str) -> Vec<String> {
+    vec![
+        format!("{dir}/config.json"),
+        format!("{dir}/model.safetensors"),
+        format!("{dir}/tokenizer.json"),
+    ]
+}
+
 /// Required GLiNER model files relative to the effective models directory.
+#[deprecated(since = "0.12.0", note = "use gliner_onnx_required_files(dir) instead")]
 pub const GLINER_REQUIRED_FILES: &[&str] = &[
     "gliner2-multi-v1-onnx/fp32_v2/classifier_fp32.onnx",
     "gliner2-multi-v1-onnx/fp32_v2/count_lstm_fixed_fp32.onnx",
@@ -25,6 +41,10 @@ pub const GLINER_REQUIRED_FILES: &[&str] = &[
 ];
 
 /// Required Candle GLiNER files relative to the effective models directory.
+#[deprecated(
+    since = "0.12.0",
+    note = "use candle_gliner_required_files(dir) instead"
+)]
 pub const CANDLE_GLINER_REQUIRED_FILES: &[&str] = &[
     "gliner2-multi-v1-candle/tokenizer.json",
     "gliner2-multi-v1-candle/config.json",
@@ -42,6 +62,26 @@ const GLINER_ONNX_BASES: &[&str] = &[
     "span_rep",
     "token_gather",
 ];
+
+/// Generate required ONNX GLiNER file paths (fp32_v2 layout) relative to the models directory.
+pub fn gliner_onnx_required_files(ner_onnx_dir: &str) -> Vec<String> {
+    let mut files: Vec<String> = GLINER_ONNX_BASES
+        .iter()
+        .map(|base| format!("{ner_onnx_dir}/fp32_v2/{base}_fp32.onnx"))
+        .collect();
+    files.push(format!("{ner_onnx_dir}/fp32_v2/tokenizer.json"));
+    files
+}
+
+/// Generate required Candle GLiNER file paths relative to the models directory.
+pub fn candle_gliner_required_files(candle_dir: &str) -> Vec<String> {
+    vec![
+        format!("{candle_dir}/tokenizer.json"),
+        format!("{candle_dir}/config.json"),
+        format!("{candle_dir}/encoder_config/config.json"),
+        format!("{candle_dir}/model.safetensors"),
+    ]
+}
 
 /// Effective models directory plus whether it came from `ANNO_MODELS_DIR`.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -118,6 +158,9 @@ pub struct ModelInventory {
 pub struct ModelInventoryService {
     effective: EffectiveModelsDir,
     detector_kind: DetectorInventoryKind,
+    embedder_dir: String,
+    ner_onnx_dir: String,
+    ner_candle_dir: String,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -133,6 +176,9 @@ impl ModelInventoryService {
         Self {
             effective: effective_models_dir(cfg),
             detector_kind: detector_inventory_kind(cfg),
+            embedder_dir: cfg.embedder_dir(),
+            ner_onnx_dir: cfg.ner_onnx_dir(),
+            ner_candle_dir: cfg.ner_candle_dir(),
         }
     }
 
@@ -141,14 +187,16 @@ impl ModelInventoryService {
     pub fn inspect(&self) -> ModelInventory {
         let path = self.effective.path.clone();
         let downloading = path.join(".download-lock").exists();
-        let e5 = inspect_family(&path, "multilingual-e5-small", E5_REQUIRED_FILES);
+        let embedder_files = embedder_required_files(&self.embedder_dir);
+        let embedder_file_refs: Vec<&str> = embedder_files.iter().map(String::as_str).collect();
+        let e5 = inspect_family(&path, &self.embedder_dir, &embedder_file_refs);
         let gliner = match self.detector_kind {
-            DetectorInventoryKind::Onnx => inspect_onnx_gliner_family(&path),
-            DetectorInventoryKind::Candle => inspect_family(
-                &path,
-                "gliner2-multi-v1-candle",
-                CANDLE_GLINER_REQUIRED_FILES,
-            ),
+            DetectorInventoryKind::Onnx => inspect_onnx_gliner_family(&path, &self.ner_onnx_dir),
+            DetectorInventoryKind::Candle => {
+                let required = candle_gliner_required_files(&self.ner_candle_dir);
+                let refs: Vec<&str> = required.iter().map(String::as_str).collect();
+                inspect_family(&path, &self.ner_candle_dir, &refs)
+            }
         };
         let ready = e5.ready && gliner.ready;
         let state = if ready {
@@ -227,15 +275,15 @@ fn inspect_family(root: &Path, name: &str, required_files: &[&str]) -> ModelFami
     }
 }
 
-fn inspect_onnx_gliner_family(root: &Path) -> ModelFamilyStatus {
+fn inspect_onnx_gliner_family(root: &Path, ner_onnx_dir: &str) -> ModelFamilyStatus {
     for (variant_dir, suffix) in [("fp32_v2", "fp32"), ("fp16_v2", "fp16")] {
         let graph_files = GLINER_ONNX_BASES
             .iter()
-            .map(|base| format!("gliner2-multi-v1-onnx/{variant_dir}/{base}_{suffix}.onnx"))
+            .map(|base| format!("{ner_onnx_dir}/{variant_dir}/{base}_{suffix}.onnx"))
             .collect::<Vec<_>>();
         let tokenizer_candidates = [
-            format!("gliner2-multi-v1-onnx/{variant_dir}/tokenizer.json"),
-            "gliner2-multi-v1-onnx/tokenizer.json".to_string(),
+            format!("{ner_onnx_dir}/{variant_dir}/tokenizer.json"),
+            format!("{ner_onnx_dir}/tokenizer.json"),
         ];
         let graphs_ready = graph_files
             .iter()
@@ -245,14 +293,16 @@ fn inspect_onnx_gliner_family(root: &Path) -> ModelFamilyStatus {
             .any(|relative| root.join(relative).is_file());
         if graphs_ready && tokenizer_ready {
             return ModelFamilyStatus {
-                name: "gliner2-multi-v1-onnx".to_string(),
-                path: root.join("gliner2-multi-v1-onnx").display().to_string(),
+                name: ner_onnx_dir.to_string(),
+                path: root.join(ner_onnx_dir).display().to_string(),
                 missing_files: Vec::new(),
                 ready: true,
             };
         }
     }
-    inspect_family(root, "gliner2-multi-v1-onnx", GLINER_REQUIRED_FILES)
+    let required = gliner_onnx_required_files(ner_onnx_dir);
+    let refs: Vec<&str> = required.iter().map(String::as_str).collect();
+    inspect_family(root, ner_onnx_dir, &refs)
 }
 
 #[cfg(test)]
@@ -320,21 +370,20 @@ mod tests {
     use anno_rag::config::AnnoRagConfig;
     use std::path::Path;
 
-    fn create_required_model_files(models_dir: &Path) {
-        for rel in [
-            "multilingual-e5-small/config.json",
-            "multilingual-e5-small/model.safetensors",
-            "multilingual-e5-small/tokenizer.json",
-            "gliner2-multi-v1-onnx/fp32_v2/classifier_fp32.onnx",
-            "gliner2-multi-v1-onnx/fp32_v2/count_lstm_fixed_fp32.onnx",
-            "gliner2-multi-v1-onnx/fp32_v2/count_pred_argmax_fp32.onnx",
-            "gliner2-multi-v1-onnx/fp32_v2/encoder_fp32.onnx",
-            "gliner2-multi-v1-onnx/fp32_v2/schema_gather_fp32.onnx",
-            "gliner2-multi-v1-onnx/fp32_v2/scorer_fp32.onnx",
-            "gliner2-multi-v1-onnx/fp32_v2/span_rep_fp32.onnx",
-            "gliner2-multi-v1-onnx/fp32_v2/token_gather_fp32.onnx",
-            "gliner2-multi-v1-onnx/fp32_v2/tokenizer.json",
-        ] {
+    fn create_required_model_files(models_dir: &Path, embedder_dir: &str) {
+        let mut rels: Vec<String> = embedder_required_files(embedder_dir);
+        rels.extend([
+            "gliner2-multi-v1-onnx/fp32_v2/classifier_fp32.onnx".to_string(),
+            "gliner2-multi-v1-onnx/fp32_v2/count_lstm_fixed_fp32.onnx".to_string(),
+            "gliner2-multi-v1-onnx/fp32_v2/count_pred_argmax_fp32.onnx".to_string(),
+            "gliner2-multi-v1-onnx/fp32_v2/encoder_fp32.onnx".to_string(),
+            "gliner2-multi-v1-onnx/fp32_v2/schema_gather_fp32.onnx".to_string(),
+            "gliner2-multi-v1-onnx/fp32_v2/scorer_fp32.onnx".to_string(),
+            "gliner2-multi-v1-onnx/fp32_v2/span_rep_fp32.onnx".to_string(),
+            "gliner2-multi-v1-onnx/fp32_v2/token_gather_fp32.onnx".to_string(),
+            "gliner2-multi-v1-onnx/fp32_v2/tokenizer.json".to_string(),
+        ]);
+        for rel in &rels {
             let path = models_dir.join(rel);
             std::fs::create_dir_all(path.parent().expect("required file parent")).unwrap();
             std::fs::write(path, b"test model file").unwrap();
@@ -345,13 +394,13 @@ mod tests {
     fn empty_model_directories_are_not_ready() {
         let tmp = tempfile::tempdir().expect("tempdir");
         let models_dir = tmp.path().join("models");
-        std::fs::create_dir_all(models_dir.join("multilingual-e5-small")).unwrap();
-        std::fs::create_dir_all(models_dir.join("gliner2-multi-v1-onnx")).unwrap();
         let cfg = AnnoRagConfig {
             data_dir: tmp.path().to_path_buf(),
             accelerator: AcceleratorPreference::Cpu,
             ..Default::default()
         };
+        std::fs::create_dir_all(models_dir.join(cfg.embedder_dir())).unwrap();
+        std::fs::create_dir_all(models_dir.join("gliner2-multi-v1-onnx")).unwrap();
         let _models_env = test_env::ScopedAnnoModelsDir::unset();
 
         let inventory = ModelInventoryService::new(&cfg).inspect();
@@ -367,12 +416,12 @@ mod tests {
     #[test]
     fn full_required_files_return_ready() {
         let tmp = tempfile::tempdir().expect("tempdir");
-        create_required_model_files(&tmp.path().join("models"));
         let cfg = AnnoRagConfig {
             data_dir: tmp.path().to_path_buf(),
             accelerator: AcceleratorPreference::Cpu,
             ..Default::default()
         };
+        create_required_model_files(&tmp.path().join("models"), &cfg.embedder_dir());
         let _models_env = test_env::ScopedAnnoModelsDir::unset();
 
         let inventory = ModelInventoryService::new(&cfg).inspect();
@@ -390,29 +439,29 @@ mod tests {
     fn fp16_onnx_required_files_return_ready() {
         let tmp = tempfile::tempdir().expect("tempdir");
         let models_dir = tmp.path().join("models");
-        for rel in [
-            "multilingual-e5-small/config.json",
-            "multilingual-e5-small/model.safetensors",
-            "multilingual-e5-small/tokenizer.json",
-            "gliner2-multi-v1-onnx/fp16_v2/classifier_fp16.onnx",
-            "gliner2-multi-v1-onnx/fp16_v2/count_lstm_fixed_fp16.onnx",
-            "gliner2-multi-v1-onnx/fp16_v2/count_pred_argmax_fp16.onnx",
-            "gliner2-multi-v1-onnx/fp16_v2/encoder_fp16.onnx",
-            "gliner2-multi-v1-onnx/fp16_v2/schema_gather_fp16.onnx",
-            "gliner2-multi-v1-onnx/fp16_v2/scorer_fp16.onnx",
-            "gliner2-multi-v1-onnx/fp16_v2/span_rep_fp16.onnx",
-            "gliner2-multi-v1-onnx/fp16_v2/token_gather_fp16.onnx",
-            "gliner2-multi-v1-onnx/fp16_v2/tokenizer.json",
-        ] {
-            let path = models_dir.join(rel);
-            std::fs::create_dir_all(path.parent().expect("required file parent")).unwrap();
-            std::fs::write(path, b"test model file").unwrap();
-        }
         let cfg = AnnoRagConfig {
             data_dir: tmp.path().to_path_buf(),
             accelerator: AcceleratorPreference::Cpu,
             ..Default::default()
         };
+        let embedder_dir = cfg.embedder_dir();
+        let mut rels: Vec<String> = embedder_required_files(&embedder_dir);
+        rels.extend([
+            "gliner2-multi-v1-onnx/fp16_v2/classifier_fp16.onnx".to_string(),
+            "gliner2-multi-v1-onnx/fp16_v2/count_lstm_fixed_fp16.onnx".to_string(),
+            "gliner2-multi-v1-onnx/fp16_v2/count_pred_argmax_fp16.onnx".to_string(),
+            "gliner2-multi-v1-onnx/fp16_v2/encoder_fp16.onnx".to_string(),
+            "gliner2-multi-v1-onnx/fp16_v2/schema_gather_fp16.onnx".to_string(),
+            "gliner2-multi-v1-onnx/fp16_v2/scorer_fp16.onnx".to_string(),
+            "gliner2-multi-v1-onnx/fp16_v2/span_rep_fp16.onnx".to_string(),
+            "gliner2-multi-v1-onnx/fp16_v2/token_gather_fp16.onnx".to_string(),
+            "gliner2-multi-v1-onnx/fp16_v2/tokenizer.json".to_string(),
+        ]);
+        for rel in &rels {
+            let path = models_dir.join(rel);
+            std::fs::create_dir_all(path.parent().expect("required file parent")).unwrap();
+            std::fs::write(path, b"test model file").unwrap();
+        }
         let _models_env = test_env::ScopedAnnoModelsDir::unset();
 
         let inventory = ModelInventoryService::new(&cfg).inspect();

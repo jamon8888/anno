@@ -330,9 +330,11 @@ const GLINER_ONNX_BASES: &[&str] = &[
     "token_gather",
 ];
 
-pub fn model_cache_verified(models_dir: &Path) -> bool {
-    required_files_present(models_dir, anno_rag_mcp::model_inventory::E5_REQUIRED_FILES)
-        && gliner_onnx_cache_verified(models_dir)
+pub fn model_cache_verified(models_dir: &Path, embedder_dir: &str, ner_onnx_dir: &str) -> bool {
+    let embedder_files = anno_rag_mcp::model_inventory::embedder_required_files(embedder_dir);
+    let embedder_refs: Vec<&str> = embedder_files.iter().map(String::as_str).collect();
+    required_files_present(models_dir, &embedder_refs)
+        && gliner_onnx_cache_verified(models_dir, ner_onnx_dir)
 }
 
 fn required_files_present(root: &Path, required_files: &[&str]) -> bool {
@@ -341,24 +343,24 @@ fn required_files_present(root: &Path, required_files: &[&str]) -> bool {
         .all(|relative| root.join(relative).is_file())
 }
 
-fn gliner_onnx_cache_verified(models_dir: &Path) -> bool {
+fn gliner_onnx_cache_verified(models_dir: &Path, ner_onnx_dir: &str) -> bool {
     [("fp32_v2", "fp32"), ("fp16_v2", "fp16")]
         .iter()
         .any(|(variant_dir, suffix)| {
             let graph_files_ready = GLINER_ONNX_BASES.iter().all(|base| {
                 models_dir
-                    .join("gliner2-multi-v1-onnx")
+                    .join(ner_onnx_dir)
                     .join(variant_dir)
                     .join(format!("{base}_{suffix}.onnx"))
                     .is_file()
             });
             let tokenizer_ready = models_dir
-                .join("gliner2-multi-v1-onnx")
+                .join(ner_onnx_dir)
                 .join(variant_dir)
                 .join("tokenizer.json")
                 .is_file()
                 || models_dir
-                    .join("gliner2-multi-v1-onnx")
+                    .join(ner_onnx_dir)
                     .join("tokenizer.json")
                     .is_file();
             graph_files_ready && tokenizer_ready
@@ -369,9 +371,12 @@ pub async fn ensure_models(
     models_dir: &Path,
     skip_models: bool,
     dry_run: bool,
+    cfg: &AnnoRagConfig,
 ) -> anyhow::Result<bool> {
+    let embedder_dir = cfg.embedder_dir();
+    let ner_onnx_dir = cfg.ner_onnx_dir();
     validate_absolute_path(models_dir).map_err(|e| anyhow!(e))?;
-    if model_cache_verified(models_dir) {
+    if model_cache_verified(models_dir, &embedder_dir, &ner_onnx_dir) {
         return Ok(true);
     }
     if skip_models || dry_run {
@@ -383,13 +388,17 @@ pub async fn ensure_models(
         );
     }
 
-    let mut cfg = AnnoRagConfig::default();
-    cfg.data_dir = models_dir
+    let mut download_cfg = cfg.clone();
+    download_cfg.data_dir = models_dir
         .parent()
         .map(Path::to_path_buf)
         .context("--models-dir must have a parent directory")?;
-    anno_rag::download_models::download(&cfg).await?;
-    Ok(model_cache_verified(models_dir))
+    anno_rag::download_models::download(&download_cfg).await?;
+    Ok(model_cache_verified(
+        models_dir,
+        &embedder_dir,
+        &ner_onnx_dir,
+    ))
 }
 
 pub fn jsonrpc_line(id: u64, method: &str, params: Value) -> String {
@@ -512,10 +521,14 @@ pub async fn run(args: SetupMcpArgs) -> anyhow::Result<()> {
 
     let models_dir = args.models_dir.unwrap_or_else(default_models_dir);
     validate_absolute_path(&models_dir).map_err(|e| anyhow!(e))?;
+    let cfg = AnnoRagConfig::load(None).unwrap_or_else(|e| {
+        tracing::warn!("config load error: {e}; using defaults");
+        AnnoRagConfig::default()
+    });
     let models_verified = if args.target == SetupTarget::Manual {
-        model_cache_verified(&models_dir)
+        model_cache_verified(&models_dir, &cfg.embedder_dir(), &cfg.ner_onnx_dir())
     } else {
-        ensure_models(&models_dir, args.skip_models, args.dry_run).await?
+        ensure_models(&models_dir, args.skip_models, args.dry_run, &cfg).await?
     };
 
     let mut summary = Vec::<String>::new();
@@ -1081,68 +1094,108 @@ mod tests {
     fn model_cache_verified_when_expected_families_exist() {
         let dir = tempfile::tempdir().expect("tempdir");
         let models = dir.path().join("models");
-        write_required_files(&models, anno_rag_mcp::model_inventory::E5_REQUIRED_FILES);
+        let embedder_files =
+            anno_rag_mcp::model_inventory::embedder_required_files("Solon-embeddings-large-0.1");
+        let embedder_refs: Vec<&str> = embedder_files.iter().map(String::as_str).collect();
+        write_required_files(&models, &embedder_refs);
+        #[allow(deprecated)]
         write_required_files(
             &models,
             anno_rag_mcp::model_inventory::GLINER_REQUIRED_FILES,
         );
 
-        assert!(model_cache_verified(&models));
+        assert!(model_cache_verified(
+            &models,
+            "Solon-embeddings-large-0.1",
+            "gliner2-multi-v1-onnx"
+        ));
     }
 
     #[test]
     fn model_cache_verified_with_fp16_gliner_variant() {
         let dir = tempfile::tempdir().expect("tempdir");
         let models = dir.path().join("models");
-        write_required_files(&models, anno_rag_mcp::model_inventory::E5_REQUIRED_FILES);
+        let embedder_files =
+            anno_rag_mcp::model_inventory::embedder_required_files("Solon-embeddings-large-0.1");
+        let embedder_refs: Vec<&str> = embedder_files.iter().map(String::as_str).collect();
+        write_required_files(&models, &embedder_refs);
         write_fp16_gliner_files(&models);
 
-        assert!(model_cache_verified(&models));
+        assert!(model_cache_verified(
+            &models,
+            "Solon-embeddings-large-0.1",
+            "gliner2-multi-v1-onnx"
+        ));
     }
 
     #[test]
     fn model_cache_not_verified_when_gliner_missing() {
         let dir = tempfile::tempdir().expect("tempdir");
         let models = dir.path().join("models");
-        write_required_files(&models, anno_rag_mcp::model_inventory::E5_REQUIRED_FILES);
+        let embedder_files =
+            anno_rag_mcp::model_inventory::embedder_required_files("Solon-embeddings-large-0.1");
+        let embedder_refs: Vec<&str> = embedder_files.iter().map(String::as_str).collect();
+        write_required_files(&models, &embedder_refs);
 
-        assert!(!model_cache_verified(&models));
+        assert!(!model_cache_verified(
+            &models,
+            "Solon-embeddings-large-0.1",
+            "gliner2-multi-v1-onnx"
+        ));
     }
 
     #[test]
     fn model_cache_not_verified_when_embedder_weights_missing() {
         let dir = tempfile::tempdir().expect("tempdir");
         let models = dir.path().join("models");
-        std::fs::create_dir_all(models.join("multilingual-e5-small")).expect("e5");
+        // Write config.json and tokenizer.json but NOT model.safetensors — incomplete embedder.
+        std::fs::create_dir_all(models.join("Solon-embeddings-large-0.1")).expect("embedder dir");
         std::fs::write(
-            models.join("multilingual-e5-small").join("config.json"),
+            models
+                .join("Solon-embeddings-large-0.1")
+                .join("config.json"),
             "{}",
         )
-        .expect("e5 config");
+        .expect("embedder config");
         std::fs::write(
-            models.join("multilingual-e5-small").join("tokenizer.json"),
+            models
+                .join("Solon-embeddings-large-0.1")
+                .join("tokenizer.json"),
             "{}",
         )
-        .expect("e5 tokenizer");
+        .expect("embedder tokenizer");
+        #[allow(deprecated)]
         write_required_files(
             &models,
             anno_rag_mcp::model_inventory::GLINER_REQUIRED_FILES,
         );
 
-        assert!(!model_cache_verified(&models));
+        assert!(!model_cache_verified(
+            &models,
+            "Solon-embeddings-large-0.1",
+            "gliner2-multi-v1-onnx"
+        ));
     }
 
     #[tokio::test]
     async fn ensure_models_returns_true_when_cache_verified() {
         let dir = tempfile::tempdir().expect("tempdir");
         let models = dir.path().join("models");
-        write_required_files(&models, anno_rag_mcp::model_inventory::E5_REQUIRED_FILES);
+        let embedder_files =
+            anno_rag_mcp::model_inventory::embedder_required_files("Solon-embeddings-large-0.1");
+        let embedder_refs: Vec<&str> = embedder_files.iter().map(String::as_str).collect();
+        write_required_files(&models, &embedder_refs);
+        #[allow(deprecated)]
         write_required_files(
             &models,
             anno_rag_mcp::model_inventory::GLINER_REQUIRED_FILES,
         );
 
-        assert!(ensure_models(&models, false, false).await.expect("ensure"));
+        assert!(
+            ensure_models(&models, false, false, &AnnoRagConfig::default())
+                .await
+                .expect("ensure")
+        );
     }
 
     #[tokio::test]
@@ -1150,7 +1203,11 @@ mod tests {
         let dir = tempfile::tempdir().expect("tempdir");
         let models = dir.path().join("models");
 
-        assert!(!ensure_models(&models, false, true).await.expect("ensure"));
+        assert!(
+            !ensure_models(&models, false, true, &AnnoRagConfig::default())
+                .await
+                .expect("ensure")
+        );
     }
 
     #[tokio::test]
@@ -1158,14 +1215,18 @@ mod tests {
         let dir = tempfile::tempdir().expect("tempdir");
         let models = dir.path().join("models");
 
-        assert!(!ensure_models(&models, true, false).await.expect("ensure"));
+        assert!(
+            !ensure_models(&models, true, false, &AnnoRagConfig::default())
+                .await
+                .expect("ensure")
+        );
     }
 
     #[tokio::test]
     async fn ensure_models_rejects_non_models_dir_when_download_required() {
         let dir = tempfile::tempdir().expect("tempdir");
         let models = dir.path().join("model-cache");
-        let err = ensure_models(&models, false, false)
+        let err = ensure_models(&models, false, false, &AnnoRagConfig::default())
             .await
             .expect_err("non-models dir must fail before download");
 

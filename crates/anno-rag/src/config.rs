@@ -176,6 +176,14 @@ fn default_ner_warmup_model() -> Option<String> {
     Some("fastino/gliner2-multi-v1".to_string())
 }
 
+fn default_ner_model_id() -> String {
+    "SemplificaAI/gliner2-multi-v1-onnx".to_string()
+}
+
+fn default_ner_candle_model_id() -> String {
+    "fastino/gliner2-multi-v1".to_string()
+}
+
 fn default_embed_model() -> String {
     "OrdalieTech/Solon-embeddings-large-0.1".to_string()
 }
@@ -294,6 +302,26 @@ pub struct AnnoRagConfig {
     )]
     #[serde(default = "default_ner_warmup_model")]
     pub ner_warmup_model: Option<String>,
+
+    /// HuggingFace model ID for the ONNX GLiNER2 detector.
+    #[config_meta(
+        env = "ANNO_RAG_NER_MODEL",
+        cli = "--ner-model",
+        doc = "HuggingFace model ID for the ONNX NER detector. Default: SemplificaAI/gliner2-multi-v1-onnx",
+        since = "0.12"
+    )]
+    #[serde(default = "default_ner_model_id")]
+    pub ner_model_id: String,
+
+    /// HuggingFace model ID for the Candle GLiNER2 detector backend.
+    #[config_meta(
+        env = "ANNO_RAG_NER_CANDLE_MODEL",
+        cli = "--ner-candle-model",
+        doc = "HuggingFace model ID for the Candle NER detector. Default: fastino/gliner2-multi-v1",
+        since = "0.12"
+    )]
+    #[serde(default = "default_ner_candle_model_id")]
+    pub ner_candle_model_id: String,
 
     /// MCP server name advertised on `initialize`. Default: `"anno-rag"`.
     #[config_meta(
@@ -709,6 +737,8 @@ impl Default for AnnoRagConfig {
             gdpr_layers: GdprLayerSet::Defense,
             vector_index_threshold: default_vector_index_threshold(),
             ner_warmup_model: default_ner_warmup_model(),
+            ner_model_id: default_ner_model_id(),
+            ner_candle_model_id: default_ner_candle_model_id(),
             mcp_server_name: default_mcp_server_name(),
             ocr_mode: default_ocr_mode(),
             enable_ocr: false,
@@ -818,6 +848,12 @@ impl AnnoRagConfig {
         if let Ok(v) = std::env::var("ANNO_RAG_EMBED_MODEL") {
             self.embed_model = v;
         }
+        if let Ok(v) = std::env::var("ANNO_RAG_NER_MODEL") {
+            self.ner_model_id = v;
+        }
+        if let Ok(v) = std::env::var("ANNO_RAG_NER_CANDLE_MODEL") {
+            self.ner_candle_model_id = v;
+        }
         if let Ok(v) = std::env::var("ANNO_RAG_EMBED_DIM") {
             if let Ok(n) = v.parse() {
                 self.embed_dim = n;
@@ -905,6 +941,12 @@ impl AnnoRagConfig {
         // ner_warmup_model: Option<String> in source → Option<String> in overrides
         if let Some(v) = ov.ner_warmup_model.clone() {
             self.ner_warmup_model = Some(v);
+        }
+        if let Some(v) = ov.ner_model_id.clone() {
+            self.ner_model_id = v;
+        }
+        if let Some(v) = ov.ner_candle_model_id.clone() {
+            self.ner_candle_model_id = v;
         }
         if let Some(v) = ov.mcp_server_name.clone() {
             self.mcp_server_name = v;
@@ -1055,6 +1097,44 @@ impl AnnoRagConfig {
     #[must_use]
     pub fn outputs_dir(&self) -> PathBuf {
         self.data_dir.join("outputs")
+    }
+
+    /// Last path segment of `ner_model_id` — used as the local ONNX model directory name.
+    ///
+    /// Example: `"SemplificaAI/gliner2-multi-v1-onnx"` → `"gliner2-multi-v1-onnx"`
+    #[must_use]
+    pub fn ner_onnx_dir(&self) -> String {
+        self.ner_model_id
+            .split('/')
+            .next_back()
+            .unwrap_or(&self.ner_model_id)
+            .to_string()
+    }
+
+    /// Local directory name for the Candle NER model: last segment of `ner_candle_model_id` + `"-candle"`.
+    ///
+    /// Example: `"fastino/gliner2-multi-v1"` → `"gliner2-multi-v1-candle"`
+    #[must_use]
+    pub fn ner_candle_dir(&self) -> String {
+        let slug = self
+            .ner_candle_model_id
+            .split('/')
+            .next_back()
+            .unwrap_or(&self.ner_candle_model_id);
+        format!("{slug}-candle")
+    }
+
+    /// Last path segment of `embed_model` — used as the local embedder directory name.
+    ///
+    /// Example: `"intfloat/multilingual-e5-small"` → `"multilingual-e5-small"`
+    /// Example: `"OrdalieTech/Solon-embeddings-large-0.1"` → `"Solon-embeddings-large-0.1"`
+    #[must_use]
+    pub fn embedder_dir(&self) -> String {
+        self.embed_model
+            .split('/')
+            .next_back()
+            .unwrap_or(&self.embed_model)
+            .to_string()
     }
 }
 
@@ -1455,5 +1535,53 @@ mod tests {
         let cfg = AnnoRagConfig::load_from_file(None, None).expect("load");
         assert_eq!(cfg.embed_dim, 1024);
         assert_eq!(cfg.default_top_k, 10);
+    }
+
+    #[test]
+    fn ner_onnx_dir_is_last_segment_of_model_id() {
+        let cfg = AnnoRagConfig::default();
+        assert_eq!(cfg.ner_onnx_dir(), "gliner2-multi-v1-onnx");
+    }
+
+    #[test]
+    fn ner_candle_dir_appends_candle_suffix() {
+        let cfg = AnnoRagConfig::default();
+        assert_eq!(cfg.ner_candle_dir(), "gliner2-multi-v1-candle");
+    }
+
+    #[test]
+    fn ner_onnx_dir_uses_custom_model_id() {
+        let mut cfg = AnnoRagConfig::default();
+        cfg.ner_model_id = "myorg/my-gliner-onnx".to_string();
+        assert_eq!(cfg.ner_onnx_dir(), "my-gliner-onnx");
+    }
+
+    #[test]
+    fn ner_candle_dir_uses_custom_candle_model_id() {
+        let mut cfg = AnnoRagConfig::default();
+        cfg.ner_candle_model_id = "myorg/my-gliner-pt".to_string();
+        assert_eq!(cfg.ner_candle_dir(), "my-gliner-pt-candle");
+    }
+
+    #[test]
+    fn embedder_dir_is_last_segment_of_embed_model() {
+        let cfg = AnnoRagConfig::default();
+        // default embed_model ends with "multilingual-e5-small" or similar — check default_embed_model()
+        let expected = cfg.embed_model.split('/').next_back().unwrap().to_string();
+        assert_eq!(cfg.embedder_dir(), expected);
+    }
+
+    #[test]
+    fn embedder_dir_uses_custom_embed_model() {
+        let mut cfg = AnnoRagConfig::default();
+        cfg.embed_model = "OrdalieTech/Solon-embeddings-large-0.1".to_string();
+        assert_eq!(cfg.embedder_dir(), "Solon-embeddings-large-0.1");
+    }
+
+    #[test]
+    fn embedder_dir_no_slash_returns_whole_string() {
+        let mut cfg = AnnoRagConfig::default();
+        cfg.embed_model = "local-model".to_string();
+        assert_eq!(cfg.embedder_dir(), "local-model");
     }
 }

@@ -325,14 +325,13 @@ mod mcp_autodetect_tests {
         let cfg = AnnoRagConfig::default();
         let models = cfg.models_cache();
         assert!(models.ends_with("models"));
+        let embed_dir = cfg.embedder_dir();
         assert_eq!(
-            models.join("multilingual-e5-small").file_name().unwrap(),
-            "multilingual-e5-small"
+            models.join(&embed_dir).file_name().unwrap(),
+            embed_dir.as_str()
         );
-        assert_eq!(
-            models.join("gliner2-multi-v1-onnx").file_name().unwrap(),
-            "gliner2-multi-v1-onnx"
-        );
+        let ner_dir = cfg.ner_onnx_dir();
+        assert_eq!(models.join(&ner_dir).file_name().unwrap(), ner_dir.as_str());
     }
 }
 
