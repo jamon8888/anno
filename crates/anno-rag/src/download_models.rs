@@ -3,7 +3,7 @@
 //! After running, set `ANNO_MODELS_DIR=<path>` so both loaders skip
 //! the HuggingFace Hub network fetch on every process start.
 
-use crate::{config::AnnoRagConfig, error::Result, Error};
+use crate::{config::AnnoRagConfig, error::Result, model_cache::migrate_legacy_cache, Error};
 use std::path::{Path, PathBuf};
 
 /// The eight base names of GLiNER2-Fastino's ONNX graphs (fp32_v2 layout).
@@ -29,6 +29,7 @@ const NER_ONNX_BASES: &[&str] = &[
 /// [`Error::Io`] on filesystem errors.
 pub async fn download(cfg: &AnnoRagConfig) -> Result<PathBuf> {
     let models_dir = cfg.models_cache();
+    migrate_legacy_cache(&models_dir, cfg);
     download_embedder(&models_dir, &cfg.embed_model).await?;
     download_ner(&models_dir, &cfg.ner_model_id, &cfg.ner_onnx_dir()).await?;
     #[cfg(any(feature = "gpu-metal", feature = "gliner2-candle-cpu"))]
