@@ -27,6 +27,8 @@ pub fn migrate_legacy_cache(models_dir: &Path, cfg: &AnnoRagConfig) {
         ),
     ];
 
+    let mut any_failed = false;
+
     for (canonical_rel, legacy_rel) in &migrations {
         if canonical_rel == legacy_rel {
             continue; // model ID has no '/'; nothing to rename
@@ -40,6 +42,7 @@ pub fn migrate_legacy_cache(models_dir: &Path, cfg: &AnnoRagConfig) {
                         "migrate_legacy_cache: create_dir_all {}: {e}",
                         parent.display()
                     );
+                    any_failed = true;
                     continue;
                 }
             }
@@ -49,20 +52,25 @@ pub fn migrate_legacy_cache(models_dir: &Path, cfg: &AnnoRagConfig) {
                     legacy.display(),
                     canonical.display()
                 ),
-                Err(e) => tracing::warn!(
-                    "migrate_legacy_cache: rename {} → {}: {e}",
-                    legacy.display(),
-                    canonical.display()
-                ),
+                Err(e) => {
+                    tracing::warn!(
+                        "migrate_legacy_cache: rename {} → {}: {e}",
+                        legacy.display(),
+                        canonical.display()
+                    );
+                    any_failed = true;
+                }
             }
         }
     }
 
-    if let Err(e) = std::fs::write(&marker, b"") {
-        tracing::warn!(
-            "migrate_legacy_cache: write marker {}: {e}",
-            marker.display()
-        );
+    if !any_failed {
+        if let Err(e) = std::fs::write(&marker, b"") {
+            tracing::warn!(
+                "migrate_legacy_cache: write marker {}: {e}",
+                marker.display()
+            );
+        }
     }
 }
 
