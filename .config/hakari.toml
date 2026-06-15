@@ -24,8 +24,10 @@ platforms = [
     "aarch64-pc-windows-msvc",
 ]
 
-# Write out exact versions rather than a semver range. (Defaults to false.)
-# exact-versions = true
+# Write out exact versions rather than a semver range. Enabled to prevent
+# loose workspace-hack constraints from bypassing workspace exact pins (e.g.
+# kreuzberg =4.9.7) when cargo resolves without --locked (cargo-semver-checks).
+exact-versions = true
 
 # Only traverse default features for candle crates.
 # cuda/metal are opt-in features (gpu-cuda / gpu-metal Cargo features) that

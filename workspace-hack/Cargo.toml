@@ -53,7 +53,7 @@ hmac = { version = "0.12", default-features = false, features = ["reset"] }
 httparse = { version = "1" }
 icu_locale_core = { version = "2", default-features = false, features = ["alloc", "zerovec"] }
 icu_provider = { version = "2", default-features = false, features = ["alloc", "baked", "sync"] }
-kreuzberg = { version = "4", default-features = false, features = ["archives", "bundled-pdfium", "chunking", "email", "excel", "office", "paddle-ocr", "xml"] }
+kreuzberg = { version = "=4.9.7", default-features = false, features = ["archives", "bundled-pdfium", "chunking", "email", "excel", "office", "paddle-ocr", "xml"] }
 litemap = { version = "0.8", default-features = false, features = ["alloc"] }
 log = { version = "0.4", default-features = false, features = ["std"] }
 matrixmultiply = { version = "0.3", default-features = false, features = ["cgemm", "threading"] }
@@ -153,7 +153,7 @@ hmac = { version = "0.12", default-features = false, features = ["reset"] }
 httparse = { version = "1" }
 icu_locale_core = { version = "2", default-features = false, features = ["alloc", "zerovec"] }
 icu_provider = { version = "2", default-features = false, features = ["alloc", "baked", "sync"] }
-kreuzberg = { version = "4", default-features = false, features = ["archives", "bundled-pdfium", "chunking", "email", "excel", "office", "paddle-ocr", "xml"] }
+kreuzberg = { version = "=4.9.7", default-features = false, features = ["archives", "bundled-pdfium", "chunking", "email", "excel", "office", "paddle-ocr", "xml"] }
 litemap = { version = "0.8", default-features = false, features = ["alloc"] }
 log = { version = "0.4", default-features = false, features = ["std"] }
 matrixmultiply = { version = "0.3", default-features = false, features = ["cgemm", "threading"] }
