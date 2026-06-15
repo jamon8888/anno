@@ -1850,9 +1850,9 @@ impl DatasetLoader {
             DatasetParsePlan::JsonlNer => parse::ner::parse_jsonl_ner(content, id),
             DatasetParsePlan::WikiannJson => parse::ner::parse_wikiann_json(content, id),
             DatasetParsePlan::TweetNer7 => parse::ner::parse_tweetner7(content, id),
-            DatasetParsePlan::DocredJson => self.parse_docred(content, id),
-            DatasetParsePlan::GoogleReCorpus => self.parse_google_re_corpus(content, id),
-            DatasetParsePlan::ChisiecJson => self.parse_chisiec(content, id),
+            DatasetParsePlan::DocredJson => parse::relation::parse_docred(content, id),
+            DatasetParsePlan::GoogleReCorpus => parse::relation::parse_google_re_corpus(content, id),
+            DatasetParsePlan::ChisiecJson => parse::relation::parse_chisiec(content, id),
             DatasetParsePlan::CadecHybrid => {
                 if self.is_hf_api_response(content) {
                     parse::ner::parse_cadec_hf_api(content, id)
@@ -1927,170 +1927,6 @@ impl DatasetLoader {
     /// Tags use BIO scheme (e.g., O, B-PERSON, I-BUSINESS).
     ///
     /// # Errors
-    ///    /// Parse WikiANN-style JSON array format.
-    ///
-    /// Expected format: `[{"text": "...", "tokens": ["word1", "word2"], "ner_tags": ["O", "B-LOC"]}, ...]`    /// Parse DocRED document-level relation extraction JSON format.
-    ///
-    /// DocRED is primarily for relation extraction but includes NER annotations.
-    /// Parse DocRED/CrossRE JSON format for relation extraction.
-    ///
-    /// CrossRE format: {"doc_key": "...", "sentence": [...], "ner": [[start, end, type], ...], "relations": [...]}
-    fn parse_docred(&self, content: &str, id: DatasetId) -> Result<LoadedDataset> {
-        let mut sentences = Vec::new();
-
-        // Parse as JSONL (one JSON object per line)
-        for line in content.lines() {
-            let line = line.trim();
-            if line.is_empty() {
-                continue;
-            }
-
-            let doc: serde_json::Value = match serde_json::from_str(line) {
-                Ok(v) => v,
-                Err(_) => continue,
-            };
-
-            // CrossRE format: sentence array + ner array
-            let tokens_arr = match doc.get("sentence").and_then(|v| v.as_array()) {
-                Some(t) => t,
-                None => continue,
-            };
-
-            let ner_spans = doc.get("ner").and_then(|v| v.as_array());
-
-            // Build token list with entity annotations
-            let mut tokens: Vec<AnnotatedToken> = tokens_arr
-                .iter()
-                .filter_map(|t| t.as_str())
-                .map(|word| AnnotatedToken {
-                    text: word.to_string(),
-                    ner_tag: "O".to_string(),
-                })
-                .collect();
-
-            // Apply NER annotations: [start, end, type]
-            if let Some(ner) = ner_spans {
-                for span in ner {
-                    if let Some(arr) = span.as_array() {
-                        if arr.len() >= 3 {
-                            let start = arr[0].as_u64().unwrap_or(0) as usize;
-                            let end = arr[1].as_u64().unwrap_or(0) as usize;
-                            let ent_type = arr[2].as_str().unwrap_or("ENTITY");
-
-                            // Apply BIO tags
-                            for idx in start..=end {
-                                if idx < tokens.len() {
-                                    tokens[idx].ner_tag = if idx == start {
-                                        format!("B-{}", ent_type.to_uppercase())
-                                    } else {
-                                        format!("I-{}", ent_type.to_uppercase())
-                                    };
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-
-            if !tokens.is_empty() {
-                sentences.push(AnnotatedSentence {
-                    tokens,
-                    source_dataset: id,
-                });
-            }
-        }
-
-        if sentences.is_empty() {
-            return Err(Error::InvalidInput(format!(
-                "DocRED/CrossRE JSON for {:?} contains no valid sentences",
-                id
-            )));
-        }
-
-        let now = chrono::Utc::now().to_rfc3339();
-        Ok(LoadedDataset {
-            id,
-            sentences,
-            loaded_at: now,
-            source_url: id.download_url().to_string(),
-            data_source: DataSource::LocalCache,
-            temporal_metadata: Self::get_temporal_metadata(id),
-            metadata: id.default_metadata(),
-        })
-    }
-
-    /// Parse Google's relation-extraction-corpus JSONL format.
-    ///
-    /// Example record (one per line):
-    /// ```json
-    /// {"pred":"/people/person/place_of_birth","sub":"/m/...","obj":"/m/...","evidences":[{"url":"...","snippet":"..."}],"judgments":[{"rater":"...","judgment":"yes"}]}
-    /// ```
-    ///
-    /// This dataset does **not** include token-level entity spans. For now we treat each
-    /// evidence snippet as a plain sentence with all tokens tagged as `O`, which is
-    /// sufficient for sanity evaluation plumbing (and avoids failing dataset loads).
-    fn parse_google_re_corpus(&self, content: &str, id: DatasetId) -> Result<LoadedDataset> {
-        let mut sentences: Vec<AnnotatedSentence> = Vec::new();
-
-        for line in content.lines() {
-            let line = line.trim();
-            if line.is_empty() {
-                continue;
-            }
-
-            let rec: serde_json::Value = match serde_json::from_str(line) {
-                Ok(v) => v,
-                Err(_) => continue,
-            };
-
-            let snippet = rec
-                .get("evidences")
-                .and_then(|v| v.as_array())
-                .and_then(|arr| arr.first())
-                .and_then(|ev| ev.get("snippet"))
-                .and_then(|s| s.as_str());
-            let Some(snippet) = snippet else {
-                continue;
-            };
-
-            let tokens: Vec<AnnotatedToken> = snippet
-                .split_whitespace()
-                .filter(|t| !t.is_empty())
-                .map(|t| AnnotatedToken {
-                    text: t.to_string(),
-                    ner_tag: "O".to_string(),
-                })
-                .collect();
-
-            if tokens.is_empty() {
-                continue;
-            }
-
-            sentences.push(AnnotatedSentence {
-                tokens,
-                source_dataset: id,
-            });
-        }
-
-        if sentences.is_empty() {
-            return Err(Error::InvalidInput(format!(
-                "Google relation-extraction-corpus file for {:?} contains no usable evidence snippets",
-                id
-            )));
-        }
-
-        let now = chrono::Utc::now().to_rfc3339();
-        Ok(LoadedDataset {
-            id,
-            sentences,
-            loaded_at: now,
-            source_url: id.download_url().to_string(),
-            data_source: DataSource::LocalCache,
-            temporal_metadata: Self::get_temporal_metadata(id),
-            metadata: id.default_metadata(),
-        })
-    }
-
     // =========================================================================
     // Coreference Loading
     // =========================================================================
@@ -2275,11 +2111,11 @@ impl DatasetLoader {
             | DatasetId::MixRED
             | DatasetId::CovEReD => {
                 // All these datasets use the CrossRE format (same as DocRED)
-                self.parse_docred_relations(&content)
+                parse::relation::parse_docred_relations(&content)
             }
             DatasetId::CHisIEC => {
                 // CHisIEC uses a different JSON format with entity indices
-                self.parse_chisiec_relations(&content)
+                parse::relation::parse_chisiec_relations(&content)
             }
             DatasetId::CADEC => {
                 // CADEC is NER, not relation extraction
@@ -2305,465 +2141,6 @@ impl DatasetLoader {
             })?;
         }
         self.load_relation(id)
-    }
-
-    /// Parse DocRED/CrossRE format for relation extraction.
-    ///
-    /// Format: JSONL with {"sentence": [...], "ner": [[start, end, type], ...], "relations": [[id1-start, id1-end, id2-start, id2-end, rel-type, ...], ...]}
-    fn parse_docred_relations(&self, content: &str) -> Result<Vec<RelationDocument>> {
-        use super::relation::RelationGold;
-
-        let mut documents = Vec::new();
-
-        // Parse as JSONL (one JSON object per line)
-        for line in content.lines() {
-            let line = line.trim();
-            if line.is_empty() {
-                continue;
-            }
-
-            let doc: serde_json::Value = match serde_json::from_str(line) {
-                Ok(v) => v,
-                Err(_) => continue,
-            };
-
-            // Get sentence tokens
-            let tokens_arr = match doc.get("sentence").and_then(|v| v.as_array()) {
-                Some(t) => t,
-                None => continue,
-            };
-
-            // Build text from tokens (with proper spacing)
-            let text: String = tokens_arr
-                .iter()
-                .filter_map(|t| t.as_str())
-                .collect::<Vec<_>>()
-                .join(" ");
-
-            // Build token-to-character offset mapping
-            // This maps each token index to its character start position in the text
-            let mut token_to_char: Vec<usize> = Vec::new();
-            let mut char_pos = 0;
-            for (i, token) in tokens_arr.iter().enumerate() {
-                if let Some(tok_str) = token.as_str() {
-                    token_to_char.push(char_pos);
-                    // Add token length + 1 for space (except last token)
-                    char_pos += tok_str.len();
-                    if i < tokens_arr.len() - 1 {
-                        char_pos += 1; // Space between tokens
-                    }
-                } else {
-                    token_to_char.push(char_pos);
-                }
-            }
-
-            // Get NER spans: [start, end, type]
-            let ner_spans = doc.get("ner").and_then(|v| v.as_array());
-
-            // Build entity map: (token_start, token_end) -> (type, text, char_start, char_end)
-            let mut entity_map: std::collections::HashMap<
-                (usize, usize),
-                (String, String, usize, usize),
-            > = std::collections::HashMap::new();
-            if let Some(ner) = ner_spans {
-                for span in ner {
-                    if let Some(arr) = span.as_array() {
-                        if arr.len() >= 3 {
-                            let token_start = arr[0].as_u64().unwrap_or(0) as usize;
-                            let token_end = arr[1].as_u64().unwrap_or(0) as usize;
-                            let ent_type = arr[2].as_str().unwrap_or("ENTITY").to_string();
-
-                            // Extract entity text from tokens
-                            let entity_text: String = tokens_arr
-                                .iter()
-                                .skip(token_start)
-                                .take(token_end - token_start + 1)
-                                .filter_map(|t| t.as_str())
-                                .collect::<Vec<_>>()
-                                .join(" ");
-
-                            // Calculate actual character offsets
-                            let char_start = token_to_char.get(token_start).copied().unwrap_or(0);
-                            let char_end = if token_end < token_to_char.len() {
-                                // Get end position of last token
-                                let last_token_char_start = token_to_char[token_end];
-                                if let Some(last_token) =
-                                    tokens_arr.get(token_end).and_then(|t| t.as_str())
-                                {
-                                    last_token_char_start + last_token.len()
-                                } else {
-                                    char_start + entity_text.len()
-                                }
-                            } else {
-                                char_start + entity_text.len()
-                            };
-
-                            entity_map.insert(
-                                (token_start, token_end),
-                                (ent_type, entity_text, char_start, char_end),
-                            );
-                        }
-                    }
-                }
-            }
-
-            // Parse relations: [id1-start, id1-end, id2-start, id2-end, rel-type, ...]
-            let relations_arr = doc.get("relations").and_then(|v| v.as_array());
-            let mut relations = Vec::new();
-
-            if let Some(rels) = relations_arr {
-                for rel in rels {
-                    if let Some(arr) = rel.as_array() {
-                        if arr.len() >= 5 {
-                            let head_token_start = arr[0].as_u64().unwrap_or(0) as usize;
-                            let head_token_end = arr[1].as_u64().unwrap_or(0) as usize;
-                            let tail_token_start = arr[2].as_u64().unwrap_or(0) as usize;
-                            let tail_token_end = arr[3].as_u64().unwrap_or(0) as usize;
-                            let rel_type = arr[4].as_str().unwrap_or("RELATION").to_string();
-
-                            // Get entity info from map (including character offsets)
-                            let (head_type, head_text, head_char_start, head_char_end) = entity_map
-                                .get(&(head_token_start, head_token_end))
-                                .cloned()
-                                .unwrap_or_else(|| {
-                                    // Fallback: compute from token positions
-                                    let char_start =
-                                        token_to_char.get(head_token_start).copied().unwrap_or(0);
-                                    let char_end = if head_token_end < token_to_char.len() {
-                                        let last_start = token_to_char[head_token_end];
-                                        if let Some(last_tok) =
-                                            tokens_arr.get(head_token_end).and_then(|t| t.as_str())
-                                        {
-                                            last_start + last_tok.len()
-                                        } else {
-                                            char_start
-                                        }
-                                    } else {
-                                        char_start
-                                    };
-                                    ("ENTITY".to_string(), String::new(), char_start, char_end)
-                                });
-
-                            let (tail_type, tail_text, tail_char_start, tail_char_end) = entity_map
-                                .get(&(tail_token_start, tail_token_end))
-                                .cloned()
-                                .unwrap_or_else(|| {
-                                    // Fallback: compute from token positions
-                                    let char_start =
-                                        token_to_char.get(tail_token_start).copied().unwrap_or(0);
-                                    let char_end = if tail_token_end < token_to_char.len() {
-                                        let last_start = token_to_char[tail_token_end];
-                                        if let Some(last_tok) =
-                                            tokens_arr.get(tail_token_end).and_then(|t| t.as_str())
-                                        {
-                                            last_start + last_tok.len()
-                                        } else {
-                                            char_start
-                                        }
-                                    } else {
-                                        char_start
-                                    };
-                                    ("ENTITY".to_string(), String::new(), char_start, char_end)
-                                });
-
-                            relations.push(RelationGold::new(
-                                (head_char_start, head_char_end),
-                                head_type,
-                                head_text,
-                                (tail_char_start, tail_char_end),
-                                tail_type,
-                                tail_text,
-                                rel_type,
-                            ));
-                        }
-                    }
-                }
-            }
-
-            if !text.is_empty() {
-                documents.push(RelationDocument { text, relations });
-            }
-        }
-
-        Ok(documents)
-    }
-
-    /// Parse CHisIEC (Chinese Historical Information Extraction Corpus) NER format.
-    ///
-    /// # Research Background
-    ///
-    /// CHisIEC (Tang et al., LREC-COLING 2024) addresses the unique challenges of
-    /// information extraction from ancient Chinese historical texts (文言文):
-    ///
-    /// - **No word boundaries**: Classical Chinese has no spaces; we tokenize by character
-    /// - **Archaic vocabulary**: Official titles (官职) differ from modern equivalents
-    /// - **Long time span**: Covers texts from multiple dynasties across 2000+ years
-    /// - **Domain-specific entities**: Government positions, classical texts, historical figures
-    ///
-    /// Paper: <https://aclanthology.org/2024.lrec-main.283/>
-    /// GitHub: <https://github.com/tangxuemei1995/CHisIEC>
-    ///
-    /// # Entity Types
-    ///
-    /// | Type | Chinese | Meaning | Example |
-    /// |------|---------|---------|---------|
-    /// | PER | 人物 | Historical figure | 司馬遷, 曹操 |
-    /// | LOC | 地点 | Location/Place | 長安, 洛陽 |
-    /// | OFI | 官职 | Official position | 丞相, 太守 |
-    /// | BOOK | 书籍 | Classical text | 史記, 論語 |
-    ///
-    /// # Format
-    ///
-    /// JSON array where each object contains:
-    /// - `tokens`: String of continuous text (no spaces between characters)
-    /// - `entities`: Array of entity objects with `type`, `start`, `end`, `span`
-    ///
-    /// # Distinction from HistoricalChineseNER
-    ///
-    /// **CHisIEC** (this dataset):
-    /// - Ancient Chinese (文言文, pre-modern)
-    /// - Source: 24 dynastic histories (二十四史)
-    /// - Tasks: NER + Relation Extraction
-    ///
-    /// **HistoricalChineseNER** (different dataset):
-    /// - Modern Chinese transition (1872-1949)
-    /// - Source: ShenBao newspapers
-    /// - Tasks: NER + Entity Linking + Coreference
-    ///
-    /// # Implementation Notes
-    ///
-    /// Chinese text is tokenized by character for NER tagging. Character offsets
-    /// are used directly (critical for Unicode correctness).
-    fn parse_chisiec(&self, content: &str, id: DatasetId) -> Result<LoadedDataset> {
-        let mut sentences = Vec::new();
-
-        // CHisIEC RE data is a JSON array
-        let docs: Vec<serde_json::Value> = serde_json::from_str(content)
-            .map_err(|e| Error::InvalidInput(format!("Failed to parse CHisIEC JSON: {}", e)))?;
-
-        for doc in docs {
-            // Get tokens string (characters concatenated, no spaces in Chinese)
-            let text = match doc.get("tokens").and_then(|v| v.as_str()) {
-                Some(t) => t.to_string(),
-                None => continue,
-            };
-
-            if text.is_empty() {
-                continue;
-            }
-
-            // Chinese text: each character is a token
-            let chars: Vec<char> = text.chars().collect();
-            let mut tokens: Vec<AnnotatedToken> = chars
-                .iter()
-                .map(|c| AnnotatedToken {
-                    text: c.to_string(),
-                    ner_tag: "O".to_string(),
-                })
-                .collect();
-
-            // Get entities array and build BIO tags
-            let entities_arr = doc.get("entities").and_then(|v| v.as_array());
-
-            if let Some(entities) = entities_arr {
-                for entity in entities {
-                    let ent_type = entity
-                        .get("type")
-                        .and_then(|v| v.as_str())
-                        .unwrap_or("ENTITY");
-                    let start = entity.get("start").and_then(|v| v.as_u64()).unwrap_or(0) as usize;
-                    let end = entity.get("end").and_then(|v| v.as_u64()).unwrap_or(0) as usize;
-
-                    // Apply BIO tags (CHisIEC uses character indices)
-                    for idx in start..end {
-                        if idx < tokens.len() {
-                            tokens[idx].ner_tag = if idx == start {
-                                format!("B-{}", ent_type)
-                            } else {
-                                format!("I-{}", ent_type)
-                            };
-                        }
-                    }
-                }
-            }
-
-            if !tokens.is_empty() {
-                sentences.push(AnnotatedSentence {
-                    tokens,
-                    source_dataset: id,
-                });
-            }
-        }
-
-        if sentences.is_empty() {
-            return Err(Error::InvalidInput(format!(
-                "CHisIEC file for {:?} contains no valid sentences",
-                id
-            )));
-        }
-
-        let now = chrono::Utc::now().to_rfc3339();
-        Ok(LoadedDataset {
-            id,
-            sentences,
-            loaded_at: now,
-            source_url: id.download_url().to_string(),
-            data_source: DataSource::LocalCache,
-            temporal_metadata: Self::get_temporal_metadata(id),
-            metadata: id.default_metadata(),
-        })
-    }
-
-    /// Parse CHisIEC relation extraction format.
-    ///
-    /// # Research Motivation
-    ///
-    /// Ancient Chinese historical texts encode complex socio-political relationships
-    /// that require domain-specific relation types. The 12 relation types in CHisIEC
-    /// reflect structures unique to dynastic China:
-    ///
-    /// - **Hierarchical**: 上下級 (superior-subordinate), 任職 (office-holding)
-    /// - **Kinship**: 父母 (parents), 兄弟 (siblings)
-    /// - **Political**: 政治奧援 (political support), 同僚 (colleagues)
-    /// - **Military**: 敵對攻伐 (hostility/attack), 駐守 (defend/garrison)
-    /// - **Spatial**: 到達 (arrival), 出生於某地 (birthplace), 管理 (governance)
-    /// - **Identity**: 別名 (alias/alternative name)
-    ///
-    /// # Format Difference from CrossRE/DocRED
-    ///
-    /// **CHisIEC** uses entity indices:
-    /// ```json
-    /// "relations": [{"type": "上下級", "head": 0, "tail": 1, ...}]
-    /// ```
-    ///
-    /// **CrossRE/DocRED** uses token spans:
-    /// ```json
-    /// "relations": [[0, 2, 3, 5, "relation_type"]]
-    /// ```
-    ///
-    /// This difference requires a separate parser.
-    ///
-    /// # JSON Format
-    ///
-    /// ```json
-    /// {
-    ///   "tokens": "明日，召問其故...",
-    ///   "entities": [
-    ///     {"type": "PER", "start": 11, "end": 13, "span": "玉汝"},
-    ///     {"type": "PER", "start": 14, "end": 16, "span": "嚴公"}
-    ///   ],
-    ///   "relations": [
-    ///     {"type": "上下級", "head": 1, "tail": 0, "head_span": "嚴公", "tail_span": "玉汝"}
-    ///   ],
-    ///   "orig_id": 1260
-    /// }
-    /// ```
-    ///
-    /// # Relation Types (12 total)
-    ///
-    /// | Chinese | Pinyin | English | Category |
-    /// |---------|--------|---------|----------|
-    /// | 敵對攻伐 | dí duì gōng fá | Attack/Hostility | Military |
-    /// | 任職 | rèn zhí | Office Holding | Political |
-    /// | 上下級 | shàng xià jí | Superior-subordinate | Hierarchical |
-    /// | 政治奧援 | zhèng zhì ào yuán | Political Support | Political |
-    /// | 同僚 | tóng liáo | Colleague | Social |
-    /// | 到達 | dào dá | Arrive | Spatial |
-    /// | 管理 | guǎn lǐ | Manage/Govern | Administrative |
-    /// | 出生於某地 | chū shēng yú mǒu dì | Birthplace | Spatial |
-    /// | 駐守 | zhù shǒu | Defend/Garrison | Military |
-    /// | 別名 | bié míng | Alias | Identity |
-    /// | 父母 | fù mǔ | Parents | Kinship |
-    /// | 兄弟 | xiōng dì | Siblings | Kinship |
-    fn parse_chisiec_relations(&self, content: &str) -> Result<Vec<RelationDocument>> {
-        use super::relation::RelationGold;
-
-        let mut documents = Vec::new();
-
-        // Parse as JSON array
-        let docs: Vec<serde_json::Value> = serde_json::from_str(content)
-            .map_err(|e| Error::InvalidInput(format!("Failed to parse CHisIEC JSON: {}", e)))?;
-
-        for doc in docs {
-            // Get tokens string
-            let text = match doc.get("tokens").and_then(|v| v.as_str()) {
-                Some(t) => t.to_string(),
-                None => continue,
-            };
-
-            if text.is_empty() {
-                continue;
-            }
-
-            // Build entity list: [(type, start, end, text), ...]
-            let entities_arr = doc.get("entities").and_then(|v| v.as_array());
-            let mut entity_list: Vec<(String, usize, usize, String)> = Vec::new();
-
-            if let Some(entities) = entities_arr {
-                for entity in entities {
-                    let ent_type = entity
-                        .get("type")
-                        .and_then(|v| v.as_str())
-                        .unwrap_or("ENTITY")
-                        .to_string();
-                    let start = entity.get("start").and_then(|v| v.as_u64()).unwrap_or(0) as usize;
-                    let end = entity.get("end").and_then(|v| v.as_u64()).unwrap_or(0) as usize;
-                    let span = entity
-                        .get("span")
-                        .and_then(|v| v.as_str())
-                        .unwrap_or("")
-                        .to_string();
-
-                    // Fallback to extracting from text if span is empty
-                    let span_text = if !span.is_empty() {
-                        span
-                    } else {
-                        text.chars().skip(start).take(end - start).collect()
-                    };
-
-                    entity_list.push((ent_type, start, end, span_text));
-                }
-            }
-
-            // Parse relations
-            let relations_arr = doc.get("relations").and_then(|v| v.as_array());
-            let mut relations = Vec::new();
-
-            if let Some(rels) = relations_arr {
-                for rel in rels {
-                    let rel_type = rel
-                        .get("type")
-                        .and_then(|v| v.as_str())
-                        .unwrap_or("RELATION")
-                        .to_string();
-                    // CHisIEC uses entity indices for head/tail
-                    let head_idx = rel.get("head").and_then(|v| v.as_u64()).unwrap_or(0) as usize;
-                    let tail_idx = rel.get("tail").and_then(|v| v.as_u64()).unwrap_or(0) as usize;
-
-                    // Look up entities by index
-                    if head_idx < entity_list.len() && tail_idx < entity_list.len() {
-                        let (head_type, head_start, head_end, head_text) = &entity_list[head_idx];
-                        let (tail_type, tail_start, tail_end, tail_text) = &entity_list[tail_idx];
-
-                        relations.push(RelationGold::new(
-                            (*head_start, *head_end),
-                            head_type.clone(),
-                            head_text.clone(),
-                            (*tail_start, *tail_end),
-                            tail_type.clone(),
-                            tail_text.clone(),
-                            rel_type,
-                        ));
-                    }
-                }
-            }
-
-            if !text.is_empty() {
-                documents.push(RelationDocument { text, relations });
-            }
-        }
-
-        Ok(documents)
     }
 
     // =========================================================================
@@ -4326,7 +3703,7 @@ Blackburn NNP I-NP I-PER
         ]"#;
 
         let loader = DatasetLoader::new().unwrap();
-        let result = loader.parse_chisiec(sample_json, DatasetId::CHisIEC);
+        let result = parse::relation::parse_chisiec(sample_json, DatasetId::CHisIEC);
         assert!(result.is_ok());
 
         let dataset = result.unwrap();
@@ -4360,7 +3737,7 @@ Blackburn NNP I-NP I-PER
         ]"#;
 
         let loader = DatasetLoader::new().unwrap();
-        let result = loader.parse_chisiec_relations(sample_json);
+        let result = parse::relation::parse_chisiec_relations(sample_json);
         assert!(result.is_ok());
 
         let docs = result.unwrap();
@@ -4397,9 +3774,7 @@ Blackburn NNP I-NP I-PER
             }
         ]"#;
 
-        let loader = DatasetLoader::new().unwrap();
-        let dataset = loader
-            .parse_chisiec(sample_json, DatasetId::CHisIEC)
+        let dataset = parse::relation::parse_chisiec(sample_json, DatasetId::CHisIEC)
             .unwrap();
 
         assert_eq!(dataset.sentences.len(), 1);
@@ -4448,9 +3823,7 @@ Blackburn NNP I-NP I-PER
             }
         ]"#;
 
-        let loader = DatasetLoader::new().unwrap();
-        let dataset = loader
-            .parse_chisiec(sample_json, DatasetId::CHisIEC)
+        let dataset = parse::relation::parse_chisiec(sample_json, DatasetId::CHisIEC)
             .unwrap();
 
         // 曹操 is 2 characters (but 6 bytes in UTF-8)
@@ -4480,7 +3853,7 @@ Blackburn NNP I-NP I-PER
         ]"#;
 
         let loader = DatasetLoader::new().unwrap();
-        let docs = loader.parse_chisiec_relations(sample_json).unwrap();
+        let docs = parse::relation::parse_chisiec_relations(sample_json).unwrap();
 
         assert_eq!(docs.len(), 1);
         assert_eq!(docs[0].relations.len(), 2);
@@ -4537,9 +3910,7 @@ Blackburn NNP I-NP I-PER
             }
         ]"#;
 
-        let loader = DatasetLoader::new().unwrap();
-        let dataset = loader
-            .parse_chisiec(sample_json, DatasetId::CHisIEC)
+        let dataset = parse::relation::parse_chisiec(sample_json, DatasetId::CHisIEC)
             .unwrap();
 
         assert_eq!(dataset.sentences.len(), 1);
@@ -5404,7 +4775,7 @@ Blackburn NNP I-NP I-PER
     fn test_parse_docred_smoke() {
         let sample = r#"{"doc_key":"d1","sentence":["John","met","Mary","in","Paris","."],"ner":[[0,0,"PER"],[2,2,"PER"],[4,4,"LOC"]],"relations":[]}"#;
         let loader = DatasetLoader::new().unwrap();
-        let ds = loader.parse_docred(sample, DatasetId::DocRED).unwrap();
+        let ds = parse::relation::parse_docred(sample, DatasetId::DocRED).unwrap();
         assert!(!ds.sentences.is_empty());
         assert!(ds.sentences[0]
             .tokens
