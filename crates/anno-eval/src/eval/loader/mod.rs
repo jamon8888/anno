@@ -135,6 +135,8 @@ pub use types::{
     TemporalMetadata,
 };
 pub(crate) use types::DatasetParsePlan;
+
+mod parse;
 pub use types::DatasetId;
 
 
@@ -2103,8 +2105,8 @@ impl DatasetLoader {
         let mut sentences = Vec::new();
 
         // Extract tag names from features if available (for integer tag mapping)
-        let tag_names = self.extract_tag_names_from_features(&parsed);
-        let class_names = self.extract_class_names_from_features(&parsed);
+        let tag_names = parse::util::extract_tag_names_from_features(&parsed);
+        let class_names = parse::util::extract_class_names_from_features(&parsed);
 
         let rows = parsed
             .get("rows")
@@ -2179,31 +2181,6 @@ impl DatasetLoader {
                         .is_some();
 
                 if has_temporal_spans && !text.is_empty() {
-                    fn spans_from_array(
-                        arr: Option<&Vec<serde_json::Value>>,
-                    ) -> Vec<(usize, usize)> {
-                        let mut out = Vec::new();
-                        let Some(arr) = arr else { return out };
-                        for item in arr {
-                            let Some(s) = item.get("start_char").and_then(|v| v.as_u64()) else {
-                                continue;
-                            };
-                            let Some(e) = item.get("end_char").and_then(|v| v.as_u64()) else {
-                                continue;
-                            };
-                            let s = s as usize;
-                            let e = e as usize;
-                            if e > s {
-                                out.push((s, e));
-                            }
-                        }
-                        out
-                    }
-
-                    fn overlaps(token_s: usize, token_e: usize, spans: &[(usize, usize)]) -> bool {
-                        spans.iter().any(|(s, e)| token_s < *e && token_e > *s)
-                    }
-
                     // Tokenize by whitespace, tracking char offsets (Rust `char` count).
                     let mut tokens: Vec<(String, usize, usize)> = Vec::new();
                     let mut cur = String::new();
@@ -2238,20 +2215,20 @@ impl DatasetLoader {
                     }
 
                     let timex_spans =
-                        spans_from_array(row.get("time_expressions").and_then(|v| v.as_array()));
+                        parse::util::spans_from_array(row.get("time_expressions").and_then(|v| v.as_array()));
                     let event_spans =
-                        spans_from_array(row.get("event_expressions").and_then(|v| v.as_array()));
+                        parse::util::spans_from_array(row.get("event_expressions").and_then(|v| v.as_array()));
                     let signal_spans =
-                        spans_from_array(row.get("signal_expressions").and_then(|v| v.as_array()));
+                        parse::util::spans_from_array(row.get("signal_expressions").and_then(|v| v.as_array()));
 
                     let mut annotated_tokens = Vec::with_capacity(tokens.len());
                     let mut prev_label: Option<&'static str> = None;
                     for (tok, s, e) in tokens {
-                        let label = if overlaps(s, e, &timex_spans) {
+                        let label = if parse::util::overlaps(s, e, &timex_spans) {
                             Some("TIMEX")
-                        } else if overlaps(s, e, &event_spans) {
+                        } else if parse::util::overlaps(s, e, &event_spans) {
                             Some("EVENT")
-                        } else if overlaps(s, e, &signal_spans) {
+                        } else if parse::util::overlaps(s, e, &signal_spans) {
                             Some("SIGNAL")
                         } else {
                             None
@@ -2390,59 +2367,6 @@ impl DatasetLoader {
         })
     }
 
-    /// Extract tag names from HF API features metadata.
-    fn extract_tag_names_from_features(&self, parsed: &serde_json::Value) -> Vec<String> {
-        let mut tag_names = Vec::new();
-
-        if let Some(features) = parsed.get("features").and_then(|v| v.as_array()) {
-            for feature in features {
-                let name = feature.get("name").and_then(|v| v.as_str());
-                if name == Some("ner_tags") {
-                    // Look for ClassLabel names
-                    if let Some(names) = feature
-                        .get("type")
-                        .and_then(|t| t.get("feature"))
-                        .and_then(|f| f.get("names"))
-                        .and_then(|n| n.as_array())
-                    {
-                        for name in names {
-                            if let Some(s) = name.as_str() {
-                                tag_names.push(s.to_string());
-                            }
-                        }
-                    }
-                    break;
-                }
-            }
-        }
-
-        tag_names
-    }
-
-    /// Extract class label names for `label` fields in HF API features metadata.
-    fn extract_class_names_from_features(&self, parsed: &serde_json::Value) -> Vec<String> {
-        let mut names = Vec::new();
-        if let Some(features) = parsed.get("features").and_then(|v| v.as_array()) {
-            for feature in features {
-                let name = feature.get("name").and_then(|v| v.as_str());
-                if name == Some("label") {
-                    if let Some(label_names) = feature
-                        .get("type")
-                        .and_then(|t| t.get("names"))
-                        .and_then(|n| n.as_array())
-                    {
-                        for n in label_names {
-                            if let Some(s) = n.as_str() {
-                                names.push(s.to_string());
-                            }
-                        }
-                    }
-                    break;
-                }
-            }
-        }
-        names
-    }
 
     /// Parse TweetNER7 JSON format.
     ///
@@ -5761,43 +5685,6 @@ impl Default for DatasetLoader {
 }
 
 // =============================================================================
-// Helper Functions
-// =============================================================================
-
-/// Parse BIO tag into prefix and type.
-#[cfg(test)]
-fn parse_bio_tag(tag: &str) -> (&str, &str) {
-    if tag == "O" {
-        return ("O", "");
-    }
-
-    // Handle B-PER, I-LOC, etc.
-    if let Some(pos) = tag.find('-') {
-        (&tag[..pos], &tag[pos + 1..])
-    } else {
-        // No prefix, treat as entity type with implicit B
-        ("B", tag)
-    }
-}
-
-/// Map dataset-specific entity types to our EntityType enum.
-///
-/// **Prefer `crate::schema::map_to_canonical()` for new code** - it handles
-/// NORP correctly (as GROUP, not ORG) and preserves GPE/FAC distinctions.
-///
-/// # Known Issues (preserved for backwards compatibility)
-///
-/// - NORP → Organization (WRONG: should be Group)
-/// - GPE/FAC/LOC all → Location (loses semantic distinctions)
-///
-/// See `src/schema.rs` for the corrected mappings.
-#[cfg(test)]
-fn map_entity_type(original: &str) -> EntityType {
-    // Use the new canonical mapper for consistent semantics
-    anno::schema::map_to_canonical(original, None)
-}
-
-// =============================================================================
 // Tests
 // =============================================================================
 
@@ -5921,42 +5808,42 @@ mod tests {
 
     #[test]
     fn test_parse_bio_tag() {
-        assert_eq!(parse_bio_tag("O"), ("O", ""));
-        assert_eq!(parse_bio_tag("B-PER"), ("B", "PER"));
-        assert_eq!(parse_bio_tag("I-LOC"), ("I", "LOC"));
-        assert_eq!(parse_bio_tag("B-ORG"), ("B", "ORG"));
+        assert_eq!(parse::util::parse_bio_tag("O"), ("O", ""));
+        assert_eq!(parse::util::parse_bio_tag("B-PER"), ("B", "PER"));
+        assert_eq!(parse::util::parse_bio_tag("I-LOC"), ("I", "LOC"));
+        assert_eq!(parse::util::parse_bio_tag("B-ORG"), ("B", "ORG"));
     }
 
     #[test]
     fn test_map_entity_type() {
         // Core types
-        assert_eq!(map_entity_type("PER"), EntityType::Person);
-        assert_eq!(map_entity_type("PERSON"), EntityType::Person);
-        assert_eq!(map_entity_type("LOC"), EntityType::Location);
-        assert_eq!(map_entity_type("ORG"), EntityType::Organization);
+        assert_eq!(parse::util::map_entity_type("PER"), EntityType::Person);
+        assert_eq!(parse::util::map_entity_type("PERSON"), EntityType::Person);
+        assert_eq!(parse::util::map_entity_type("LOC"), EntityType::Location);
+        assert_eq!(parse::util::map_entity_type("ORG"), EntityType::Organization);
 
         // GPE now preserves distinction (Custom, not Location)
-        assert!(matches!(map_entity_type("GPE"), EntityType::Custom { .. }));
+        assert!(matches!(parse::util::map_entity_type("GPE"), EntityType::Custom { .. }));
 
         // MISC -> Custom or Other
-        assert!(matches!(map_entity_type("MISC"), EntityType::Custom { .. }));
+        assert!(matches!(parse::util::map_entity_type("MISC"), EntityType::Custom { .. }));
 
         // OntoNotes types -> Custom (preserves semantics)
         assert!(matches!(
-            map_entity_type("PRODUCT"),
+            parse::util::map_entity_type("PRODUCT"),
             EntityType::Custom { .. }
         ));
         assert!(matches!(
-            map_entity_type("EVENT"),
+            parse::util::map_entity_type("EVENT"),
             EntityType::Custom { .. }
         ));
         assert!(matches!(
-            map_entity_type("WORK_OF_ART"),
+            parse::util::map_entity_type("WORK_OF_ART"),
             EntityType::Custom { .. }
         ));
 
         // Numeric types preserved
-        assert_eq!(map_entity_type("CARDINAL"), EntityType::Cardinal);
+        assert_eq!(parse::util::map_entity_type("CARDINAL"), EntityType::Cardinal);
     }
 
     #[test]
