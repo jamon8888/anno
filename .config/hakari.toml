@@ -33,6 +33,25 @@ exact-versions = true
 # cuda/metal are opt-in features (gpu-cuda / gpu-metal Cargo features) that
 # require nvcc or a Metal SDK. Including them in workspace-hack would force
 # every CI runner to have those toolchains installed even for non-GPU builds.
+# kreuzberg is excluded from workspace-hack: anno/anno-eval don't depend on it,
+# so including it forces a kreuzberg compile during cargo-semver-checks (which
+# runs without --locked and may resolve incompatible sub-crate versions).
+[[traversal-rules]]
+name = "kreuzberg"
+type = "skip"
+
+[[traversal-rules]]
+name = "kreuzberg-pdfium-render"
+type = "skip"
+
+[[traversal-rules]]
+name = "kreuzberg-tesseract"
+type = "skip"
+
+[[traversal-rules]]
+name = "kreuzberg-paddle-ocr"
+type = "skip"
+
 [[traversal-rules]]
 name = "candle-core"
 type = "default-only"
