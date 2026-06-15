@@ -1,2 +1,3 @@
 //! Dataset content parsers, grouped by task family.
+pub(crate) mod ner;
 pub(crate) mod util;

@@ -1786,7 +1786,7 @@ impl DatasetLoader {
     }
 
     /// Get temporal metadata for a dataset if available.
-    fn get_temporal_metadata(id: DatasetId) -> Option<TemporalMetadata> {
+    pub(crate) fn get_temporal_metadata(id: DatasetId) -> Option<TemporalMetadata> {
         match id {
             DatasetId::TweetNER7 => {
                 // TweetNER7 has temporal entity recognition - use dataset creation date as cutoff
@@ -1846,22 +1846,22 @@ impl DatasetLoader {
         })?;
 
         let result = match plan {
-            DatasetParsePlan::Conll => self.parse_conll(content, id),
-            DatasetParsePlan::JsonlNer => self.parse_jsonl_ner(content, id),
-            DatasetParsePlan::WikiannJson => self.parse_wikiann_json(content, id),
-            DatasetParsePlan::TweetNer7 => self.parse_tweetner7(content, id),
+            DatasetParsePlan::Conll => parse::ner::parse_conll(content, id),
+            DatasetParsePlan::JsonlNer => parse::ner::parse_jsonl_ner(content, id),
+            DatasetParsePlan::WikiannJson => parse::ner::parse_wikiann_json(content, id),
+            DatasetParsePlan::TweetNer7 => parse::ner::parse_tweetner7(content, id),
             DatasetParsePlan::DocredJson => self.parse_docred(content, id),
             DatasetParsePlan::GoogleReCorpus => self.parse_google_re_corpus(content, id),
             DatasetParsePlan::ChisiecJson => self.parse_chisiec(content, id),
             DatasetParsePlan::CadecHybrid => {
                 if self.is_hf_api_response(content) {
-                    self.parse_cadec_hf_api(content, id)
+                    parse::ner::parse_cadec_hf_api(content, id)
                 } else {
-                    self.parse_cadec_jsonl(content, id)
+                    parse::ner::parse_cadec_jsonl(content, id)
                 }
             }
-            DatasetParsePlan::Bc5cdr => self.parse_bc5cdr(content, id),
-            DatasetParsePlan::NcbiDisease => self.parse_ncbi_disease(content, id),
+            DatasetParsePlan::Bc5cdr => parse::ner::parse_bc5cdr(content, id),
+            DatasetParsePlan::NcbiDisease => parse::ner::parse_ncbi_disease(content, id),
             DatasetParsePlan::GapTsv => self.parse_gap(content, id),
             DatasetParsePlan::PrecoJsonl => self.parse_preco_jsonl(content, id),
             DatasetParsePlan::Litbank => self.parse_litbank(content, id),
@@ -1869,7 +1869,7 @@ impl DatasetLoader {
             DatasetParsePlan::AfriSenti => self.parse_afrisenti(content, id),
             DatasetParsePlan::AfriQa => self.parse_afriqa(content, id),
             DatasetParsePlan::MasakhaNews => self.parse_masakhanews(content, id),
-            DatasetParsePlan::Conllu => self.parse_conllu(content, id),
+            DatasetParsePlan::Conllu => parse::ner::parse_conllu(content, id),
             DatasetParsePlan::AgNews => self.parse_agnews(content, id),
             DatasetParsePlan::Dbpedia14 => self.parse_dbpedia14(content, id),
             DatasetParsePlan::YahooAnswers => self.parse_yahoo_answers(content, id),
@@ -1879,9 +1879,9 @@ impl DatasetLoader {
             DatasetParsePlan::MavenArg => self.parse_maven_arg(content, id),
             DatasetParsePlan::Casie => self.parse_casie(content, id),
             DatasetParsePlan::Rams => self.parse_rams(content, id),
-            DatasetParsePlan::HfApiResponse => self.parse_hf_api_response(content, id),
-            DatasetParsePlan::TsvNer => self.parse_tsv_ner(content, id),
-            DatasetParsePlan::CsvNer => self.parse_csv_ner(content, id),
+            DatasetParsePlan::HfApiResponse => parse::ner::parse_hf_api_response(content, id),
+            DatasetParsePlan::TsvNer => parse::ner::parse_tsv_ner(content, id),
+            DatasetParsePlan::CsvNer => parse::ner::parse_csv_ner(content, id),
         }?;
 
         // Validate parsed dataset is not empty
@@ -1906,552 +1906,6 @@ impl DatasetLoader {
                 && trimmed.contains("\"rows\":[")
                 && trimmed.contains("\"features\":["))
     }
-
-    /// Parse CoNLL/BIO format content.
-    fn parse_conll(&self, content: &str, id: DatasetId) -> Result<LoadedDataset> {
-        let mut sentences = Vec::new();
-        let mut current_tokens = Vec::new();
-
-        // Detect format: MIT datasets use TAB separator with TAG first
-        let is_mit_format = matches!(id, DatasetId::MitMovie | DatasetId::MitRestaurant);
-
-        for line in content.lines() {
-            let line = line.trim();
-
-            // Empty line = sentence boundary
-            if line.is_empty() {
-                if !current_tokens.is_empty() {
-                    sentences.push(AnnotatedSentence {
-                        tokens: std::mem::take(&mut current_tokens),
-                        source_dataset: id,
-                    });
-                }
-                continue;
-            }
-
-            // Skip document markers
-            if line.starts_with("-DOCSTART-") {
-                continue;
-            }
-
-            // Parse based on format
-            let (text, ner_tag) = if is_mit_format {
-                // MIT format: TAG\tword (tab-separated)
-                let parts: Vec<&str> = line.split('\t').collect();
-                if parts.len() >= 2 {
-                    (parts[1].to_string(), parts[0].to_string())
-                } else {
-                    continue;
-                }
-            } else {
-                // Standard CoNLL/BIO format (space-separated)
-                let parts: Vec<&str> = line.split_whitespace().collect();
-                if parts.is_empty() {
-                    continue;
-                }
-
-                if parts.len() >= 4 {
-                    // CoNLL-2003 format: word POS chunk NER
-                    (parts[0].to_string(), parts[3].to_string())
-                } else if parts.len() >= 2 {
-                    // BIO format: word NER
-                    (parts[0].to_string(), parts[parts.len() - 1].to_string())
-                } else {
-                    // Single column - assume O tag
-                    (parts[0].to_string(), "O".to_string())
-                }
-            };
-
-            // Normalize BIO tags: some corpora (e.g., WikiGold) use `I-XXX` even at the
-            // beginning of an entity. Treat such `I-` tags as `B-` when they don't
-            // continue an entity of the same type.
-            let ner_tag = if let Some(label) = ner_tag.strip_prefix("I-") {
-                let continues_same = current_tokens
-                    .last()
-                    .map(|t| t.ner_tag.as_str())
-                    .is_some_and(|prev| {
-                        (prev.starts_with("B-") || prev.starts_with("I-"))
-                            && prev.get(2..).is_some_and(|prev_label| prev_label == label)
-                    });
-
-                if continues_same {
-                    ner_tag
-                } else {
-                    format!("B-{}", label)
-                }
-            } else {
-                ner_tag
-            };
-
-            current_tokens.push(AnnotatedToken { text, ner_tag });
-        }
-
-        // Don't forget last sentence
-        if !current_tokens.is_empty() {
-            sentences.push(AnnotatedSentence {
-                tokens: current_tokens,
-                source_dataset: id,
-            });
-        }
-
-        if sentences.is_empty() {
-            return Err(Error::InvalidInput(format!(
-                "CoNLL file for {:?} contains no valid sentences",
-                id
-            )));
-        }
-
-        let now = chrono::Utc::now().to_rfc3339();
-
-        Ok(LoadedDataset {
-            id,
-            sentences,
-            loaded_at: now,
-            source_url: id.download_url().to_string(),
-            data_source: DataSource::LocalCache,
-            temporal_metadata: Self::get_temporal_metadata(id),
-            metadata: id.default_metadata(),
-        })
-    }
-
-    /// Parse JSONL NER format (HuggingFace style, e.g., MultiNERD).
-    ///
-    /// Expected format: `{"tokens": ["word1", "word2"], "ner_tags": [0, 1, 0]}`
-    fn parse_jsonl_ner(&self, content: &str, id: DatasetId) -> Result<LoadedDataset> {
-        let mut sentences = Vec::new();
-
-        // MultiNERD tag mapping (index -> label)
-        let tag_labels = [
-            "O", "B-PER", "I-PER", "B-ORG", "I-ORG", "B-LOC", "I-LOC", "B-ANIM", "I-ANIM", "B-BIO",
-            "I-BIO", "B-CEL", "I-CEL", "B-DIS", "I-DIS", "B-EVE", "I-EVE", "B-FOOD", "I-FOOD",
-            "B-INST", "I-INST", "B-MEDIA", "I-MEDIA", "B-MYTH", "I-MYTH", "B-PLANT", "I-PLANT",
-            "B-TIME", "I-TIME", "B-VEHI", "I-VEHI",
-        ];
-
-        for line in content.lines() {
-            let line = line.trim();
-            if line.is_empty() {
-                continue;
-            }
-
-            // Parse JSON line
-            let parsed: serde_json::Value = match serde_json::from_str(line) {
-                Ok(v) => v,
-                Err(_) => continue, // Skip malformed lines
-            };
-
-            let tokens = match parsed.get("tokens").and_then(|v| v.as_array()) {
-                Some(t) => t,
-                None => continue,
-            };
-
-            let ner_tags = match parsed.get("ner_tags").and_then(|v| v.as_array()) {
-                Some(t) => t,
-                None => continue,
-            };
-
-            if tokens.len() != ner_tags.len() {
-                continue; // Skip malformed entries
-            }
-
-            let mut annotated_tokens = Vec::new();
-            for (token, tag) in tokens.iter().zip(ner_tags.iter()) {
-                let text = token.as_str().unwrap_or("").to_string();
-                let tag_idx = tag.as_u64().unwrap_or(0) as usize;
-                let ner_tag = tag_labels.get(tag_idx).unwrap_or(&"O").to_string();
-                annotated_tokens.push(AnnotatedToken { text, ner_tag });
-            }
-
-            if !annotated_tokens.is_empty() {
-                sentences.push(AnnotatedSentence {
-                    tokens: annotated_tokens,
-                    source_dataset: id,
-                });
-            }
-        }
-
-        if sentences.is_empty() {
-            return Err(Error::InvalidInput(format!(
-                "JSONL NER file for {:?} contains no valid sentences",
-                id
-            )));
-        }
-
-        let now = chrono::Utc::now().to_rfc3339();
-        Ok(LoadedDataset {
-            id,
-            sentences,
-            loaded_at: now,
-            source_url: id.download_url().to_string(),
-            data_source: DataSource::LocalCache,
-            temporal_metadata: Self::get_temporal_metadata(id),
-            metadata: id.default_metadata(),
-        })
-    }
-
-    /// Parse HuggingFace datasets-server API response.
-    ///
-    /// Expected format:
-    /// ```json
-    /// {
-    ///   "features": [{"name": "tokens", ...}, {"name": "ner_tags", ...}],
-    ///   "rows": [{"row_idx": 0, "row": {"tokens": [...], "ner_tags": [...]}}, ...]
-    /// }
-    /// ```
-    fn parse_hf_api_response(&self, content: &str, id: DatasetId) -> Result<LoadedDataset> {
-        let parsed: serde_json::Value = serde_json::from_str(content)
-            .map_err(|e| Error::InvalidInput(format!("Failed to parse HF API response: {}", e)))?;
-
-        let mut sentences = Vec::new();
-
-        // Extract tag names from features if available (for integer tag mapping)
-        let tag_names = parse::util::extract_tag_names_from_features(&parsed);
-        let class_names = parse::util::extract_class_names_from_features(&parsed);
-
-        let rows = parsed
-            .get("rows")
-            .and_then(|v| v.as_array())
-            .ok_or_else(|| Error::InvalidInput("No 'rows' array in HF API response".to_string()))?;
-
-        for row_obj in rows {
-            let row = match row_obj.get("row") {
-                Some(r) => r,
-                None => continue,
-            };
-
-            // Primary path: token-level NER rows (`tokens` + `ner_tags`)
-            if let (Some(tokens), Some(ner_tags)) = (
-                row.get("tokens").and_then(|v| v.as_array()),
-                row.get("ner_tags").and_then(|v| v.as_array()),
-            ) {
-                if tokens.len() != ner_tags.len() {
-                    continue;
-                }
-
-                let mut annotated_tokens = Vec::new();
-                for (token, tag) in tokens.iter().zip(ner_tags.iter()) {
-                    let text = token.as_str().unwrap_or("").to_string();
-
-                    // Handle both integer and string tags
-                    let ner_tag = if let Some(tag_idx) = tag.as_u64() {
-                        // Integer tag - map using feature names or default
-                        tag_names
-                            .get(tag_idx as usize)
-                            .cloned()
-                            .unwrap_or_else(|| format!("TAG_{}", tag_idx))
-                    } else if let Some(tag_str) = tag.as_str() {
-                        // String tag - use directly
-                        tag_str.to_string()
-                    } else {
-                        "O".to_string()
-                    };
-
-                    annotated_tokens.push(AnnotatedToken { text, ner_tag });
-                }
-
-                if !annotated_tokens.is_empty() {
-                    sentences.push(AnnotatedSentence {
-                        tokens: annotated_tokens,
-                        source_dataset: id,
-                    });
-                }
-                continue;
-            }
-
-            // Fallback: temporal standoff rows (`text` + `*_expressions` with char offsets).
-            //
-            // Some HF datasets expose TIMEX/EVENT spans as character ranges in lists like:
-            // - `time_expressions`: [{start_char, end_char, ...}, ...]
-            // - `event_expressions`: ...
-            // - `signal_expressions`: ...
-            //
-            // We tokenize `text` by whitespace and assign BIO tags based on overlap with any span.
-            if let Some(text) = row.get("text").and_then(|v| v.as_str()).map(str::trim) {
-                let has_temporal_spans = row
-                    .get("time_expressions")
-                    .and_then(|v| v.as_array())
-                    .is_some()
-                    || row
-                        .get("event_expressions")
-                        .and_then(|v| v.as_array())
-                        .is_some()
-                    || row
-                        .get("signal_expressions")
-                        .and_then(|v| v.as_array())
-                        .is_some();
-
-                if has_temporal_spans && !text.is_empty() {
-                    // Tokenize by whitespace, tracking char offsets (Rust `char` count).
-                    let mut tokens: Vec<(String, usize, usize)> = Vec::new();
-                    let mut cur = String::new();
-                    let mut cur_start: Option<usize> = None;
-
-                    for (i, ch) in text.chars().enumerate() {
-                        if ch.is_whitespace() {
-                            if let Some(s) = cur_start.take() {
-                                let e = i;
-                                if !cur.is_empty() {
-                                    tokens.push((std::mem::take(&mut cur), s, e));
-                                } else {
-                                    cur.clear();
-                                }
-                            }
-                        } else {
-                            if cur_start.is_none() {
-                                cur_start = Some(i);
-                            }
-                            cur.push(ch);
-                        }
-                    }
-                    if let Some(s) = cur_start.take() {
-                        let e = text.chars().count();
-                        if !cur.is_empty() {
-                            tokens.push((cur, s, e));
-                        }
-                    }
-
-                    if tokens.is_empty() {
-                        continue;
-                    }
-
-                    let timex_spans =
-                        parse::util::spans_from_array(row.get("time_expressions").and_then(|v| v.as_array()));
-                    let event_spans =
-                        parse::util::spans_from_array(row.get("event_expressions").and_then(|v| v.as_array()));
-                    let signal_spans =
-                        parse::util::spans_from_array(row.get("signal_expressions").and_then(|v| v.as_array()));
-
-                    let mut annotated_tokens = Vec::with_capacity(tokens.len());
-                    let mut prev_label: Option<&'static str> = None;
-                    for (tok, s, e) in tokens {
-                        let label = if parse::util::overlaps(s, e, &timex_spans) {
-                            Some("TIMEX")
-                        } else if parse::util::overlaps(s, e, &event_spans) {
-                            Some("EVENT")
-                        } else if parse::util::overlaps(s, e, &signal_spans) {
-                            Some("SIGNAL")
-                        } else {
-                            None
-                        };
-
-                        let ner_tag = match (label, prev_label) {
-                            (None, _) => {
-                                prev_label = None;
-                                "O".to_string()
-                            }
-                            (Some(l), Some(p)) if l == p => format!("I-{}", l),
-                            (Some(l), _) => {
-                                prev_label = Some(l);
-                                format!("B-{}", l)
-                            }
-                        };
-
-                        annotated_tokens.push(AnnotatedToken { text: tok, ner_tag });
-                    }
-
-                    sentences.push(AnnotatedSentence {
-                        tokens: annotated_tokens,
-                        source_dataset: id,
-                    });
-                    continue;
-                }
-            }
-
-            // Fallback: DISRPT-style CoNLL-U rows for discourse segmentation.
-            //
-            // DISRPT `*.conllu` configs are exported via HF datasets-server as arrays:
-            // - `form`: token surface strings
-            // - `misc`: per-token features, including `Seg=B-seg` (segment boundary) or `Seg=O`
-            //
-            // We convert boundaries into BIO tags of a single entity type (`SEG`), treating each
-            // segment (EDU) as an entity span.
-            if let (Some(forms), Some(misc)) = (
-                row.get("form").and_then(|v| v.as_array()),
-                row.get("misc").and_then(|v| v.as_array()),
-            ) {
-                if !forms.is_empty() && forms.len() == misc.len() {
-                    let mut annotated_tokens = Vec::with_capacity(forms.len());
-                    let mut in_seg = false;
-                    for (i, (f, m)) in forms.iter().zip(misc.iter()).enumerate() {
-                        let tok = f.as_str().unwrap_or("").to_string();
-                        let misc_s = m.as_str().unwrap_or("");
-                        let start = misc_s.contains("Seg=B-seg");
-                        let ner_tag = if i == 0 || start {
-                            in_seg = true;
-                            "B-SEG".to_string()
-                        } else if in_seg {
-                            "I-SEG".to_string()
-                        } else {
-                            "O".to_string()
-                        };
-                        annotated_tokens.push(AnnotatedToken { text: tok, ner_tag });
-                    }
-
-                    sentences.push(AnnotatedSentence {
-                        tokens: annotated_tokens,
-                        source_dataset: id,
-                    });
-                    continue;
-                }
-            }
-
-            // Fallback: classification-ish rows (`<text>` + `label`).
-            //
-            // We encode the gold label as `B-<LABEL>` on a single token, matching the loader's
-            // convention for other classification datasets.
-            let text = if let Some(s) = row.get("text").and_then(|v| v.as_str()) {
-                s.trim().to_string()
-            } else if let (Some(a), Some(b)) = (
-                row.get("unit1_txt").and_then(|v| v.as_str()),
-                row.get("unit2_txt").and_then(|v| v.as_str()),
-            ) {
-                format!("{} [SEP] {}", a.trim(), b.trim())
-            } else if let (Some(a), Some(b)) = (
-                row.get("sentence1").and_then(|v| v.as_str()),
-                row.get("sentence2").and_then(|v| v.as_str()),
-            ) {
-                format!("{} [SEP] {}", a.trim(), b.trim())
-            } else if let (Some(a), Some(b)) = (
-                row.get("premise").and_then(|v| v.as_str()),
-                row.get("hypothesis").and_then(|v| v.as_str()),
-            ) {
-                format!("{} [SEP] {}", a.trim(), b.trim())
-            } else {
-                continue;
-            };
-            if text.trim().is_empty() {
-                continue;
-            }
-
-            let label_value = row.get("label").or_else(|| row.get("labels"));
-            let label = match label_value {
-                Some(v) if v.is_string() => v.as_str().unwrap_or("").to_string(),
-                Some(v) if v.is_number() => {
-                    let idx = v.as_u64().unwrap_or(0) as usize;
-                    class_names
-                        .get(idx)
-                        .cloned()
-                        .unwrap_or_else(|| format!("LABEL_{}", idx))
-                }
-                _ => "label".to_string(),
-            };
-            if label.trim().is_empty() {
-                continue;
-            }
-
-            sentences.push(AnnotatedSentence {
-                tokens: vec![AnnotatedToken {
-                    text,
-                    ner_tag: format!("B-{}", label),
-                }],
-                source_dataset: id,
-            });
-        }
-
-        if sentences.is_empty() {
-            return Err(Error::InvalidInput(format!(
-                "HF API response for {:?} contains no valid sentences",
-                id
-            )));
-        }
-
-        let now = chrono::Utc::now().to_rfc3339();
-        Ok(LoadedDataset {
-            id,
-            sentences,
-            loaded_at: now,
-            source_url: id.download_url().to_string(),
-            data_source: DataSource::LocalCache,
-            temporal_metadata: Self::get_temporal_metadata(id),
-            metadata: id.default_metadata(),
-        })
-    }
-
-
-    /// Parse TweetNER7 JSON format.
-    ///
-    /// TweetNER7 is JSONL with each line: {"tokens": [...], "tags": [...]}
-    /// Tag mapping from label.json (tag -> id format, we need id -> tag):
-    fn parse_tweetner7(&self, content: &str, id: DatasetId) -> Result<LoadedDataset> {
-        // TweetNER7 tag mapping from label.json (index order!)
-        // {"B-corporation": 0, "B-creative_work": 1, "B-event": 2, "B-group": 3,
-        //  "B-location": 4, "B-person": 5, "B-product": 6, "I-corporation": 7,
-        //  "I-creative_work": 8, "I-event": 9, "I-group": 10, "I-location": 11,
-        //  "I-person": 12, "I-product": 13, "O": 14}
-        let tag_labels = [
-            "B-corporation",   // 0
-            "B-creative_work", // 1
-            "B-event",         // 2
-            "B-group",         // 3
-            "B-location",      // 4
-            "B-person",        // 5
-            "B-product",       // 6
-            "I-corporation",   // 7
-            "I-creative_work", // 8
-            "I-event",         // 9
-            "I-group",         // 10
-            "I-location",      // 11
-            "I-person",        // 12
-            "I-product",       // 13
-            "O",               // 14
-        ];
-
-        let mut sentences = Vec::new();
-
-        // Parse as JSONL (one JSON object per line)
-        for line in content.lines() {
-            let line = line.trim();
-            if line.is_empty() {
-                continue;
-            }
-
-            let parsed: serde_json::Value = match serde_json::from_str(line) {
-                Ok(v) => v,
-                Err(_) => continue, // Skip malformed lines
-            };
-
-            let tokens = match parsed.get("tokens").and_then(|v| v.as_array()) {
-                Some(t) => t,
-                None => continue,
-            };
-
-            let tags = match parsed.get("tags").and_then(|v| v.as_array()) {
-                Some(t) => t,
-                None => continue,
-            };
-
-            if tokens.len() != tags.len() {
-                continue;
-            }
-
-            let mut annotated_tokens = Vec::new();
-            for (token, tag) in tokens.iter().zip(tags.iter()) {
-                let text = token.as_str().unwrap_or("").to_string();
-                let tag_idx = tag.as_u64().unwrap_or(0) as usize;
-                let ner_tag = tag_labels.get(tag_idx).unwrap_or(&"O").to_string();
-                annotated_tokens.push(AnnotatedToken { text, ner_tag });
-            }
-
-            if !annotated_tokens.is_empty() {
-                sentences.push(AnnotatedSentence {
-                    tokens: annotated_tokens,
-                    source_dataset: id,
-                });
-            }
-        }
-
-        let now = chrono::Utc::now().to_rfc3339();
-        Ok(LoadedDataset {
-            id,
-            sentences,
-            loaded_at: now,
-            source_url: id.download_url().to_string(),
-            data_source: DataSource::LocalCache,
-            temporal_metadata: Self::get_temporal_metadata(id),
-            metadata: id.default_metadata(),
-        })
-    }
-
     /// Parse HIPE-2022 style TSV NER format.
     ///
     /// Expected format:
@@ -2466,266 +1920,16 @@ impl DatasetLoader {
     /// - First line is header (starts with TOKEN)
     /// - Lines starting with `#` are metadata comments
     /// - Data lines are tab-separated with token in first column
-    /// - NE-COARSE-LIT (column 2) contains BIO-tagged NER labels
-    /// - `_` means no annotation
-    fn parse_tsv_ner(&self, content: &str, id: DatasetId) -> Result<LoadedDataset> {
-        let mut sentences = Vec::new();
-        let mut current_tokens = Vec::new();
-
-        for line in content.lines() {
-            let line = line.trim();
-
-            // Skip empty lines - they indicate sentence boundaries
-            if line.is_empty() {
-                if !current_tokens.is_empty() {
-                    sentences.push(AnnotatedSentence {
-                        tokens: std::mem::take(&mut current_tokens),
-                        source_dataset: id,
-                    });
-                }
-                continue;
-            }
-
-            // Skip header line
-            if line.starts_with("TOKEN\t") || line.starts_with("TOKEN ") {
-                continue;
-            }
-
-            // Skip metadata comments
-            if line.starts_with('#') {
-                // Document boundary comment can also serve as sentence boundary
-                if line.contains("document_id") && !current_tokens.is_empty() {
-                    sentences.push(AnnotatedSentence {
-                        tokens: std::mem::take(&mut current_tokens),
-                        source_dataset: id,
-                    });
-                }
-                continue;
-            }
-
-            // Parse data line
-            let parts: Vec<&str> = line.split('\t').collect();
-            if parts.len() < 2 {
-                continue; // Malformed line
-            }
-
-            let token_text = parts[0].to_string();
-            let ner_label = parts.get(1).unwrap_or(&"O");
-
-            // Convert underscore to O (no annotation)
-            let ner_tag = if *ner_label == "_" || ner_label.is_empty() {
-                "O".to_string()
-            } else {
-                ner_label.to_string()
-            };
-
-            current_tokens.push(AnnotatedToken {
-                text: token_text,
-                ner_tag,
-            });
-        }
-
-        // Don't forget the last sentence
-        if !current_tokens.is_empty() {
-            sentences.push(AnnotatedSentence {
-                tokens: current_tokens,
-                source_dataset: id,
-            });
-        }
-
-        if sentences.is_empty() {
-            return Err(Error::InvalidInput(format!(
-                "TSV NER file for {:?} contains no valid sentences",
-                id
-            )));
-        }
-
-        let now = chrono::Utc::now().to_rfc3339();
-        Ok(LoadedDataset {
-            id,
-            sentences,
-            loaded_at: now,
-            source_url: id.download_url().to_string(),
-            data_source: DataSource::LocalCache,
-            temporal_metadata: Self::get_temporal_metadata(id),
-            metadata: id.default_metadata(),
-        })
-    }
-
-    /// Parse CSV NER format (E-NER/EDGAR-NER style).
+    /// - NE-COARSE-LIT (column 2) contains BIO-tagged NER labels    /// Parse CSV NER format (E-NER/EDGAR-NER style).
     ///
     /// Expected format: `Token,Tag` (comma-separated)
     /// Uses `-DOCSTART-` for document boundaries and empty lines for sentence boundaries.
     /// Tags use BIO scheme (e.g., O, B-PERSON, I-BUSINESS).
     ///
     /// # Errors
+    ///    /// Parse WikiANN-style JSON array format.
     ///
-    /// Returns error if CSV is malformed or has no valid sentences.
-    fn parse_csv_ner(&self, content: &str, id: DatasetId) -> Result<LoadedDataset> {
-        let mut sentences = Vec::new();
-        let mut current_tokens = Vec::new();
-
-        for line in content.lines() {
-            let line = line.trim();
-
-            // Empty lines indicate sentence boundaries
-            if line.is_empty() {
-                if !current_tokens.is_empty() {
-                    sentences.push(AnnotatedSentence {
-                        tokens: std::mem::take(&mut current_tokens),
-                        source_dataset: id,
-                    });
-                }
-                continue;
-            }
-
-            // Handle -DOCSTART- markers (document boundary, also a sentence boundary)
-            if line.starts_with("-DOCSTART-") {
-                if !current_tokens.is_empty() {
-                    sentences.push(AnnotatedSentence {
-                        tokens: std::mem::take(&mut current_tokens),
-                        source_dataset: id,
-                    });
-                }
-                continue;
-            }
-
-            // Skip header line if present
-            if line.eq_ignore_ascii_case("token,tag")
-                || line.eq_ignore_ascii_case("text,label")
-                || line.eq_ignore_ascii_case("word,ner")
-            {
-                continue;
-            }
-
-            // Parse comma-separated line
-            // Handle cases where the token itself might be a comma: ",O" means token is comma
-            let (token_text, ner_tag) = if let Some(rest) = line.strip_prefix(',') {
-                // Token is empty or the comma itself
-                if let Some(idx) = rest.find(',') {
-                    // Format: ,tag (empty token) or ,,tag (comma token)
-                    if idx == 0 {
-                        // ",,tag" -> token is comma, tag follows
-                        (",".to_string(), rest[1..].to_string())
-                    } else {
-                        // ",tag" -> empty token
-                        (String::new(), rest[..idx].to_string())
-                    }
-                } else {
-                    // ",tag" with no more commas
-                    (String::new(), rest.to_string())
-                }
-            } else if let Some(idx) = line.rfind(',') {
-                // Normal case: Token,Tag
-                let token = line[..idx].to_string();
-                let tag = line[idx + 1..].to_string();
-                (token, tag)
-            } else {
-                // Malformed line, skip
-                continue;
-            };
-
-            // Skip if we got empty results
-            if token_text.is_empty() && ner_tag.is_empty() {
-                continue;
-            }
-
-            // Convert empty tag to O
-            let ner_tag = if ner_tag.is_empty() || ner_tag == "_" {
-                "O".to_string()
-            } else {
-                ner_tag
-            };
-
-            current_tokens.push(AnnotatedToken {
-                text: token_text,
-                ner_tag,
-            });
-        }
-
-        // Don't forget the last sentence
-        if !current_tokens.is_empty() {
-            sentences.push(AnnotatedSentence {
-                tokens: current_tokens,
-                source_dataset: id,
-            });
-        }
-
-        if sentences.is_empty() {
-            return Err(Error::InvalidInput(format!(
-                "CSV NER file for {:?} contains no valid sentences",
-                id
-            )));
-        }
-
-        let now = chrono::Utc::now().to_rfc3339();
-        Ok(LoadedDataset {
-            id,
-            sentences,
-            loaded_at: now,
-            source_url: id.download_url().to_string(),
-            data_source: DataSource::LocalCache,
-            temporal_metadata: Self::get_temporal_metadata(id),
-            metadata: id.default_metadata(),
-        })
-    }
-
-    /// Parse WikiANN-style JSON array format.
-    ///
-    /// Expected format: `[{"text": "...", "tokens": ["word1", "word2"], "ner_tags": ["O", "B-LOC"]}, ...]`
-    /// Used by UNER and MSNER datasets converted via download_hf_datasets.py.
-    fn parse_wikiann_json(&self, content: &str, id: DatasetId) -> Result<LoadedDataset> {
-        let parsed: serde_json::Value = serde_json::from_str(content)
-            .map_err(|e| Error::InvalidInput(format!("Failed to parse JSON: {}", e)))?;
-
-        let mut sentences = Vec::new();
-
-        // Handle JSON array format
-        if let Some(items) = parsed.as_array() {
-            for item in items {
-                let tokens = match item.get("tokens").and_then(|v| v.as_array()) {
-                    Some(t) => t,
-                    None => continue,
-                };
-
-                let ner_tags = match item.get("ner_tags").and_then(|v| v.as_array()) {
-                    Some(t) => t,
-                    None => continue,
-                };
-
-                if tokens.len() != ner_tags.len() {
-                    continue;
-                }
-
-                let mut annotated_tokens = Vec::new();
-                for (token, tag) in tokens.iter().zip(ner_tags.iter()) {
-                    let text = token.as_str().unwrap_or("").to_string();
-                    let ner_tag = tag.as_str().unwrap_or("O").to_string();
-                    annotated_tokens.push(AnnotatedToken { text, ner_tag });
-                }
-
-                if !annotated_tokens.is_empty() {
-                    sentences.push(AnnotatedSentence {
-                        tokens: annotated_tokens,
-                        source_dataset: id,
-                    });
-                }
-            }
-        }
-
-        let now = chrono::Utc::now().to_rfc3339();
-        Ok(LoadedDataset {
-            id,
-            sentences,
-            loaded_at: now,
-            source_url: id.download_url().to_string(),
-            data_source: DataSource::LocalCache,
-            temporal_metadata: Self::get_temporal_metadata(id),
-            metadata: id.default_metadata(),
-        })
-    }
-
-    /// Parse DocRED document-level relation extraction JSON format.
+    /// Expected format: `[{"text": "...", "tokens": ["word1", "word2"], "ner_tags": ["O", "B-LOC"]}, ...]`    /// Parse DocRED document-level relation extraction JSON format.
     ///
     /// DocRED is primarily for relation extraction but includes NER annotations.
     /// Parse DocRED/CrossRE JSON format for relation extraction.
@@ -2890,452 +2094,23 @@ impl DatasetLoader {
     /// Parse CADEC from HuggingFace datasets-server API.
     ///
     /// CADEC HF API format: {"text": "...", "ade": "...", "term_PT": "..."}
-    /// Each row is a text-ADE pair (one sentence per ADE mention).
-    /// The `ade` field contains the adverse drug event mention within `text`.
-    fn parse_cadec_hf_api(&self, content: &str, id: DatasetId) -> Result<LoadedDataset> {
-        let parsed: serde_json::Value = serde_json::from_str(content).map_err(|e| {
-            Error::InvalidInput(format!("Failed to parse CADEC HF API response: {}", e))
-        })?;
-
-        let mut sentences = Vec::new();
-
-        let rows = parsed
-            .get("rows")
-            .and_then(|v| v.as_array())
-            .ok_or_else(|| {
-                Error::InvalidInput("No 'rows' array in CADEC HF API response".to_string())
-            })?;
-
-        for row_obj in rows {
-            let row = match row_obj.get("row") {
-                Some(r) => r,
-                None => continue,
-            };
-
-            let text = match row.get("text").and_then(|v| v.as_str()) {
-                Some(t) => t,
-                None => continue,
-            };
-
-            let ade_text = match row.get("ade").and_then(|v| v.as_str()) {
-                Some(a) => a,
-                None => continue,
-            };
-
-            // Find ADE span in text.
-            //
-            // IMPORTANT: anno uses **character offsets** globally, but this parser assigns BIO tags
-            // token-by-token and uses byte spans internally. We must preserve indices and avoid
-            // Unicode casefolding (which can change string length).
-            //
-            // Strategy:
-            // 1) Try exact match (fast, preserves byte indices).
-            // 2) Fall back to ASCII case-insensitive match (ADE strings are ASCII-centric).
-            let ade_start_byte = text.find(ade_text).or_else(|| {
-                let needle_len = ade_text.len();
-                if needle_len == 0 {
-                    return None;
-                }
-                for (b, _) in text.char_indices() {
-                    if let Some(hay) = text.get(b..b + needle_len) {
-                        if hay.eq_ignore_ascii_case(ade_text) {
-                            return Some(b);
-                        }
-                    }
-                }
-                None
-            });
-            let Some(ade_start_byte) = ade_start_byte else {
-                continue; // ADE not found in text
-            };
-            let ade_end_byte = ade_start_byte + ade_text.len();
-
-            // Tokenize text preserving byte offsets.
-            let mut tokens: Vec<AnnotatedToken> = Vec::new();
-            let mut byte_idx = 0;
-            let words: Vec<&str> = text.split_whitespace().collect();
-
-            for word in words {
-                let word_start =
-                    text.get(byte_idx..).and_then(|s| s.find(word)).unwrap_or(0) + byte_idx;
-                let word_end = word_start + word.len();
-
-                // Check if this word overlaps with ADE span (byte spans)
-                let ner_tag = if word_start >= ade_start_byte && word_end <= ade_end_byte {
-                    // Check if this is the first word of the ADE
-                    if word_start == ade_start_byte
-                        || tokens.is_empty()
-                        || !tokens
-                            .last()
-                            .expect("tokens.is_empty() checked above")
-                            .ner_tag
-                            .starts_with("I-")
-                    {
-                        "B-adverse_drug_event".to_string()
-                    } else {
-                        "I-adverse_drug_event".to_string()
-                    }
-                } else {
-                    "O".to_string()
-                };
-
-                tokens.push(AnnotatedToken {
-                    text: word.to_string(),
-                    ner_tag,
-                });
-
-                // Update byte position to after this word (including trailing space)
-                byte_idx = word_end;
-                if byte_idx < text.len() && text.as_bytes().get(byte_idx) == Some(&b' ') {
-                    byte_idx += 1;
-                }
-            }
-
-            if !tokens.is_empty() {
-                sentences.push(AnnotatedSentence {
-                    tokens,
-                    source_dataset: id,
-                });
-            }
-        }
-
-        let now = chrono::Utc::now().to_rfc3339();
-        Ok(LoadedDataset {
-            id,
-            sentences,
-            loaded_at: now,
-            source_url: id.download_url().to_string(),
-            data_source: DataSource::LocalCache,
-            temporal_metadata: Self::get_temporal_metadata(id),
-            metadata: id.default_metadata(),
-        })
-    }
-
-    /// Parse CADEC JSONL format with support for discontinuous entities.
+    /// Each row is a text-ADE pair (one sentence per ADE mention).    /// Parse CADEC JSONL format with support for discontinuous entities.
     ///
     /// CADEC format can include:
     /// - Standard BIO tags: `{"tokens": [...], "ner_tags": [...]}`
     /// - Entity spans: `{"tokens": [...], "entities": [{"text": "...", "label": "...", "start": 0, "end": 10}]}`
     /// - Discontinuous entities: `{"entities": [{"text": "...", "label": "...", "spans": [[0, 5], [10, 15]]}]}`
     ///
-    /// For discontinuous entities, we convert them to BIO tags by marking all tokens
-    /// within any span as part of the entity.
-    fn parse_cadec_jsonl(&self, content: &str, id: DatasetId) -> Result<LoadedDataset> {
-        let mut sentences = Vec::new();
-
-        for line in content.lines() {
-            let line = line.trim();
-            if line.is_empty() {
-                continue;
-            }
-
-            // Parse JSON line
-            let parsed: serde_json::Value = match serde_json::from_str(line) {
-                Ok(v) => v,
-                Err(_) => continue, // Skip malformed lines
-            };
-
-            // Try to get tokens
-            let tokens = match parsed.get("tokens").and_then(|v| v.as_array()) {
-                Some(t) => t,
-                None => continue,
-            };
-
-            let mut annotated_tokens = Vec::new();
-            let mut char_offset = 0;
-
-            // Build token list with character offsets
-            let mut token_offsets = Vec::new();
-            for token in tokens {
-                let text = token.as_str().unwrap_or("").to_string();
-                let start = char_offset;
-                char_offset += text.chars().count() + 1; // +1 for space
-                let end = char_offset - 1;
-                token_offsets.push((text, start, end));
-            }
-
-            // Initialize all tokens as "O"
-            for (text, _, _) in &token_offsets {
-                annotated_tokens.push(AnnotatedToken {
-                    text: text.clone(),
-                    ner_tag: "O".to_string(),
-                });
-            }
-
-            // Try to parse entities (for discontinuous support)
-            if let Some(entities) = parsed.get("entities").and_then(|v| v.as_array()) {
-                for entity in entities {
-                    let label = entity
-                        .get("label")
-                        .or_else(|| entity.get("entity_type"))
-                        .and_then(|v| v.as_str())
-                        .unwrap_or("UNKNOWN")
-                        .to_string();
-
-                    // Check for discontinuous spans
-                    if let Some(spans) = entity.get("spans").and_then(|v| v.as_array()) {
-                        // Discontinuous entity with multiple spans
-                        for span in spans {
-                            if let Some(span_array) = span.as_array() {
-                                if span_array.len() >= 2 {
-                                    let start = span_array[0].as_u64().unwrap_or(0) as usize;
-                                    let end = span_array[1].as_u64().unwrap_or(0) as usize;
-
-                                    // Mark tokens within this span
-                                    for (idx, (_, token_start, token_end)) in
-                                        token_offsets.iter().enumerate()
-                                    {
-                                        if *token_start >= start && *token_end <= end {
-                                            if idx > 0
-                                                && annotated_tokens[idx - 1]
-                                                    .ner_tag
-                                                    .starts_with(&format!("I-{}", label))
-                                                || annotated_tokens[idx - 1]
-                                                    .ner_tag
-                                                    .starts_with(&format!("B-{}", label))
-                                            {
-                                                annotated_tokens[idx].ner_tag =
-                                                    format!("I-{}", label);
-                                            } else {
-                                                annotated_tokens[idx].ner_tag =
-                                                    format!("B-{}", label);
-                                            }
-                                        }
-                                    }
-                                }
-                            }
-                        }
-                    } else if let (Some(start_val), Some(end_val)) = (
-                        entity.get("start").and_then(|v| v.as_u64()),
-                        entity.get("end").and_then(|v| v.as_u64()),
-                    ) {
-                        // Contiguous entity
-                        let start = start_val as usize;
-                        let end = end_val as usize;
-
-                        // Mark tokens within this span
-                        for (idx, (_, token_start, token_end)) in token_offsets.iter().enumerate() {
-                            if *token_start >= start && *token_end <= end {
-                                if idx > 0
-                                    && (annotated_tokens[idx - 1]
-                                        .ner_tag
-                                        .starts_with(&format!("I-{}", label))
-                                        || annotated_tokens[idx - 1]
-                                            .ner_tag
-                                            .starts_with(&format!("B-{}", label)))
-                                {
-                                    annotated_tokens[idx].ner_tag = format!("I-{}", label);
-                                } else {
-                                    annotated_tokens[idx].ner_tag = format!("B-{}", label);
-                                }
-                            }
-                        }
-                    }
-                }
-            } else if let Some(ner_tags) = parsed.get("ner_tags").and_then(|v| v.as_array()) {
-                // Fallback to standard BIO tags
-                let tag_labels = [
-                    "O",
-                    "B-PER",
-                    "I-PER",
-                    "B-ORG",
-                    "I-ORG",
-                    "B-LOC",
-                    "I-LOC",
-                    "B-MISC",
-                    "I-MISC",
-                    "B-DRUG",
-                    "I-DRUG",
-                    "B-ADR",
-                    "I-ADR",
-                    "B-DISEASE",
-                    "I-DISEASE",
-                ];
-
-                for (idx, (text, _, _)) in token_offsets.iter().enumerate() {
-                    if let Some(tag_val) = ner_tags.get(idx) {
-                        let tag_idx = tag_val.as_u64().unwrap_or(0) as usize;
-                        let ner_tag = tag_labels.get(tag_idx).unwrap_or(&"O").to_string();
-                        annotated_tokens[idx] = AnnotatedToken {
-                            text: text.clone(),
-                            ner_tag,
-                        };
-                    }
-                }
-            }
-
-            if !annotated_tokens.is_empty() {
-                sentences.push(AnnotatedSentence {
-                    tokens: annotated_tokens,
-                    source_dataset: id,
-                });
-            }
-        }
-
-        if sentences.is_empty() {
-            return Err(Error::InvalidInput(format!(
-                "CADEC JSONL file for {:?} contains no valid sentences",
-                id
-            )));
-        }
-
-        let now = chrono::Utc::now().to_rfc3339();
-        Ok(LoadedDataset {
-            id,
-            sentences,
-            loaded_at: now,
-            source_url: id.download_url().to_string(),
-            data_source: DataSource::LocalCache,
-            temporal_metadata: Self::get_temporal_metadata(id),
-            metadata: id.default_metadata(),
-        })
-    }
-
-    /// Parse BC5CDR BioC XML format.
+    /// For discontinuous entities, we convert them to BIO tags by marking all tokens    /// Parse BC5CDR BioC XML format.
     ///
     /// Note: This is a simplified parser that extracts text passages.
     /// Full annotation extraction would require proper XML parsing.
     /// Parse BC5CDR dataset in CoNLL format from BioFLAIR.
-    ///
-    /// Format: WORD\tPOS\tCHUNK\tNER_TAG
-    fn parse_bc5cdr(&self, content: &str, id: DatasetId) -> Result<LoadedDataset> {
-        let mut sentences = Vec::new();
-        let mut current_tokens = Vec::new();
-
-        for line in content.lines() {
-            let line = line.trim();
-
-            // Skip DOCSTART lines
-            if line.starts_with("-DOCSTART-") {
-                continue;
-            }
-
-            if line.is_empty() {
-                // End of sentence
-                if !current_tokens.is_empty() {
-                    sentences.push(AnnotatedSentence {
-                        tokens: std::mem::take(&mut current_tokens),
-                        source_dataset: id,
-                    });
-                }
-                continue;
-            }
-
-            // Parse CoNLL line: WORD\tPOS\tCHUNK\tNER_TAG
-            let parts: Vec<&str> = line.split('\t').collect();
-            if parts.len() >= 4 {
-                let word = parts[0].to_string();
-                let ner_tag = parts[3].to_string();
-
-                // Map Entity tags to BIO format
-                let normalized_tag = if ner_tag.contains("Entity")
-                    || ner_tag.contains("CHEMICAL")
-                    || ner_tag.contains("DISEASE")
-                {
-                    // Convert I-Entity to B-CHEMICAL or I-CHEMICAL based on context
-                    if ner_tag.starts_with("B-") {
-                        "B-CHEMICAL".to_string()
-                    } else if ner_tag.starts_with("I-") {
-                        "I-CHEMICAL".to_string()
-                    } else {
-                        "O".to_string()
-                    }
-                } else {
-                    ner_tag
-                };
-
-                current_tokens.push(AnnotatedToken {
-                    text: word,
-                    ner_tag: normalized_tag,
-                });
-            }
-        }
-
-        // Don't forget the last sentence
-        if !current_tokens.is_empty() {
-            sentences.push(AnnotatedSentence {
-                tokens: current_tokens,
-                source_dataset: id,
-            });
-        }
-
-        let now = chrono::Utc::now().to_rfc3339();
-        Ok(LoadedDataset {
-            id,
-            sentences,
-            loaded_at: now,
-            source_url: id.download_url().to_string(),
-            data_source: DataSource::LocalCache,
-            temporal_metadata: Self::get_temporal_metadata(id),
-            metadata: id.default_metadata(),
-        })
-    }
-
-    /// Parse NCBI Disease corpus format.
+    ///    /// Parse NCBI Disease corpus format.
     ///
     /// Format: PMID|t|Title or PMID|a|Abstract, followed by annotation lines.
     /// Parse NCBI Disease dataset in CoNLL format from BioFLAIR.
-    ///
-    /// Format: WORD\tPOS\tCHUNK\tNER_TAG
-    fn parse_ncbi_disease(&self, content: &str, id: DatasetId) -> Result<LoadedDataset> {
-        let mut sentences = Vec::new();
-        let mut current_tokens = Vec::new();
-
-        for line in content.lines() {
-            let line = line.trim();
-
-            if line.is_empty() {
-                // End of sentence
-                if !current_tokens.is_empty() {
-                    sentences.push(AnnotatedSentence {
-                        tokens: std::mem::take(&mut current_tokens),
-                        source_dataset: id,
-                    });
-                }
-                continue;
-            }
-
-            // Parse CoNLL line: WORD\tPOS\tCHUNK\tNER_TAG
-            let parts: Vec<&str> = line.split('\t').collect();
-            if parts.len() >= 4 {
-                let word = parts[0].to_string();
-                let ner_tag = parts[3].to_string();
-
-                current_tokens.push(AnnotatedToken {
-                    text: word,
-                    ner_tag,
-                });
-            }
-        }
-
-        // Don't forget the last sentence
-        if !current_tokens.is_empty() {
-            sentences.push(AnnotatedSentence {
-                tokens: current_tokens,
-                source_dataset: id,
-            });
-        }
-
-        if sentences.is_empty() {
-            return Err(Error::InvalidInput(format!(
-                "NCBI Disease file for {:?} contains no valid sentences",
-                id
-            )));
-        }
-
-        let now = chrono::Utc::now().to_rfc3339();
-        Ok(LoadedDataset {
-            id,
-            sentences,
-            loaded_at: now,
-            source_url: id.download_url().to_string(),
-            data_source: DataSource::LocalCache,
-            temporal_metadata: Self::get_temporal_metadata(id),
-            metadata: id.default_metadata(),
-        })
-    }
-
-    /// Parse GAP coreference TSV format.
+    ///    /// Parse GAP coreference TSV format.
     ///
     /// GAP format columns: ID, Text, Pronoun, Pronoun-offset, A, A-offset, A-coref, B, B-offset, B-coref, URL
     fn parse_gap(&self, content: &str, id: DatasetId) -> Result<LoadedDataset> {
@@ -5588,78 +4363,7 @@ impl DatasetLoader {
     /// ID FORM LEMMA UPOS XPOS FEATS HEAD DEPREL DEPS MISC
     ///
     /// Used by MasakhaPOS for African language POS tagging.
-    ///
-    /// Source: <https://universaldependencies.org/format.html>
-    fn parse_conllu(&self, content: &str, id: DatasetId) -> Result<LoadedDataset> {
-        let mut sentences = Vec::new();
-        let now = chrono::Utc::now().to_rfc3339();
-        let mut current_tokens = Vec::new();
-
-        for line in content.lines() {
-            let line = line.trim();
-
-            // Skip comments
-            if line.starts_with('#') {
-                continue;
-            }
-
-            // Blank line marks end of sentence
-            if line.is_empty() {
-                if !current_tokens.is_empty() {
-                    sentences.push(AnnotatedSentence {
-                        tokens: std::mem::take(&mut current_tokens),
-                        source_dataset: id,
-                    });
-                }
-                continue;
-            }
-
-            // Parse CoNLL-U columns
-            let fields: Vec<&str> = line.split('\t').collect();
-            if fields.len() >= 4 {
-                // Skip multi-word tokens (IDs with ranges like "1-2")
-                let id_field = fields[0];
-                if id_field.contains('-') || id_field.contains('.') {
-                    continue;
-                }
-
-                let form = fields[1]; // Word form
-                let upos = fields[3]; // Universal POS tag
-
-                current_tokens.push(AnnotatedToken {
-                    text: form.to_string(),
-                    ner_tag: format!("B-{}", upos), // Use POS tag as entity type
-                });
-            }
-        }
-
-        // Don't forget last sentence
-        if !current_tokens.is_empty() {
-            sentences.push(AnnotatedSentence {
-                tokens: current_tokens,
-                source_dataset: id,
-            });
-        }
-
-        if sentences.is_empty() {
-            return Err(Error::InvalidInput(format!(
-                "CoNLL-U file for {:?} contains no valid sentences",
-                id
-            )));
-        }
-
-        Ok(LoadedDataset {
-            id,
-            sentences,
-            loaded_at: now,
-            source_url: id.download_url().to_string(),
-            data_source: DataSource::LocalCache,
-            temporal_metadata: Self::get_temporal_metadata(id),
-            metadata: id.default_metadata(),
-        })
-    }
-
-    /// Load all cached datasets.
+    ///    /// Load all cached datasets.
     pub fn load_all_cached(&self) -> Vec<(DatasetId, Result<LoadedDataset>)> {
         LoadableDatasetId::all()
             .into_iter()
@@ -5948,8 +4652,7 @@ today O
 . O
 "#;
 
-        let loader = DatasetLoader::new().unwrap();
-        let dataset = loader.parse_conll(content, DatasetId::WikiGold).unwrap();
+        let dataset = parse::ner::parse_conll(content, DatasetId::WikiGold).unwrap();
 
         assert_eq!(dataset.len(), 2);
         assert_eq!(dataset.entity_count(), 3);
@@ -5971,10 +4674,7 @@ Peter NNP B-NP B-PER
 Blackburn NNP I-NP I-PER
 "#;
 
-        let loader = DatasetLoader::new().unwrap();
-        let dataset = loader
-            .parse_conll(content, DatasetId::CoNLL2003Sample)
-            .unwrap();
+        let dataset = parse::ner::parse_conll(content, DatasetId::CoNLL2003Sample).unwrap();
 
         assert_eq!(dataset.len(), 2);
 
@@ -6542,8 +5242,7 @@ Blackburn NNP I-NP I-PER
                              1\tHe\the\tPRON\tPRP\t_\t2\tnsubj\t_\t_\n\
                              2\truns\trun\tVERB\tVBZ\t_\t0\troot\t_\t_\n";
 
-        let loader = DatasetLoader::new().unwrap();
-        let result = loader.parse_conllu(sample_conllu, DatasetId::MasakhaPOS);
+        let result = parse::ner::parse_conllu(sample_conllu, DatasetId::MasakhaPOS);
         assert!(result.is_ok());
 
         let dataset = result.unwrap();
@@ -6599,8 +5298,7 @@ Blackburn NNP I-NP I-PER
 
 ";
 
-        let loader = DatasetLoader::new().unwrap();
-        let result = loader.parse_conllu(sample_conllu, DatasetId::AncientGreekUD);
+        let result = parse::ner::parse_conllu(sample_conllu, DatasetId::AncientGreekUD);
         assert!(
             result.is_ok(),
             "Failed to parse Ancient Greek CoNLLU: {:?}",
@@ -7140,8 +5838,7 @@ Blackburn NNP I-NP I-PER
                              ውስጥ O\n\
                              ተወለዱ O\n";
 
-        let loader = DatasetLoader::new().unwrap();
-        let result = loader.parse_conll(amharic_conll, DatasetId::MasakhaNER);
+        let result = parse::ner::parse_conll(amharic_conll, DatasetId::MasakhaNER);
         assert!(result.is_ok());
 
         let dataset = result.unwrap();
@@ -7172,8 +5869,7 @@ Blackburn NNP I-NP I-PER
                            2\tukuthetha\tthetha\tVERB\tV\t_\t1\txcomp\t_\t_\n\
                            3\tisiXhosa\tisiXhosa\tNOUN\tN\t_\t2\tobj\t_\t_\n";
 
-        let loader = DatasetLoader::new().unwrap();
-        let result = loader.parse_conllu(xhosa_conllu, DatasetId::MasakhaPOS);
+        let result = parse::ner::parse_conllu(xhosa_conllu, DatasetId::MasakhaPOS);
         assert!(result.is_ok());
 
         let dataset = result.unwrap();
@@ -7272,8 +5968,7 @@ Blackburn NNP I-NP I-PER
         // Character offsets in `entities` are interpreted over reconstructed text from tokens.
         // "I took aspirin" → aspirin starts at char 7, ends at 14 (exclusive).
         let sample = r#"{"tokens":["I","took","aspirin"],"entities":[{"text":"aspirin","label":"DRUG","start":7,"end":14}]}"#;
-        let loader = DatasetLoader::new().unwrap();
-        let ds = loader.parse_cadec_jsonl(sample, DatasetId::CADEC).unwrap();
+        let ds = parse::ner::parse_cadec_jsonl(sample, DatasetId::CADEC).unwrap();
         assert!(!ds.sentences.is_empty());
         assert!(ds.sentences[0]
             .tokens
@@ -7284,8 +5979,7 @@ Blackburn NNP I-NP I-PER
     #[test]
     fn test_parse_cadec_hf_api_smoke() {
         let sample = r#"{"rows":[{"row":{"text":"I took aspirin","ade":"aspirin"}}]}"#;
-        let loader = DatasetLoader::new().unwrap();
-        let ds = loader.parse_cadec_hf_api(sample, DatasetId::CADEC).unwrap();
+        let ds = parse::ner::parse_cadec_hf_api(sample, DatasetId::CADEC).unwrap();
         assert!(!ds.sentences.is_empty());
         assert!(ds.sentences[0]
             .tokens
@@ -7296,8 +5990,7 @@ Blackburn NNP I-NP I-PER
     #[test]
     fn test_parse_bc5cdr_smoke() {
         let sample = "Aspirin\tNN\tO\tB-CHEMICAL\nhelps\tVBZ\tO\tO\n\n";
-        let loader = DatasetLoader::new().unwrap();
-        let ds = loader.parse_bc5cdr(sample, DatasetId::BC5CDR).unwrap();
+        let ds = parse::ner::parse_bc5cdr(sample, DatasetId::BC5CDR).unwrap();
         assert_eq!(ds.sentences.len(), 1);
         assert_eq!(ds.sentences[0].tokens[0].ner_tag, "B-CHEMICAL");
     }
@@ -7305,10 +5998,7 @@ Blackburn NNP I-NP I-PER
     #[test]
     fn test_parse_ncbi_disease_smoke() {
         let sample = "Cancer\tNN\tO\tB-Disease\nprogresses\tVBZ\tO\tO\n\n";
-        let loader = DatasetLoader::new().unwrap();
-        let ds = loader
-            .parse_ncbi_disease(sample, DatasetId::NCBIDisease)
-            .unwrap();
+        let ds = parse::ner::parse_ncbi_disease(sample, DatasetId::NCBIDisease).unwrap();
         assert_eq!(ds.sentences.len(), 1);
         assert!(ds.sentences[0].tokens[0].ner_tag.starts_with("B-"));
     }
@@ -7337,8 +6027,7 @@ g1\tJohn met Mary. He waved.\tHe\t14\tJohn\t0\tTRUE\tMary\t9\tFALSE\thttp://exam
     fn test_parse_wikiann_json_array_smoke() {
         let sample =
             r#"[{"tokens":["John","went","to","Paris"],"ner_tags":["B-PER","O","O","B-LOC"]}]"#;
-        let loader = DatasetLoader::new().unwrap();
-        let ds = loader.parse_wikiann_json(sample, DatasetId::UNER).unwrap();
+        let ds = parse::ner::parse_wikiann_json(sample, DatasetId::UNER).unwrap();
         assert_eq!(ds.sentences.len(), 1);
         assert_eq!(ds.sentences[0].tokens[0].ner_tag, "B-PER");
     }
@@ -7349,10 +6038,7 @@ g1\tJohn met Mary. He waved.\tHe\t14\tJohn\t0\tTRUE\tMary\t9\tFALSE\thttp://exam
   "features":[{"name":"tokens"},{"name":"ner_tags","type":{"feature":{"names":["O","B-PER","I-PER"]}}}],
   "rows":[{"row_idx":0,"row":{"tokens":["John"],"ner_tags":[1]}}]
 }"#;
-        let loader = DatasetLoader::new().unwrap();
-        let ds = loader
-            .parse_hf_api_response(sample, DatasetId::UniversalNER)
-            .unwrap();
+        let ds = parse::ner::parse_hf_api_response(sample, DatasetId::UniversalNER).unwrap();
         assert_eq!(ds.sentences.len(), 1);
         assert_eq!(ds.sentences[0].tokens[0].ner_tag, "B-PER");
     }
@@ -7368,10 +6054,7 @@ g1\tJohn met Mary. He waved.\tHe\t14\tJohn\t0\tTRUE\tMary\t9\tFALSE\thttp://exam
     "signal_expressions":[]
   }}]
 }"#;
-        let loader = DatasetLoader::new().unwrap();
-        let ds = loader
-            .parse_hf_api_response(sample, DatasetId::TimexRecognitionSentenceOriginal)
-            .unwrap();
+        let ds = parse::ner::parse_hf_api_response(sample, DatasetId::TimexRecognitionSentenceOriginal).unwrap();
         assert_eq!(ds.sentences.len(), 1);
         assert_eq!(ds.sentences[0].tokens.len(), 3);
         assert_eq!(ds.sentences[0].tokens[0].text, "A");
@@ -7392,10 +6075,7 @@ g1\tJohn met Mary. He waved.\tHe\t14\tJohn\t0\tTRUE\tMary\t9\tFALSE\thttp://exam
     "label":"Cause"
   }}]
 }"#;
-        let loader = DatasetLoader::new().unwrap();
-        let ds = loader
-            .parse_hf_api_response(sample, DatasetId::DisrptEngDepScidtbRels)
-            .unwrap();
+        let ds = parse::ner::parse_hf_api_response(sample, DatasetId::DisrptEngDepScidtbRels).unwrap();
         assert_eq!(ds.sentences.len(), 1);
         assert_eq!(ds.sentences[0].tokens.len(), 1);
         assert_eq!(
@@ -7414,10 +6094,7 @@ g1\tJohn met Mary. He waved.\tHe\t14\tJohn\t0\tTRUE\tMary\t9\tFALSE\thttp://exam
     "misc":["Seg=B-seg","Seg=O","Seg=O","Seg=B-seg","Seg=O"]
   }}]
 }"#;
-        let loader = DatasetLoader::new().unwrap();
-        let ds = loader
-            .parse_hf_api_response(sample, DatasetId::DisrptEngDepScidtbConlluSeg)
-            .unwrap();
+        let ds = parse::ner::parse_hf_api_response(sample, DatasetId::DisrptEngDepScidtbConlluSeg).unwrap();
         assert_eq!(ds.sentences.len(), 1);
         let tags: Vec<&str> = ds.sentences[0]
             .tokens
@@ -7615,8 +6292,7 @@ the,O
 CEO,O
 .
 ";
-        let loader = DatasetLoader::new().unwrap();
-        let ds = loader.parse_csv_ner(sample, DatasetId::ENer).unwrap();
+        let ds = parse::ner::parse_csv_ner(sample, DatasetId::ENer).unwrap();
 
         // Should have 3 sentences (separated by empty lines and -DOCSTART-)
         assert_eq!(
@@ -7755,8 +6431,7 @@ CEO,O
                             T\tB-cell_type\n\
                             cells\tI-cell_type\n";
 
-        let loader = DatasetLoader::new().unwrap();
-        let result = loader.parse_conll(nested_conll, DatasetId::GENIANested);
+        let result = parse::ner::parse_conll(nested_conll, DatasetId::GENIANested);
         assert!(result.is_ok());
 
         let dataset = result.unwrap();
@@ -7777,8 +6452,7 @@ CEO,O
                              introduced\tO\n\
                              themself\tB-PER\n";
 
-        let loader = DatasetLoader::new().unwrap();
-        let result = loader.parse_conll(gicoref_conll, DatasetId::GICoref);
+        let result = parse::ner::parse_conll(gicoref_conll, DatasetId::GICoref);
         assert!(result.is_ok());
 
         let dataset = result.unwrap();
@@ -7799,8 +6473,7 @@ CEO,O
         let fewrel_sample =
             r#"{"tokens":["John","works","at","Google","."],"ner_tags":[1,0,0,3,0]}"#;
 
-        let loader = DatasetLoader::new().unwrap();
-        let result = loader.parse_jsonl_ner(fewrel_sample, DatasetId::FewRel);
+        let result = parse::ner::parse_jsonl_ner(fewrel_sample, DatasetId::FewRel);
         assert!(result.is_ok());
 
         let dataset = result.unwrap();
@@ -7817,8 +6490,7 @@ CEO,O
         let b2nerd_sample =
             r#"{"tokens":["Apple","Inc",".","reports","Q4","earnings"],"ner_tags":[3,4,4,0,0,0]}"#;
 
-        let loader = DatasetLoader::new().unwrap();
-        let result = loader.parse_jsonl_ner(b2nerd_sample, DatasetId::B2NERD);
+        let result = parse::ner::parse_jsonl_ner(b2nerd_sample, DatasetId::B2NERD);
         assert!(result.is_ok());
 
         let dataset = result.unwrap();
@@ -7908,8 +6580,7 @@ CEO,O
                               treats\tO\n\
                               diabetes\tB-DISEASE\n";
 
-        let loader = DatasetLoader::new().unwrap();
-        let result = loader.parse_conll(chemdner_conll, DatasetId::CHEMDNER);
+        let result = parse::ner::parse_conll(chemdner_conll, DatasetId::CHEMDNER);
         assert!(result.is_ok());
 
         let dataset = result.unwrap();
@@ -7928,8 +6599,7 @@ CEO,O
                                  ye\tO\n\
                                  Congreſs\tB-ORG\n";
 
-        let loader = DatasetLoader::new().unwrap();
-        let result = loader.parse_conll(historical_conll, DatasetId::EighteenthCenturyNER);
+        let result = parse::ner::parse_conll(historical_conll, DatasetId::EighteenthCenturyNER);
         assert!(result.is_ok());
 
         let dataset = result.unwrap();
@@ -7950,8 +6620,7 @@ CEO,O
                                    de\tI-LOC\n\
                                    México\tI-LOC\n";
 
-        let loader = DatasetLoader::new().unwrap();
-        let result = loader.parse_conll(codeswitched_conll, DatasetId::LinCE);
+        let result = parse::ner::parse_conll(codeswitched_conll, DatasetId::LinCE);
         assert!(result.is_ok());
 
         let dataset = result.unwrap();
@@ -7973,8 +6642,7 @@ CEO,O
                               Asunción\tB-LOC\n\
                               pe\tO\n";
 
-        let loader = DatasetLoader::new().unwrap();
-        let result = loader.parse_conll(guarani_conll, DatasetId::GuaraniNER);
+        let result = parse::ner::parse_conll(guarani_conll, DatasetId::GuaraniNER);
         assert!(result.is_ok());
 
         let dataset = result.unwrap();
@@ -7992,8 +6660,7 @@ CEO,O
                             2\tκαὶ\tκαί\tCCONJ\tC\t_\t3\tcc\t_\tSpaceAfter=Yes\n\
                             3\tδικαιοσύνη\tδικαιοσύνη\tNOUN\tN\tCase=Nom|Gender=Fem|Number=Sing\t1\tconj\t_\tSpaceAfter=No\n";
 
-        let loader = DatasetLoader::new().unwrap();
-        let result = loader.parse_conllu(greek_conllu, DatasetId::AncientGreekUD);
+        let result = parse::ner::parse_conllu(greek_conllu, DatasetId::AncientGreekUD);
         assert!(result.is_ok());
 
         let dataset = result.unwrap();
@@ -8012,8 +6679,7 @@ CEO,O
                             2\tāterna\taeternus\tADJ\tA\tCase=Nom|Gender=Fem|Number=Sing\t1\tamod\t_\tSpaceAfter=Yes\n\
                             3\test\tsum\tAUX\tV\tMood=Ind|Number=Sing|Person=3|Tense=Pres|VerbForm=Fin|Voice=Act\t0\troot\t_\tSpaceAfter=No\n";
 
-        let loader = DatasetLoader::new().unwrap();
-        let result = loader.parse_conllu(latin_conllu, DatasetId::LatinUD);
+        let result = parse::ner::parse_conllu(latin_conllu, DatasetId::LatinUD);
         assert!(result.is_ok());
 
         let dataset = result.unwrap();
@@ -8032,8 +6698,7 @@ CEO,O
                                2\tसीतां\tसीता\tPROPN\tNNP\tCase=Acc|Gender=Fem|Number=Sing\t3\tobj\t_\tSpaceAfter=Yes\n\
                                3\tपश्यति\tदृश्\tVERB\tV\tMood=Ind|Number=Sing|Person=3|Tense=Pres|VerbForm=Fin|Voice=Act\t0\troot\t_\tSpaceAfter=No\n";
 
-        let loader = DatasetLoader::new().unwrap();
-        let result = loader.parse_conllu(sanskrit_conllu, DatasetId::SanskritUD);
+        let result = parse::ner::parse_conllu(sanskrit_conllu, DatasetId::SanskritUD);
         assert!(result.is_ok());
 
         let dataset = result.unwrap();
@@ -8069,8 +6734,7 @@ CEO,O
                              Q4\tB-PERIOD\n\
                              earnings\tO\n";
 
-        let loader = DatasetLoader::new().unwrap();
-        let result = loader.parse_conll(finance_conll, DatasetId::FinanceNER);
+        let result = parse::ner::parse_conll(finance_conll, DatasetId::FinanceNER);
         assert!(result.is_ok());
 
         let dataset = result.unwrap();
@@ -8092,8 +6756,7 @@ CEO,O
                             tsp\tI-QUANTITY\n\
                             salt\tB-INGREDIENT\n";
 
-        let loader = DatasetLoader::new().unwrap();
-        let result = loader.parse_conll(recipe_conll, DatasetId::RecipeNER);
+        let result = parse::ner::parse_conll(recipe_conll, DatasetId::RecipeNER);
         assert!(result.is_ok());
 
         let dataset = result.unwrap();
@@ -8114,8 +6777,7 @@ CEO,O
                            light-years\tI-DISTANCE\n\
                            away\tO\n";
 
-        let loader = DatasetLoader::new().unwrap();
-        let result = loader.parse_conll(astro_conll, DatasetId::AstroNER);
+        let result = parse::ner::parse_conll(astro_conll, DatasetId::AstroNER);
         assert!(result.is_ok());
 
         let dataset = result.unwrap();
@@ -8202,8 +6864,7 @@ CEO,O
         // Edge case: JSONL with some empty tokens
         let jsonl_with_empty = r#"{"tokens":["Hello","","world"],"ner_tags":[0,0,0]}"#;
 
-        let loader = DatasetLoader::new().unwrap();
-        let result = loader.parse_jsonl_ner(jsonl_with_empty, DatasetId::MultiWOZNER);
+        let result = parse::ner::parse_jsonl_ner(jsonl_with_empty, DatasetId::MultiWOZNER);
         assert!(result.is_ok());
 
         let dataset = result.unwrap();
@@ -8226,8 +6887,7 @@ CEO,O
                                Clause\tI-DOCUMENT\n\
                                3\tI-DOCUMENT\n";
 
-        let loader = DatasetLoader::new().unwrap();
-        let result = loader.parse_conll(long_span_conll, DatasetId::LegNER);
+        let result = parse::ner::parse_conll(long_span_conll, DatasetId::LegNER);
         assert!(result.is_ok());
 
         let dataset = result.unwrap();
@@ -8345,8 +7005,7 @@ CEO,O
         // Test CRLF line endings (Windows format)
         let windows_conll = "John\tB-PER\r\nSmith\tI-PER\r\n\r\nLondon\tB-LOC\r\n";
 
-        let loader = DatasetLoader::new().unwrap();
-        let result = loader.parse_conll(windows_conll, DatasetId::WikiGold);
+        let result = parse::ner::parse_conll(windows_conll, DatasetId::WikiGold);
         assert!(result.is_ok());
 
         let dataset = result.unwrap();
@@ -8358,8 +7017,7 @@ CEO,O
         // Test lines with trailing/leading whitespace
         let whitespace_conll = "  John  \t  B-PER  \n  meets  \t  O  \n\n";
 
-        let loader = DatasetLoader::new().unwrap();
-        let result = loader.parse_conll(whitespace_conll, DatasetId::WikiGold);
+        let result = parse::ner::parse_conll(whitespace_conll, DatasetId::WikiGold);
         // Should handle gracefully (may skip malformed lines)
         assert!(result.is_ok());
     }
@@ -8375,8 +7033,7 @@ CEO,O
                           3\tn't\tnot\tPART\tRB\t_\t0\troot\t_\t_\n\
                           4\tgo\tgo\tVERB\tVB\t_\t3\txcomp\t_\tSpaceAfter=No\n";
 
-        let loader = DatasetLoader::new().unwrap();
-        let result = loader.parse_conllu(mwt_conllu, DatasetId::LatinUD);
+        let result = parse::ner::parse_conllu(mwt_conllu, DatasetId::LatinUD);
         assert!(result.is_ok());
 
         let dataset = result.unwrap();
@@ -8396,8 +7053,7 @@ CEO,O
                                  3\tand\tand\tCCONJ\tCC\t_\t4\tcc\t_\tSpaceAfter=Yes\n\
                                  4\theard\thear\tVERB\tVBD\t_\t2\tconj\t_\tSpaceAfter=No\n";
 
-        let loader = DatasetLoader::new().unwrap();
-        let result = loader.parse_conllu(empty_node_conllu, DatasetId::LatinUD);
+        let result = parse::ner::parse_conllu(empty_node_conllu, DatasetId::LatinUD);
         assert!(result.is_ok());
 
         let dataset = result.unwrap();
@@ -8413,8 +7069,7 @@ CEO,O
                              is\tO\n\
                              beautiful\tO\n";
 
-        let loader = DatasetLoader::new().unwrap();
-        let result = loader.parse_conll(malformed_bio, DatasetId::WikiGold);
+        let result = parse::ner::parse_conll(malformed_bio, DatasetId::WikiGold);
         assert!(result.is_ok());
 
         let dataset = result.unwrap();
@@ -8435,9 +7090,8 @@ CEO,O
             "test inputs must actually differ in bytes"
         );
 
-        let loader = DatasetLoader::new().unwrap();
-        let d1 = loader.parse_conll(composed, DatasetId::WikiGold).unwrap();
-        let d2 = loader.parse_conll(decomposed, DatasetId::WikiGold).unwrap();
+        let d1 = parse::ner::parse_conll(composed, DatasetId::WikiGold).unwrap();
+        let d2 = parse::ner::parse_conll(decomposed, DatasetId::WikiGold).unwrap();
 
         assert_eq!(d1.sentences.len(), d2.sentences.len());
         assert_eq!(d1.sentences[0].tokens.len(), d2.sentences[0].tokens.len());
@@ -8476,8 +7130,7 @@ CEO,O
         // JSONL with various Unicode characters
         let unicode_jsonl = r#"{"tokens":["北京","🎉","Москва","القاهرة"],"ner_tags":[5,0,5,5]}"#;
 
-        let loader = DatasetLoader::new().unwrap();
-        let result = loader.parse_jsonl_ner(unicode_jsonl, DatasetId::MultiWOZNER);
+        let result = parse::ner::parse_jsonl_ner(unicode_jsonl, DatasetId::MultiWOZNER);
         assert!(result.is_ok());
 
         let dataset = result.unwrap();
