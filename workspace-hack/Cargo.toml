@@ -54,6 +54,9 @@ httparse = { version = "1" }
 icu_locale_core = { version = "2", default-features = false, features = ["alloc", "zerovec"] }
 icu_provider = { version = "2", default-features = false, features = ["alloc", "baked", "sync"] }
 kreuzberg = { version = "=4.9.7", default-features = false, features = ["archives", "bundled-pdfium", "chunking", "email", "excel", "office", "paddle-ocr", "xml"] }
+kreuzberg-paddle-ocr = { version = "=4.9.9", default-features = false }
+kreuzberg-pdfium-render = { version = "=4.9.8", default-features = false }
+kreuzberg-tesseract = { version = "=4.9.8", default-features = false }
 litemap = { version = "0.8", default-features = false, features = ["alloc"] }
 log = { version = "0.4", default-features = false, features = ["std"] }
 matrixmultiply = { version = "0.3", default-features = false, features = ["cgemm", "threading"] }
@@ -154,6 +157,9 @@ httparse = { version = "1" }
 icu_locale_core = { version = "2", default-features = false, features = ["alloc", "zerovec"] }
 icu_provider = { version = "2", default-features = false, features = ["alloc", "baked", "sync"] }
 kreuzberg = { version = "=4.9.7", default-features = false, features = ["archives", "bundled-pdfium", "chunking", "email", "excel", "office", "paddle-ocr", "xml"] }
+kreuzberg-paddle-ocr = { version = "=4.9.9", default-features = false }
+kreuzberg-pdfium-render = { version = "=4.9.8", default-features = false }
+kreuzberg-tesseract = { version = "=4.9.8", default-features = false }
 litemap = { version = "0.8", default-features = false, features = ["alloc"] }
 log = { version = "0.4", default-features = false, features = ["std"] }
 matrixmultiply = { version = "0.3", default-features = false, features = ["cgemm", "threading"] }
