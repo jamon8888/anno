@@ -253,6 +253,14 @@ jobs:
           RELEASE_TAG="${{ needs.plan.outputs.tag }}"
           DMG_NAME="anno-rag-${RELEASE_TAG}-${TARGET}.dmg"
 
+          # All dist binaries that link ONNX Runtime dynamically and therefore need
+          # their rpath patched to find the bundled @executable_path/libonnxruntime.dylib.
+          # Add new ORT-linked binaries here — single place to update.
+          ORT_RPATH_BINARIES=(
+            "${BINARY}"
+            "target/${TARGET}/dist/anno-privacy-gateway"
+          )
+
           # Locate the ORT dylib that was set up in ORT_LIB_LOCATION
           ORT_DYLIB="${ORT_LIB_LOCATION}/libonnxruntime.dylib"
           if [ ! -f "${ORT_DYLIB}" ]; then
@@ -264,11 +272,12 @@ jobs:
           # Copy dylib alongside binary in the dist folder
           cp "${ORT_DYLIB}" "target/${TARGET}/dist/libonnxruntime.dylib"
 
-          # Patch every dist binary's rpath so it finds @executable_path/libonnxruntime.dylib.
-          # anno-privacy-gateway also links ORT dynamically and the gateway boot smoke
-          # step below runs it directly from this dist dir (not from dmg-staging), so it
-          # needs the same treatment as anno-rag or it dyld-aborts at startup.
-          for BIN in "${BINARY}" "target/${TARGET}/dist/anno-privacy-gateway"; do
+          # Patch every ORT-linked dist binary's rpath so it finds
+          # @executable_path/libonnxruntime.dylib. The gateway boot smoke step below
+          # runs anno-privacy-gateway directly from this dist dir (not from
+          # dmg-staging), so it needs the same treatment as anno-rag or it
+          # dyld-aborts at startup.
+          for BIN in "${ORT_RPATH_BINARIES[@]}"; do
             if [ ! -f "${BIN}" ]; then
               echo "Skipping rpath patch, binary not found: ${BIN}"
               continue

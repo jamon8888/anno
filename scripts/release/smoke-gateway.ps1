@@ -48,11 +48,11 @@ try {
         -PassThru
 
     if ($Process.WaitForExit($Seconds * 1000)) {
-        Write-Error "Gateway exited early with code $($Process.ExitCode)."
-        Write-Error "--- stdout ($StdoutPath) ---"
-        Get-Content -LiteralPath $StdoutPath -ErrorAction SilentlyContinue | ForEach-Object { Write-Error $_ }
-        Write-Error "--- stderr ($StderrPath) ---"
-        Get-Content -LiteralPath $StderrPath -ErrorAction SilentlyContinue | ForEach-Object { Write-Error $_ }
+        Write-Error "Gateway exited early with code $($Process.ExitCode)." -ErrorAction Continue
+        Write-Error "--- stdout ($StdoutPath) ---" -ErrorAction Continue
+        Get-Content -LiteralPath $StdoutPath -ErrorAction SilentlyContinue | ForEach-Object { Write-Error $_ -ErrorAction Continue }
+        Write-Error "--- stderr ($StderrPath) ---" -ErrorAction Continue
+        Get-Content -LiteralPath $StderrPath -ErrorAction SilentlyContinue | ForEach-Object { Write-Error $_ -ErrorAction Continue }
         exit 1
     }
 
