@@ -440,7 +440,7 @@ impl DatasetLoader {
             Error::InvalidInput(format!("Failed to read cache {:?}: {}", cache_path, e))
         })?;
 
-        let mut dataset = self.parse_content_impl(&content, dataset_id)?;
+        let mut dataset = parse::parse_content(&content, dataset_id)?;
         if dataset.sentences.is_empty() {
             return Err(Error::InvalidInput(format!(
                 "Cached dataset '{}' parsed to 0 sentences (cache_path={:?})",
@@ -473,7 +473,7 @@ impl DatasetLoader {
                     Error::InvalidInput(format!("Failed to write cache {:?}: {}", cache_path, e))
                 })?;
 
-                let mut dataset = self.parse_content_impl(&content, dataset_id)?;
+                let mut dataset = parse::parse_content(&content, dataset_id)?;
                 dataset.data_source = DataSource::S3Cache;
 
                 // Best-effort: if S3 provides a manifest entry, record it locally.
@@ -497,7 +497,7 @@ impl DatasetLoader {
         })?;
 
         // 5. Parse the content
-        let mut dataset = self.parse_content_impl(&content, dataset_id)?;
+        let mut dataset = parse::parse_content(&content, dataset_id)?;
         dataset.data_source = DataSource::OriginalUrl;
 
         // 6. Update manifest with download metadata
@@ -1829,82 +1829,7 @@ impl DatasetLoader {
     /// It does **not** download or read from cache. For typical usage, prefer
     /// [`DatasetLoader::load_or_download`] / [`DatasetLoader::load`].
     pub fn parse_content_str(&self, content: &str, id: DatasetId) -> Result<LoadedDataset> {
-        self.parse_content_impl(content, id)
-    }
-
-    /// Internal implementation for parsing a dataset payload.
-    fn parse_content_impl(&self, content: &str, id: DatasetId) -> Result<LoadedDataset> {
-        if content.trim().is_empty() {
-            return Err(Error::InvalidInput(format!(
-                "Dataset {:?} file is empty",
-                id
-            )));
-        }
-
-        let plan = LoadableDatasetId::parse_plan(id).ok_or_else(|| {
-            Error::InvalidInput(format!("No parser configured for dataset {:?}", id))
-        })?;
-
-        let result = match plan {
-            DatasetParsePlan::Conll => parse::ner::parse_conll(content, id),
-            DatasetParsePlan::JsonlNer => parse::ner::parse_jsonl_ner(content, id),
-            DatasetParsePlan::WikiannJson => parse::ner::parse_wikiann_json(content, id),
-            DatasetParsePlan::TweetNer7 => parse::ner::parse_tweetner7(content, id),
-            DatasetParsePlan::DocredJson => parse::relation::parse_docred(content, id),
-            DatasetParsePlan::GoogleReCorpus => parse::relation::parse_google_re_corpus(content, id),
-            DatasetParsePlan::ChisiecJson => parse::relation::parse_chisiec(content, id),
-            DatasetParsePlan::CadecHybrid => {
-                if self.is_hf_api_response(content) {
-                    parse::ner::parse_cadec_hf_api(content, id)
-                } else {
-                    parse::ner::parse_cadec_jsonl(content, id)
-                }
-            }
-            DatasetParsePlan::Bc5cdr => parse::ner::parse_bc5cdr(content, id),
-            DatasetParsePlan::NcbiDisease => parse::ner::parse_ncbi_disease(content, id),
-            DatasetParsePlan::GapTsv => parse::coref::parse_gap(content, id),
-            DatasetParsePlan::PrecoJsonl => parse::coref::parse_preco_jsonl(content, id),
-            DatasetParsePlan::Litbank => parse::coref::parse_litbank(content, id),
-            DatasetParsePlan::EcbPlus => parse::coref::parse_ecb_plus(content, id),
-            DatasetParsePlan::AfriSenti => parse::classification::parse_afrisenti(content, id),
-            DatasetParsePlan::AfriQa => parse::classification::parse_afriqa(content, id),
-            DatasetParsePlan::MasakhaNews => parse::classification::parse_masakhanews(content, id),
-            DatasetParsePlan::Conllu => parse::ner::parse_conllu(content, id),
-            DatasetParsePlan::AgNews => parse::classification::parse_agnews(content, id),
-            DatasetParsePlan::Dbpedia14 => parse::classification::parse_dbpedia14(content, id),
-            DatasetParsePlan::YahooAnswers => parse::classification::parse_yahoo_answers(content, id),
-            DatasetParsePlan::Trec => parse::classification::parse_trec(content, id),
-            DatasetParsePlan::TweetTopic => parse::classification::parse_tweettopic(content, id),
-            DatasetParsePlan::Maven => parse::event::parse_maven(content, id),
-            DatasetParsePlan::MavenArg => parse::event::parse_maven_arg(content, id),
-            DatasetParsePlan::Casie => parse::event::parse_casie(content, id),
-            DatasetParsePlan::Rams => parse::event::parse_rams(content, id),
-            DatasetParsePlan::HfApiResponse => parse::ner::parse_hf_api_response(content, id),
-            DatasetParsePlan::TsvNer => parse::ner::parse_tsv_ner(content, id),
-            DatasetParsePlan::CsvNer => parse::ner::parse_csv_ner(content, id),
-        }?;
-
-        // Validate parsed dataset is not empty
-        if result.sentences.is_empty() {
-            return Err(Error::InvalidInput(format!(
-                "Dataset {:?} parsed successfully but contains no sentences. \
-                 This may indicate a parsing issue or empty dataset file.",
-                id
-            )));
-        }
-
-        Ok(result)
-    }
-
-    /// Check if content is HuggingFace datasets-server API response.
-    fn is_hf_api_response(&self, content: &str) -> bool {
-        // Check for HF datasets-server API response structure
-        let trimmed = content.trim_start();
-        trimmed.starts_with("{\"rows\":")
-            || trimmed.starts_with("{\"features\":")
-            || (trimmed.starts_with("{")
-                && trimmed.contains("\"rows\":[")
-                && trimmed.contains("\"features\":["))
+        parse::parse_content(content, id)
     }
     /// Parse HIPE-2022 style TSV NER format.
     ///
@@ -3718,11 +3643,9 @@ Blackburn NNP I-NP I-PER
     #[test]
     fn test_parse_content_rejects_empty_for_all_loadable_datasets() {
         // Global invariant: no dataset should parse from empty content.
-        let loader = DatasetLoader::new().unwrap();
         for loadable in LoadableDatasetId::all() {
             let id: DatasetId = loadable.into();
-            let err = loader
-                .parse_content_impl("   \n\t", id)
+            let err = parse::parse_content("   \n\t", id)
                 .expect_err("empty content must error");
             let msg = format!("{err}");
             assert!(
