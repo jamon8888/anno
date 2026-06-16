@@ -264,18 +264,27 @@ jobs:
           # Copy dylib alongside binary in the dist folder
           cp "${ORT_DYLIB}" "target/${TARGET}/dist/libonnxruntime.dylib"
 
-          # Patch the binary rpath so it finds @executable_path/libonnxruntime.dylib
-          LINKED=$(otool -L "${BINARY}" 2>/dev/null | grep -i onnxruntime | awk '{print $1}' || true)
-          if [ -n "${LINKED}" ]; then
-            echo "Currently linked ORT: ${LINKED}"
-            install_name_tool -change "${LINKED}" "@executable_path/libonnxruntime.dylib" "${BINARY}" || true
-          else
-            echo "No ORT dylib ref in binary (may be statically linked or absent)"
-          fi
-          # Ensure @executable_path is in rpath (non-fatal)
-          install_name_tool -add_rpath "@executable_path" "${BINARY}" 2>/dev/null || true
-          # Diagnostics only — non-fatal
-          echo "After patching:" && otool -L "${BINARY}" | grep -i ort || echo "(no ORT ref)"
+          # Patch every dist binary's rpath so it finds @executable_path/libonnxruntime.dylib.
+          # anno-privacy-gateway also links ORT dynamically and the gateway boot smoke
+          # step below runs it directly from this dist dir (not from dmg-staging), so it
+          # needs the same treatment as anno-rag or it dyld-aborts at startup.
+          for BIN in "${BINARY}" "target/${TARGET}/dist/anno-privacy-gateway"; do
+            if [ ! -f "${BIN}" ]; then
+              echo "Skipping rpath patch, binary not found: ${BIN}"
+              continue
+            fi
+            LINKED=$(otool -L "${BIN}" 2>/dev/null | grep -i onnxruntime | awk '{print $1}' || true)
+            if [ -n "${LINKED}" ]; then
+              echo "Currently linked ORT (${BIN}): ${LINKED}"
+              install_name_tool -change "${LINKED}" "@executable_path/libonnxruntime.dylib" "${BIN}" || true
+            else
+              echo "No ORT dylib ref in ${BIN} (may be statically linked or absent)"
+            fi
+            # Ensure @executable_path is in rpath (non-fatal)
+            install_name_tool -add_rpath "@executable_path" "${BIN}" 2>/dev/null || true
+            # Diagnostics only — non-fatal
+            echo "After patching (${BIN}):" && otool -L "${BIN}" | grep -i ort || echo "(no ORT ref)"
+          done
 
           # Build .dmg staging
           DMG_STAGING="dmg-staging-${TARGET}"
