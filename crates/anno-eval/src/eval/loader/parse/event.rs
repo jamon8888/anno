@@ -208,8 +208,7 @@ pub(crate) fn parse_casie(content: &str, id: DatasetId) -> Result<LoadedDataset>
                             });
 
                             // Also extract arguments if present
-                            if let Some(args) = event.get("argument").and_then(|a| a.as_array())
-                            {
+                            if let Some(args) = event.get("argument").and_then(|a| a.as_array()) {
                                 for arg in args {
                                     let arg_text =
                                         arg.get("text").and_then(|t| t.as_str()).unwrap_or("");
@@ -415,9 +414,7 @@ pub(crate) fn parse_rams(content: &str, id: DatasetId) -> Result<LoadedDataset> 
                     sents
                         .iter()
                         .filter_map(|s| s.as_array())
-                        .flat_map(|toks| {
-                            toks.iter().filter_map(|t| t.as_str().map(String::from))
-                        })
+                        .flat_map(|toks| toks.iter().filter_map(|t| t.as_str().map(String::from)))
                         .collect()
                 })
                 .unwrap_or_default();
@@ -470,8 +467,7 @@ pub(crate) fn parse_rams(content: &str, id: DatasetId) -> Result<LoadedDataset> 
                                     let role = link_arr[2].as_str().unwrap_or("argument");
 
                                     if end < all_tokens.len() {
-                                        let arg_text =
-                                            all_tokens[start..=end.min(start)].join(" ");
+                                        let arg_text = all_tokens[start..=end.min(start)].join(" ");
                                         let tokens = vec![AnnotatedToken {
                                             text: arg_text,
                                             ner_tag: format!("B-ARG_{}", role),

@@ -21,9 +21,8 @@ pub(crate) fn parse_content(content: &str, id: DatasetId) -> Result<LoadedDatase
         )));
     }
 
-    let plan = LoadableDatasetId::parse_plan(id).ok_or_else(|| {
-        Error::InvalidInput(format!("No parser configured for dataset {:?}", id))
-    })?;
+    let plan = LoadableDatasetId::parse_plan(id)
+        .ok_or_else(|| Error::InvalidInput(format!("No parser configured for dataset {:?}", id)))?;
 
     let result = match plan {
         DatasetParsePlan::Conll => ner::parse_conll(content, id),

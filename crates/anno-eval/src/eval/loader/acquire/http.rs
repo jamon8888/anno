@@ -180,10 +180,7 @@ pub(crate) fn download_attempt_bytes(url: &str) -> Result<Vec<u8>> {
                         .take(MAX_BYTES as u64)
                         .read_to_end(&mut bytes)
                         .map_err(|e| {
-                            Error::InvalidInput(format!(
-                                "Failed to read bytes from {}: {}",
-                                url, e
-                            ))
+                            Error::InvalidInput(format!("Failed to read bytes from {}: {}", url, e))
                         })?;
                     return Ok(bytes);
                 }
@@ -203,8 +200,7 @@ pub(crate) fn download_attempt_bytes(url: &str) -> Result<Vec<u8>> {
             }
             Err(ureq::Error::Transport(e)) => {
                 let msg = format!("{}", e);
-                if (msg.contains("timeout") || msg.contains("timed out")) && attempt < MAX_RETRIES
-                {
+                if (msg.contains("timeout") || msg.contains("timed out")) && attempt < MAX_RETRIES {
                     let wait_ms = 1000 * (1 << attempt);
                     std::thread::sleep(std::time::Duration::from_millis(wait_ms));
                     last_error = Some(msg);

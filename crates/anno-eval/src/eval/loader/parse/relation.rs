@@ -1,8 +1,10 @@
 //! Relation extraction and relation-adjacent NER dataset parsers as free functions.
 
-use crate::eval::loader::types::{AnnotatedSentence, AnnotatedToken, DataSource, LoadedDataset, RelationDocument};
-use crate::eval::loader::DatasetLoader;
+use crate::eval::loader::types::{
+    AnnotatedSentence, AnnotatedToken, DataSource, LoadedDataset, RelationDocument,
+};
 use crate::eval::loader::DatasetId;
+use crate::eval::loader::DatasetLoader;
 use anno::{Error, Result};
 
 pub(crate) fn parse_docred(content: &str, id: DatasetId) -> Result<LoadedDataset> {

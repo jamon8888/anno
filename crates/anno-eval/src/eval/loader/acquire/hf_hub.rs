@@ -29,9 +29,12 @@ pub(crate) fn download_hf_dataset_file_from_hub(dataset: &str) -> Result<(String
         )));
     }
 
-    let body = response
-        .into_string()
-        .map_err(|e| Error::InvalidInput(format!("Failed to read HuggingFace dataset metadata: {}", e)))?;
+    let body = response.into_string().map_err(|e| {
+        Error::InvalidInput(format!(
+            "Failed to read HuggingFace dataset metadata: {}",
+            e
+        ))
+    })?;
     let json: serde_json::Value = serde_json::from_str(&body).map_err(|e| {
         Error::InvalidInput(format!(
             "Invalid JSON from HuggingFace dataset metadata: {}",

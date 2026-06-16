@@ -169,8 +169,7 @@ fn test_parse_content_rejects_empty_for_all_loadable_datasets() {
     // Global invariant: no dataset should parse from empty content.
     for loadable in LoadableDatasetId::all() {
         let id: DatasetId = loadable.into();
-        let err = parse::parse_content("   \n\t", id)
-            .expect_err("empty content must error");
+        let err = parse::parse_content("   \n\t", id).expect_err("empty content must error");
         let msg = format!("{err}");
         assert!(
             msg.to_lowercase().contains("empty"),
@@ -282,7 +281,8 @@ fn test_parse_hf_api_response_temporal_standoff_smoke() {
 "signal_expressions":[]
   }}]
 }"#;
-    let ds = parse::ner::parse_hf_api_response(sample, DatasetId::TimexRecognitionSentenceOriginal).unwrap();
+    let ds = parse::ner::parse_hf_api_response(sample, DatasetId::TimexRecognitionSentenceOriginal)
+        .unwrap();
     assert_eq!(ds.sentences.len(), 1);
     assert_eq!(ds.sentences[0].tokens.len(), 3);
     assert_eq!(ds.sentences[0].tokens[0].text, "A");
@@ -322,7 +322,8 @@ fn test_parse_hf_api_response_disrpt_conllu_seg_smoke() {
 "misc":["Seg=B-seg","Seg=O","Seg=O","Seg=B-seg","Seg=O"]
   }}]
 }"#;
-    let ds = parse::ner::parse_hf_api_response(sample, DatasetId::DisrptEngDepScidtbConlluSeg).unwrap();
+    let ds =
+        parse::ner::parse_hf_api_response(sample, DatasetId::DisrptEngDepScidtbConlluSeg).unwrap();
     assert_eq!(ds.sentences.len(), 1);
     let tags: Vec<&str> = ds.sentences[0]
         .tokens
@@ -344,8 +345,7 @@ fn test_parse_agnews_smoke() {
 #[test]
 fn test_parse_dbpedia14_smoke() {
     let sample = r#"{"content":"The Beatles released Abbey Road","label":5}"#;
-    let ds = parse::classification::parse_dbpedia14(sample, DatasetId::DBPedia14)
-        .unwrap();
+    let ds = parse::classification::parse_dbpedia14(sample, DatasetId::DBPedia14).unwrap();
     assert_eq!(ds.sentences.len(), 1);
     assert!(ds.sentences[0].tokens[0].ner_tag.starts_with("B-"));
 }
@@ -353,8 +353,7 @@ fn test_parse_dbpedia14_smoke() {
 #[test]
 fn test_parse_yahoo_answers_smoke() {
     let sample = r#"{"question_title":"Why is the sky blue?","topic":1}"#;
-    let ds = parse::classification::parse_yahoo_answers(sample, DatasetId::YahooAnswers)
-        .unwrap();
+    let ds = parse::classification::parse_yahoo_answers(sample, DatasetId::YahooAnswers).unwrap();
     assert_eq!(ds.sentences.len(), 1);
     assert!(ds.sentences[0].tokens[0].ner_tag.starts_with("B-"));
 }
@@ -694,8 +693,7 @@ fn test_fewrel_jsonl_parse() {
     // FewRel has relation extraction in JSONL format
     // The parser expects integer tags mapping to MultiNERD labels:
     // 0=O, 1=B-PER, 3=B-ORG
-    let fewrel_sample =
-        r#"{"tokens":["John","works","at","Google","."],"ner_tags":[1,0,0,3,0]}"#;
+    let fewrel_sample = r#"{"tokens":["John","works","at","Google","."],"ner_tags":[1,0,0,3,0]}"#;
 
     let result = parse::ner::parse_jsonl_ner(fewrel_sample, DatasetId::FewRel);
     assert!(result.is_ok());

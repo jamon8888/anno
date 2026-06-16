@@ -62,9 +62,10 @@ pub(crate) fn download_from_s3(
             .map_err(|e| Error::InvalidInput(format!("Failed to run aws s3 cp: {}", e)))?;
 
         if output.status.success() {
-            content = Some(String::from_utf8(output.stdout).map_err(|e| {
-                Error::InvalidInput(format!("S3 content not valid UTF-8: {}", e))
-            })?);
+            content =
+                Some(String::from_utf8(output.stdout).map_err(|e| {
+                    Error::InvalidInput(format!("S3 content not valid UTF-8: {}", e))
+                })?);
         } else {
             return Err(Error::InvalidInput(format!(
                 "S3 download failed: {}",

@@ -129,18 +129,17 @@ use std::path::PathBuf;
 /// 4. Ensure it exists in `dataset_registry::DatasetId` (metadata catalog)
 ///
 mod types;
+pub(crate) use types::DatasetParsePlan;
 pub use types::{
     AnnotatedSentence, AnnotatedToken, CacheManifest, CacheManifestEntry, DataSource,
     DatasetMetadata, DatasetStats, LoadableDatasetId, LoadedDataset, RelationDocument,
     TemporalMetadata,
 };
-pub(crate) use types::DatasetParsePlan;
 
 mod acquire;
 mod cache;
 mod parse;
 pub use types::DatasetId;
-
 
 // =============================================================================
 // Dataset Loader
@@ -408,7 +407,8 @@ impl DatasetLoader {
 
         // 2. Try S3 cache if enabled
         if let Some(ref bucket) = self.s3_bucket {
-            if let Ok((content, manifest_entry)) = acquire::s3::download_from_s3(bucket, dataset_id) {
+            if let Ok((content, manifest_entry)) = acquire::s3::download_from_s3(bucket, dataset_id)
+            {
                 cache::enforce_max_download_bytes(content.len(), "S3")?;
                 // Cache locally for future use
                 let cache_path = self.cache_path(id);
@@ -807,7 +807,6 @@ impl Default for DatasetLoader {
         Self::new().expect("Failed to create default DatasetLoader")
     }
 }
-
 
 #[cfg(test)]
 mod tests_a;

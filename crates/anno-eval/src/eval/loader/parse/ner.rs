@@ -3,11 +3,9 @@
 //! Each function was extracted from `impl DatasetLoader` and takes the same
 //! parameters as before (minus `&self` which was never used).
 
-use crate::eval::loader::types::{
-    AnnotatedSentence, AnnotatedToken, DataSource, LoadedDataset,
-};
-use crate::eval::loader::DatasetLoader;
+use crate::eval::loader::types::{AnnotatedSentence, AnnotatedToken, DataSource, LoadedDataset};
 use crate::eval::loader::DatasetId;
+use crate::eval::loader::DatasetLoader;
 use anno::{Error, Result};
 
 /// Parse CoNLL/BIO format content.
@@ -317,12 +315,15 @@ pub(crate) fn parse_hf_api_response(content: &str, id: DatasetId) -> Result<Load
                     continue;
                 }
 
-                let timex_spans =
-                    super::util::spans_from_array(row.get("time_expressions").and_then(|v| v.as_array()));
-                let event_spans =
-                    super::util::spans_from_array(row.get("event_expressions").and_then(|v| v.as_array()));
-                let signal_spans =
-                    super::util::spans_from_array(row.get("signal_expressions").and_then(|v| v.as_array()));
+                let timex_spans = super::util::spans_from_array(
+                    row.get("time_expressions").and_then(|v| v.as_array()),
+                );
+                let event_spans = super::util::spans_from_array(
+                    row.get("event_expressions").and_then(|v| v.as_array()),
+                );
+                let signal_spans = super::util::spans_from_array(
+                    row.get("signal_expressions").and_then(|v| v.as_array()),
+                );
 
                 let mut annotated_tokens = Vec::with_capacity(tokens.len());
                 let mut prev_label: Option<&'static str> = None;
@@ -1034,11 +1035,9 @@ pub(crate) fn parse_cadec_jsonl(content: &str, id: DatasetId) -> Result<LoadedDa
                                                 .ner_tag
                                                 .starts_with(&format!("B-{}", label))
                                         {
-                                            annotated_tokens[idx].ner_tag =
-                                                format!("I-{}", label);
+                                            annotated_tokens[idx].ner_tag = format!("I-{}", label);
                                         } else {
-                                            annotated_tokens[idx].ner_tag =
-                                                format!("B-{}", label);
+                                            annotated_tokens[idx].ner_tag = format!("B-{}", label);
                                         }
                                     }
                                 }

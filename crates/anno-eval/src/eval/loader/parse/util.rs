@@ -89,9 +89,7 @@ pub(crate) fn extract_tag_names_from_features(parsed: &serde_json::Value) -> Vec
 }
 
 /// Extract class label names for `label` fields in HF API features metadata.
-pub(crate) fn extract_class_names_from_features(
-    parsed: &serde_json::Value,
-) -> Vec<String> {
+pub(crate) fn extract_class_names_from_features(parsed: &serde_json::Value) -> Vec<String> {
     let mut names = Vec::new();
     if let Some(features) = parsed.get("features").and_then(|v| v.as_array()) {
         for feature in features {

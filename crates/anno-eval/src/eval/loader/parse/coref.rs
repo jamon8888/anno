@@ -2,8 +2,8 @@
 
 use crate::eval::coref::CorefDocument;
 use crate::eval::loader::types::{AnnotatedSentence, AnnotatedToken, DataSource, LoadedDataset};
-use crate::eval::loader::DatasetLoader;
 use crate::eval::loader::DatasetId;
+use crate::eval::loader::DatasetLoader;
 use anno::{Error, Result};
 
 pub(crate) fn parse_gap(content: &str, id: DatasetId) -> Result<LoadedDataset> {

@@ -82,9 +82,8 @@ fn resolve_hf_config_split_prefer(
         .into_string()
         .map_err(|e| Error::InvalidInput(format!("Failed to read HF splits response: {}", e)))?;
 
-    let json: serde_json::Value = serde_json::from_str(&body).map_err(|e| {
-        Error::InvalidInput(format!("Invalid JSON from HF splits endpoint: {}", e))
-    })?;
+    let json: serde_json::Value = serde_json::from_str(&body)
+        .map_err(|e| Error::InvalidInput(format!("Invalid JSON from HF splits endpoint: {}", e)))?;
 
     let splits = json
         .get("splits")
@@ -317,7 +316,8 @@ pub(crate) fn download_with_resolved_url(id: DatasetId) -> Result<(String, Strin
                 Err(_e) => {
                     // If the datasets-server endpoint is unavailable (rate limits, transient issues),
                     // prefer falling back to the hub-file path rather than downloading HTML.
-                    if let Ok((content, resolved)) = hf_hub::download_hf_dataset_file_from_hub(&hf_ds)
+                    if let Ok((content, resolved)) =
+                        hf_hub::download_hf_dataset_file_from_hub(&hf_ds)
                     {
                         return Ok((content, resolved));
                     }
@@ -334,7 +334,8 @@ pub(crate) fn download_with_resolved_url(id: DatasetId) -> Result<(String, Strin
                 // Some datasets fail row export (422). If we can infer the HF dataset id,
                 // fall back to the hub file download path.
                 if let Some(hf_ds) = hf_dataset_from_rows_url(&url) {
-                    if let Ok((content, resolved)) = hf_hub::download_hf_dataset_file_from_hub(&hf_ds)
+                    if let Ok((content, resolved)) =
+                        hf_hub::download_hf_dataset_file_from_hub(&hf_ds)
                     {
                         return Ok((content, resolved));
                     }

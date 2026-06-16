@@ -82,9 +82,7 @@ fn test_huggingface_access_status_requires_hf_id() {
     // `access_status: HuggingFace` is our strongest signal that a dataset is automatable
     // via the Hub. Keep the registry self-consistent so hinting can stay metadata-driven.
     for &ds in DatasetId::all() {
-        if ds.access_status()
-            != crate::eval::dataset_registry::DatasetAccessibility::HuggingFace
-        {
+        if ds.access_status() != crate::eval::dataset_registry::DatasetAccessibility::HuggingFace {
             continue;
         }
         assert!(
@@ -101,9 +99,7 @@ fn test_huggingface_access_status_is_hintable() {
     // parse-plan hint (not necessarily `HfApiResponse`, since a few datasets are hybrids
     // with bespoke parse plans).
     for &ds in DatasetId::all() {
-        if ds.access_status()
-            != crate::eval::dataset_registry::DatasetAccessibility::HuggingFace
-        {
+        if ds.access_status() != crate::eval::dataset_registry::DatasetAccessibility::HuggingFace {
             continue;
         }
         assert!(
@@ -128,13 +124,22 @@ fn test_map_entity_type() {
     assert_eq!(parse::util::map_entity_type("PER"), EntityType::Person);
     assert_eq!(parse::util::map_entity_type("PERSON"), EntityType::Person);
     assert_eq!(parse::util::map_entity_type("LOC"), EntityType::Location);
-    assert_eq!(parse::util::map_entity_type("ORG"), EntityType::Organization);
+    assert_eq!(
+        parse::util::map_entity_type("ORG"),
+        EntityType::Organization
+    );
 
     // GPE now preserves distinction (Custom, not Location)
-    assert!(matches!(parse::util::map_entity_type("GPE"), EntityType::Custom { .. }));
+    assert!(matches!(
+        parse::util::map_entity_type("GPE"),
+        EntityType::Custom { .. }
+    ));
 
     // MISC -> Custom or Other
-    assert!(matches!(parse::util::map_entity_type("MISC"), EntityType::Custom { .. }));
+    assert!(matches!(
+        parse::util::map_entity_type("MISC"),
+        EntityType::Custom { .. }
+    ));
 
     // OntoNotes types -> Custom (preserves semantics)
     assert!(matches!(
@@ -151,7 +156,10 @@ fn test_map_entity_type() {
     ));
 
     // Numeric types preserved
-    assert_eq!(parse::util::map_entity_type("CARDINAL"), EntityType::Cardinal);
+    assert_eq!(
+        parse::util::map_entity_type("CARDINAL"),
+        EntityType::Cardinal
+    );
 }
 
 #[test]
@@ -551,8 +559,7 @@ fn test_chisiec_all_entity_types() {
         }
     ]"#;
 
-    let dataset = parse::relation::parse_chisiec(sample_json, DatasetId::CHisIEC)
-        .unwrap();
+    let dataset = parse::relation::parse_chisiec(sample_json, DatasetId::CHisIEC).unwrap();
 
     assert_eq!(dataset.sentences.len(), 1);
     let sentence = &dataset.sentences[0];
@@ -600,8 +607,7 @@ fn test_chisiec_unicode_character_offsets() {
         }
     ]"#;
 
-    let dataset = parse::relation::parse_chisiec(sample_json, DatasetId::CHisIEC)
-        .unwrap();
+    let dataset = parse::relation::parse_chisiec(sample_json, DatasetId::CHisIEC).unwrap();
 
     // 曹操 is 2 characters (but 6 bytes in UTF-8)
     let sentence = &dataset.sentences[0];
@@ -687,8 +693,7 @@ fn test_chisiec_empty_entities_handled() {
         }
     ]"#;
 
-    let dataset = parse::relation::parse_chisiec(sample_json, DatasetId::CHisIEC)
-        .unwrap();
+    let dataset = parse::relation::parse_chisiec(sample_json, DatasetId::CHisIEC).unwrap();
 
     assert_eq!(dataset.sentences.len(), 1);
     let sentence = &dataset.sentences[0];
@@ -1020,8 +1025,7 @@ fn test_datasets_with_urls_have_formats() {
         }
 
         // Check if format is missing for public datasets
-        if format.is_none()
-            && access == crate::eval::dataset_registry::DatasetAccessibility::Public
+        if format.is_none() && access == crate::eval::dataset_registry::DatasetAccessibility::Public
         {
             missing_format.push(ds);
         }
@@ -1364,4 +1368,3 @@ fn test_parse_tweettopic() {
         .ner_tag
         .contains("science_&_technology"));
 }
-
