@@ -43,7 +43,9 @@ exit_code="$?"
 set -e
 {
   echo "Gateway exited early with code ${exit_code}."
-  echo "stdout: ${stdout_path}"
-  echo "stderr: ${stderr_path}"
+  echo "--- stdout (${stdout_path}) ---"
+  cat "${stdout_path}" || true
+  echo "--- stderr (${stderr_path}) ---"
+  cat "${stderr_path}" || true
 } >&2
 exit 1
