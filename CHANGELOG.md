@@ -4,6 +4,11 @@ All notable changes to the `anno-rag` crate are documented here. Other crates in
 
 Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Semver: pre-1.0 minor versions may introduce breaking changes.
 
+## [0.13.2] — 2026-06-16
+
+### Fixed
+- **Release pipeline** — `anno-privacy-gateway` was left at `0.13.0` while `anno-rag-bin` was bumped to `0.13.1`, so `cargo-dist`'s lockstep mode silently excluded the gateway binary from the build; the `v0.13.1` release failed the gateway boot-smoke step on every platform (Windows, macOS Intel, macOS ARM). Versions are now bumped together for this release.
+
 ## [0.13.1] — 2026-06-12
 
 ### Fixed
