@@ -137,6 +137,7 @@ pub use types::{
 pub(crate) use types::DatasetParsePlan;
 
 mod acquire;
+mod cache;
 mod parse;
 pub use types::DatasetId;
 
@@ -184,49 +185,6 @@ pub struct DatasetLoader {
 }
 
 impl DatasetLoader {
-    // Default download cap when `ANNO_MAX_DOWNLOAD_BYTES` is unset.
-    //
-    // Rationale: unset should be *usable* but *safe* by default. This cap is meant to prevent
-    // accidental multi-GB downloads while still allowing many evaluation datasets.
-    #[cfg(feature = "eval")]
-    const DEFAULT_MAX_DOWNLOAD_BYTES: u64 = 50 * 1024 * 1024; // 50 MiB
-
-    #[cfg(feature = "eval")]
-    fn max_download_bytes() -> Option<u64> {
-        match std::env::var("ANNO_MAX_DOWNLOAD_BYTES").ok() {
-            Some(s) => {
-                let s = s.trim();
-                if s.is_empty() {
-                    return Some(Self::DEFAULT_MAX_DOWNLOAD_BYTES);
-                }
-                let Ok(v) = s.parse::<u64>() else {
-                    return Some(Self::DEFAULT_MAX_DOWNLOAD_BYTES);
-                };
-                if v == 0 {
-                    None // explicit opt-out
-                } else {
-                    Some(v)
-                }
-            }
-            None => Some(Self::DEFAULT_MAX_DOWNLOAD_BYTES),
-        }
-    }
-
-    #[cfg(feature = "eval")]
-    fn enforce_max_download_bytes(content_len: usize, source: &str) -> Result<()> {
-        let Some(limit) = Self::max_download_bytes() else {
-            return Ok(());
-        };
-        let len = content_len as u64;
-        if len > limit {
-            return Err(Error::InvalidInput(format!(
-                "Download rejected ({} bytes > ANNO_MAX_DOWNLOAD_BYTES={} bytes) from {}",
-                len, limit, source
-            )));
-        }
-        Ok(())
-    }
-
     /// Create a new loader with default cache directory.
     ///
     /// Default location: `~/.cache/anno/datasets` (platform cache via `dirs` crate)
@@ -360,7 +318,7 @@ impl DatasetLoader {
                 e
             ))
         })?;
-        Self::enforce_max_download_bytes(content.len(), "local cache (sync-s3)")?;
+        cache::enforce_max_download_bytes(content.len(), "local cache (sync-s3)")?;
         acquire::s3::upload_to_s3(bucket, id, &content, &entry)
     }
 
@@ -451,7 +409,7 @@ impl DatasetLoader {
         // 2. Try S3 cache if enabled
         if let Some(ref bucket) = self.s3_bucket {
             if let Ok((content, manifest_entry)) = acquire::s3::download_from_s3(bucket, dataset_id) {
-                Self::enforce_max_download_bytes(content.len(), "S3")?;
+                cache::enforce_max_download_bytes(content.len(), "S3")?;
                 // Cache locally for future use
                 let cache_path = self.cache_path(id);
                 fs::write(&cache_path, &content).map_err(|e| {
@@ -471,9 +429,9 @@ impl DatasetLoader {
 
         // 3. Download from original URL
         let (content, resolved_url) = acquire::download_with_resolved_url(dataset_id)?;
-        Self::enforce_max_download_bytes(content.len(), &resolved_url)?;
+        cache::enforce_max_download_bytes(content.len(), &resolved_url)?;
         let file_size = content.len() as u64;
-        let sha256 = self.compute_sha256(&content);
+        let sha256 = cache::compute_sha256(&content);
 
         // 4. Cache the downloaded content locally
         let cache_path = self.cache_path(id);
@@ -505,7 +463,7 @@ impl DatasetLoader {
                 dataset_id: dataset_id.cache_filename().to_string(),
                 source_url: dataset_id.download_url().to_string(),
                 resolved_url: Some(resolved_url),
-                sha256: self.compute_sha256(&content),
+                sha256: cache::compute_sha256(&content),
                 file_size: content.len() as u64,
                 downloaded_at: chrono::Utc::now().to_rfc3339(),
                 sentence_count: dataset.sentences.len(),
@@ -530,27 +488,6 @@ impl DatasetLoader {
         Err(Error::InvalidInput(
             "Dataset is not cached. Rebuild with feature `eval` to enable downloading.".to_string(),
         ))
-    }
-
-    /// Compute SHA256 checksum of content.
-    #[cfg(feature = "eval")]
-    fn compute_sha256(&self, content: &str) -> String {
-        #[cfg(feature = "eval")]
-        {
-            use sha2::{Digest, Sha256};
-            let mut hasher = Sha256::new();
-            hasher.update(content.as_bytes());
-            format!("{:x}", hasher.finalize())
-        }
-        #[cfg(not(feature = "eval"))]
-        {
-            // Fallback if sha2 not available
-            use std::collections::hash_map::DefaultHasher;
-            use std::hash::{Hash, Hasher};
-            let mut hasher = DefaultHasher::new();
-            content.hash(&mut hasher);
-            format!("{:x}", hasher.finish())
-        }
     }
 
     /// Get temporal metadata for a dataset if available.

@@ -1,7 +1,7 @@
 //! HuggingFace Hub download helpers: datasets-server pagination and direct
 //! `hf-hub` crate downloads.
+use crate::eval::loader::cache;
 use crate::eval::loader::DatasetId;
-use crate::eval::loader::DatasetLoader;
 use anno::{Error, Result};
 
 /// Best-effort fallback: download a raw dataset file from the HuggingFace Hub.
@@ -138,7 +138,7 @@ pub(crate) fn download_hf_dataset_file_from_hub(dataset: &str) -> Result<(String
     );
 
     // Best-effort: avoid downloading huge files if a max byte limit is configured.
-    if let Some(limit) = DatasetLoader::max_download_bytes() {
+    if let Some(limit) = cache::max_download_bytes() {
         if let Ok(resp) = ureq::head(&file_url)
             .timeout(std::time::Duration::from_secs(30))
             .call()
