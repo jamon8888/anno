@@ -810,4 +810,6 @@ impl Default for DatasetLoader {
 
 
 #[cfg(test)]
-mod tests;
+mod tests_a;
+#[cfg(test)]
+mod tests_b;
