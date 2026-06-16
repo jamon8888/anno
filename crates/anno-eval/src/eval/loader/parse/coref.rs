@@ -248,9 +248,6 @@ pub(crate) fn parse_litbank(content: &str, id: DatasetId) -> Result<LoadedDatase
     // Improved approach: tokenize entity text into words and apply BIO tags
     let mut tokens: Vec<AnnotatedToken> = Vec::new();
 
-    // Sort entities by start position for processing
-    entities.sort_by_key(|(start, _, _, _)| *start);
-
     let mut last_end = 0usize;
     for (start, end, entity_text, label) in &entities {
         // Add "O" tokens for gaps between entities

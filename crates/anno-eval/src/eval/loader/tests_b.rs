@@ -1365,14 +1365,14 @@ fn test_jsonl_with_unicode_tokens() {
 
 #[test]
 fn test_parse_plan_consistency_with_is_loadable() {
-    // Invariant: parse_plan returns Some iff is_loadable_dataset returns true
+    // Invariant: TryFrom and is_loadable_dataset must agree.
     for &id in DatasetId::all() {
-        let has_plan = LoadableDatasetId::parse_plan(id).is_some();
         let is_loadable = LoadableDatasetId::is_loadable_dataset(id);
+        let try_ok = LoadableDatasetId::try_from(id).is_ok();
         assert_eq!(
-            has_plan, is_loadable,
-            "Mismatch for {:?}: parse_plan={}, is_loadable={}",
-            id, has_plan, is_loadable
+            try_ok, is_loadable,
+            "Mismatch for {:?}: try_from={}, is_loadable={}",
+            id, try_ok, is_loadable
         );
     }
 }

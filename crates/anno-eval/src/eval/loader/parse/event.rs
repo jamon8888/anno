@@ -118,6 +118,13 @@ pub(crate) fn parse_maven(content: &str, id: DatasetId) -> Result<LoadedDataset>
         }
     }
 
+    if sentences.is_empty() {
+        return Err(Error::InvalidInput(format!(
+            "MAVEN file for {:?} contains no valid sentences",
+            id
+        )));
+    }
+
     Ok(LoadedDataset {
         id,
         sentences,
@@ -253,7 +260,7 @@ pub(crate) fn parse_casie(content: &str, id: DatasetId) -> Result<LoadedDataset>
 
     if sentences.is_empty() {
         return Err(Error::InvalidInput(format!(
-            "MAVEN file for {:?} contains no valid sentences",
+            "CASIE file for {:?} contains no valid sentences",
             id
         )));
     }
@@ -437,8 +444,8 @@ pub(crate) fn parse_rams(content: &str, id: DatasetId) -> Result<LoadedDataset> 
                                 .unwrap_or("event");
 
                             // Extract trigger text
-                            if end <= all_tokens.len() {
-                                let trigger_text = all_tokens[start..=end.min(start)].join(" ");
+                            if end < all_tokens.len() {
+                                let trigger_text = all_tokens[start..=end].join(" ");
                                 let tokens = vec![AnnotatedToken {
                                     text: trigger_text,
                                     ner_tag: format!("B-{}", event_type),
@@ -467,7 +474,7 @@ pub(crate) fn parse_rams(content: &str, id: DatasetId) -> Result<LoadedDataset> 
                                     let role = link_arr[2].as_str().unwrap_or("argument");
 
                                     if end < all_tokens.len() {
-                                        let arg_text = all_tokens[start..=end.min(start)].join(" ");
+                                        let arg_text = all_tokens[start..=end].join(" ");
                                         let tokens = vec![AnnotatedToken {
                                             text: arg_text,
                                             ner_tag: format!("B-ARG_{}", role),

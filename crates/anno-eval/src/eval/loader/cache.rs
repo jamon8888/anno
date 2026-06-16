@@ -47,20 +47,8 @@ pub(crate) fn enforce_max_download_bytes(content_len: usize, source: &str) -> Re
 /// Compute SHA256 checksum of content.
 #[cfg(feature = "eval")]
 pub(crate) fn compute_sha256(content: &str) -> String {
-    #[cfg(feature = "eval")]
-    {
-        use sha2::{Digest, Sha256};
-        let mut hasher = Sha256::new();
-        hasher.update(content.as_bytes());
-        format!("{:x}", hasher.finalize())
-    }
-    #[cfg(not(feature = "eval"))]
-    {
-        // Fallback if sha2 not available
-        use std::collections::hash_map::DefaultHasher;
-        use std::hash::{Hash, Hasher};
-        let mut hasher = DefaultHasher::new();
-        content.hash(&mut hasher);
-        format!("{:x}", hasher.finish())
-    }
+    use sha2::{Digest, Sha256};
+    let mut hasher = Sha256::new();
+    hasher.update(content.as_bytes());
+    format!("{:x}", hasher.finalize())
 }

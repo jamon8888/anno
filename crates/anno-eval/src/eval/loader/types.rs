@@ -963,13 +963,9 @@ impl AnnotatedSentence {
                     .join(" ");
 
                 let start = token_starts.get(i).copied().unwrap_or(0);
-                let end_char = if end <= i {
-                    start
-                } else {
-                    let last = end - 1;
-                    token_starts.get(last).copied().unwrap_or(start)
-                        + self.tokens[last].text.chars().count()
-                };
+                let last = end - 1;
+                let end_char = token_starts.get(last).copied().unwrap_or(start)
+                    + self.tokens[last].text.chars().count();
 
                 entities.push(crate::eval::datasets::GoldEntity {
                     text: entity_text,
@@ -996,13 +992,9 @@ impl AnnotatedSentence {
                     .join(" ");
 
                 let start = token_starts.get(i).copied().unwrap_or(0);
-                let end_char = if end <= i {
-                    start
-                } else {
-                    let last = end - 1;
-                    token_starts.get(last).copied().unwrap_or(start)
-                        + self.tokens[last].text.chars().count()
-                };
+                let last = end - 1;
+                let end_char = token_starts.get(last).copied().unwrap_or(start)
+                    + self.tokens[last].text.chars().count();
 
                 entities.push(crate::eval::datasets::GoldEntity {
                     text: entity_text,

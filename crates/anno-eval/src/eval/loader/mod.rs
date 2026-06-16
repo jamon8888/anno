@@ -455,21 +455,10 @@ impl DatasetLoader {
             entity_count: dataset.entity_count(),
             anno_version: env!("CARGO_PKG_VERSION").to_string(),
         };
-        let _ = self.update_manifest(entry); // Best effort
+        let _ = self.update_manifest(entry.clone()); // Best effort
 
         // 7. Optionally upload to S3 for future use (best effort)
         if let Some(ref bucket) = self.s3_bucket {
-            let entry = CacheManifestEntry {
-                dataset_id: dataset_id.cache_filename().to_string(),
-                source_url: dataset_id.download_url().to_string(),
-                resolved_url: Some(resolved_url),
-                sha256: cache::compute_sha256(&content),
-                file_size: content.len() as u64,
-                downloaded_at: chrono::Utc::now().to_rfc3339(),
-                sentence_count: dataset.sentences.len(),
-                entity_count: dataset.entity_count(),
-                anno_version: env!("CARGO_PKG_VERSION").to_string(),
-            };
             let _ = acquire::s3::upload_to_s3(bucket, dataset_id, &content, &entry);
         }
 
@@ -536,27 +525,7 @@ impl DatasetLoader {
     pub fn parse_content_str(&self, content: &str, id: DatasetId) -> Result<LoadedDataset> {
         parse::parse_content(content, id)
     }
-    /// Parse HIPE-2022 style TSV NER format.
-    ///
-    /// Expected format:
-    /// ```text
-    /// TOKEN    NE-COARSE-LIT   NE-COARSE-METO   NE-FINE-LIT   ...
-    /// # hipe2022:document_id = doc123
-    /// word1    B-PER           _                B-pers.author ...
-    /// word2    I-PER           _                I-pers.author ...
-    /// word3    O               _                O             ...
-    /// ```
-    ///
-    /// - First line is header (starts with TOKEN)
-    /// - Lines starting with `#` are metadata comments
-    /// - Data lines are tab-separated with token in first column
-    /// - NE-COARSE-LIT (column 2) contains BIO-tagged NER labels    /// Parse CSV NER format (E-NER/EDGAR-NER style).
-    ///
-    /// Expected format: `Token,Tag` (comma-separated)
-    /// Uses `-DOCSTART-` for document boundaries and empty lines for sentence boundaries.
-    /// Tags use BIO scheme (e.g., O, B-PERSON, I-BUSINESS).
-    ///
-    /// # Errors
+
     // =========================================================================
     // Coreference Loading
     // =========================================================================

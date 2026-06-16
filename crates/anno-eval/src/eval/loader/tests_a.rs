@@ -40,13 +40,13 @@ fn test_loadable_wrapper_invariants() {
 #[test]
 fn test_parse_plan_is_single_source_of_truth_for_loadability() {
     // For *every* registry dataset id:
-    // - parse_plan(id).is_some()  <=>  TryFrom<DatasetId> succeeds
+    // - is_loadable_dataset(id)  <=>  TryFrom<DatasetId> succeeds
     for &ds in DatasetId::all() {
-        let plan_exists = LoadableDatasetId::parse_plan(ds).is_some();
+        let is_loadable = LoadableDatasetId::is_loadable_dataset(ds);
         let try_ok = LoadableDatasetId::try_from(ds).is_ok();
         assert_eq!(
-            plan_exists, try_ok,
-            "parse_plan / TryFrom mismatch for {:?}",
+            is_loadable, try_ok,
+            "is_loadable_dataset / TryFrom mismatch for {:?}",
             ds
         );
     }
@@ -974,22 +974,20 @@ fn test_datasets_with_public_url_and_format_are_hintable() {
         }
     }
 
-    // Allow some datasets to not have hints (complex formats, etc.)
-    // but document them
-    if !missing_hints.is_empty() {
-        // These are known to be missing hints (need special parsers)
-        let known_missing: &[DatasetId] = &[
-            // Add any datasets that intentionally don't have hints here
-        ];
-        for (ds, format) in &missing_hints {
-            if !known_missing.contains(ds) {
-                eprintln!(
-                    "Warning: {:?} (format={}) has public URL but no registry hint",
-                    ds, format
-                );
-            }
-        }
-    }
+    // Allow some datasets to not have hints (complex formats, etc.), but require
+    // them to be explicitly documented here rather than silently missing.
+    let known_missing: &[DatasetId] = &[
+        // Add any datasets that intentionally don't have hints here
+    ];
+    let unexpected_missing: Vec<_> = missing_hints
+        .into_iter()
+        .filter(|(ds, _)| !known_missing.contains(ds))
+        .collect();
+    assert!(
+        unexpected_missing.is_empty(),
+        "Unexpected datasets missing registry hints: {:?}",
+        unexpected_missing
+    );
 }
 
 #[test]
@@ -1106,7 +1104,9 @@ fn test_conll_format_ner_only_datasets_are_parseable() {
 
 #[test]
 fn test_jsonl_ner_datasets_are_parseable() {
-    // JSONL datasets with NER task should ideally be loadable
+    // JSONL datasets with NER task should ideally be loadable, except those that
+    // have no download URL at all (e.g. ContactAuthors access only).
+    let known_missing: &[DatasetId] = &[DatasetId::HistoricalChineseNER];
     let mut jsonl_ner_not_loadable = Vec::new();
 
     for &ds in DatasetId::all() {
@@ -1114,7 +1114,7 @@ fn test_jsonl_ner_datasets_are_parseable() {
         let is_jsonl = format == "JSONL" || format == "JSON-Lines" || format == "jsonl";
         let is_ner = ds.is_ner();
 
-        if !is_jsonl || !is_ner {
+        if !is_jsonl || !is_ner || known_missing.contains(&ds) {
             continue;
         }
 
@@ -1123,16 +1123,11 @@ fn test_jsonl_ner_datasets_are_parseable() {
         }
     }
 
-    // Log for debugging
-    if !jsonl_ner_not_loadable.is_empty() {
-        eprintln!(
-            "JSONL NER datasets not loadable ({}):",
-            jsonl_ner_not_loadable.len()
-        );
-        for ds in &jsonl_ner_not_loadable {
-            eprintln!("  - {:?}", ds);
-        }
-    }
+    assert!(
+        jsonl_ner_not_loadable.is_empty(),
+        "JSONL NER datasets not loadable: {:?}",
+        jsonl_ner_not_loadable
+    );
 }
 
 #[test]

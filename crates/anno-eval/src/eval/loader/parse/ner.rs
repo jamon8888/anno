@@ -121,7 +121,12 @@ pub(crate) fn parse_conll(content: &str, id: DatasetId) -> Result<LoadedDataset>
 pub(crate) fn parse_jsonl_ner(content: &str, id: DatasetId) -> Result<LoadedDataset> {
     let mut sentences = Vec::new();
 
-    // MultiNERD tag mapping (index -> label)
+    // MultiNERD tag mapping (index -> label), used only when `ner_tags` are integers.
+    //
+    // CAVEAT: this function is also routed to for 50+ other JsonlNer datasets
+    // (see DatasetParsePlan::JsonlNer in types.rs). Datasets whose `ner_tags` are
+    // integer indices into a *different* schema than MultiNERD's will silently
+    // get wrong labels here.
     let tag_labels = [
         "O", "B-PER", "I-PER", "B-ORG", "I-ORG", "B-LOC", "I-LOC", "B-ANIM", "I-ANIM", "B-BIO",
         "I-BIO", "B-CEL", "I-CEL", "B-DIS", "I-DIS", "B-EVE", "I-EVE", "B-FOOD", "I-FOOD",
@@ -158,8 +163,14 @@ pub(crate) fn parse_jsonl_ner(content: &str, id: DatasetId) -> Result<LoadedData
         let mut annotated_tokens = Vec::new();
         for (token, tag) in tokens.iter().zip(ner_tags.iter()) {
             let text = token.as_str().unwrap_or("").to_string();
-            let tag_idx = tag.as_u64().unwrap_or(0) as usize;
-            let ner_tag = tag_labels.get(tag_idx).unwrap_or(&"O").to_string();
+            // String tags are dataset-provided labels; use them directly rather than
+            // forcing them through the (MultiNERD-specific) integer-index table.
+            let ner_tag = if let Some(tag_str) = tag.as_str() {
+                tag_str.to_string()
+            } else {
+                let tag_idx = tag.as_u64().unwrap_or(0) as usize;
+                tag_labels.get(tag_idx).unwrap_or(&"O").to_string()
+            };
             annotated_tokens.push(AnnotatedToken { text, ner_tag });
         }
 
@@ -293,8 +304,6 @@ pub(crate) fn parse_hf_api_response(content: &str, id: DatasetId) -> Result<Load
                             let e = i;
                             if !cur.is_empty() {
                                 tokens.push((std::mem::take(&mut cur), s, e));
-                            } else {
-                                cur.clear();
                             }
                         }
                     } else {
@@ -704,18 +713,20 @@ pub(crate) fn parse_csv_ner(content: &str, id: DatasetId) -> Result<LoadedDatase
         // Parse comma-separated line
         // Handle cases where the token itself might be a comma: ",O" means token is comma
         let (token_text, ner_tag) = if let Some(rest) = line.strip_prefix(',') {
-            // Token is empty or the comma itself
-            if let Some(idx) = rest.find(',') {
-                // Format: ,tag (empty token) or ,,tag (comma token)
-                if idx == 0 {
-                    // ",,tag" -> token is comma, tag follows
-                    (",".to_string(), rest[1..].to_string())
+            // Line started with comma: either empty token or comma is the token.
+            if let Some(idx) = rest.rfind(',') {
+                // ",,tag" or ",something,tag" - everything before the last comma is the token.
+                let token_part = &rest[..idx];
+                let tag_part = &rest[idx + 1..];
+                if token_part.is_empty() {
+                    // ",,tag" -> token is the leading comma we stripped
+                    (",".to_string(), tag_part.to_string())
                 } else {
-                    // ",tag" -> empty token
-                    (String::new(), rest[..idx].to_string())
+                    // ",text,tag" -> token includes the leading comma
+                    (format!(",{}", token_part), tag_part.to_string())
                 }
             } else {
-                // ",tag" with no more commas
+                // ",tag" with no more commas -> empty token
                 (String::new(), rest.to_string())
             }
         } else if let Some(idx) = line.rfind(',') {
@@ -903,15 +914,12 @@ pub(crate) fn parse_cadec_hf_api(content: &str, id: DatasetId) -> Result<LoadedD
 
             // Check if this word overlaps with ADE span (byte spans)
             let ner_tag = if word_start >= ade_start_byte && word_end <= ade_end_byte {
-                // Check if this is the first word of the ADE
-                if word_start == ade_start_byte
-                    || tokens.is_empty()
-                    || !tokens
-                        .last()
-                        .expect("tokens.is_empty() checked above")
-                        .ner_tag
-                        .starts_with("I-")
-                {
+                // Check if this is the first word of the ADE span
+                let is_continuation = !tokens.is_empty()
+                    && tokens.last().is_some_and(|t| {
+                        t.ner_tag.starts_with("B-adverse") || t.ner_tag.starts_with("I-adverse")
+                    });
+                if word_start == ade_start_byte || !is_continuation {
                     "B-adverse_drug_event".to_string()
                 } else {
                     "I-adverse_drug_event".to_string()
@@ -1028,12 +1036,12 @@ pub(crate) fn parse_cadec_jsonl(content: &str, id: DatasetId) -> Result<LoadedDa
                                 {
                                     if *token_start >= start && *token_end <= end {
                                         if idx > 0
-                                            && annotated_tokens[idx - 1]
+                                            && (annotated_tokens[idx - 1]
                                                 .ner_tag
                                                 .starts_with(&format!("I-{}", label))
-                                            || annotated_tokens[idx - 1]
-                                                .ner_tag
-                                                .starts_with(&format!("B-{}", label))
+                                                || annotated_tokens[idx - 1]
+                                                    .ner_tag
+                                                    .starts_with(&format!("B-{}", label)))
                                         {
                                             annotated_tokens[idx].ner_tag = format!("I-{}", label);
                                         } else {

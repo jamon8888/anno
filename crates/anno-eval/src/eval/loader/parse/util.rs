@@ -1,5 +1,5 @@
 use anno::EntityType;
-use serde_json;
+use serde_json::Value;
 
 /// Parse BIO tag into prefix and type.
 #[cfg(test)]
@@ -35,7 +35,7 @@ pub(crate) fn map_entity_type(original: &str) -> EntityType {
 }
 
 /// Extract spans (start_char, end_char) pairs from a JSON array.
-pub(crate) fn spans_from_array(arr: Option<&Vec<serde_json::Value>>) -> Vec<(usize, usize)> {
+pub(crate) fn spans_from_array(arr: Option<&Vec<Value>>) -> Vec<(usize, usize)> {
     let mut out = Vec::new();
     let Some(arr) = arr else { return out };
     for item in arr {
@@ -60,7 +60,7 @@ pub(crate) fn overlaps(token_s: usize, token_e: usize, spans: &[(usize, usize)])
 }
 
 /// Extract tag names from HF API features metadata.
-pub(crate) fn extract_tag_names_from_features(parsed: &serde_json::Value) -> Vec<String> {
+pub(crate) fn extract_tag_names_from_features(parsed: &Value) -> Vec<String> {
     let mut tag_names = Vec::new();
 
     if let Some(features) = parsed.get("features").and_then(|v| v.as_array()) {
@@ -89,7 +89,7 @@ pub(crate) fn extract_tag_names_from_features(parsed: &serde_json::Value) -> Vec
 }
 
 /// Extract class label names for `label` fields in HF API features metadata.
-pub(crate) fn extract_class_names_from_features(parsed: &serde_json::Value) -> Vec<String> {
+pub(crate) fn extract_class_names_from_features(parsed: &Value) -> Vec<String> {
     let mut names = Vec::new();
     if let Some(features) = parsed.get("features").and_then(|v| v.as_array()) {
         for feature in features {

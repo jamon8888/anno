@@ -129,7 +129,7 @@ pub(crate) fn download_hf_dataset_file_from_hub(dataset: &str) -> Result<(String
 
     let Some(filename) = chosen else {
         return Err(Error::InvalidInput(format!(
-            "No downloadable .jsonl file discovered for HF dataset {}",
+            "No downloadable dataset file discovered for HF dataset {}",
             dataset
         )));
     };

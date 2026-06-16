@@ -110,7 +110,9 @@ pub(crate) fn upload_to_s3(
         .map_err(|e| Error::InvalidInput(format!("Failed to spawn aws s3 cp: {}", e)))?;
 
     if let Some(ref mut stdin) = child.stdin {
-        let _ = stdin.write_all(content.as_bytes());
+        stdin.write_all(content.as_bytes()).map_err(|e| {
+            Error::InvalidInput(format!("Failed to write content to aws s3 cp stdin: {}", e))
+        })?;
     }
 
     let status = child
