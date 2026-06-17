@@ -42,6 +42,30 @@ use std::{collections::HashMap, sync::Arc};
 use tokio::sync::{OnceCell, RwLock};
 use wire::*;
 
+/// Warmup lifecycle for background model loading.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) enum WarmupPhase {
+    /// Background warmup has not started yet.
+    Idle,
+    /// Warmup in progress. `started_ms` = Unix epoch milliseconds at spawn time.
+    Loading { started_ms: u64 },
+    /// Both models loaded successfully.
+    Ready { elapsed_ms: u64 },
+    /// One or both models failed to load.
+    Failed { error: String },
+}
+
+impl WarmupPhase {
+    fn as_str(&self) -> &'static str {
+        match self {
+            Self::Idle => "idle",
+            Self::Loading { .. } => "loading",
+            Self::Ready { .. } => "ready",
+            Self::Failed { .. } => "failed",
+        }
+    }
+}
+
 /// State held by the MCP server: either a pre-built Pipeline (eager) or a
 /// lazily-initialised one (deferred until the first tool call).
 #[derive(Clone)]
@@ -55,6 +79,7 @@ pub struct AnnoRagServer {
     allowed_roots: AllowedRoots,
     tabular_storage: Arc<OnceCell<Arc<anno_rag_tabular::storage::StorageHandle>>>,
     extraction_status: Arc<RwLock<HashMap<anno_rag_tabular::ReviewId, ReviewExtractionStatus>>>,
+    warmup_phase: Arc<RwLock<WarmupPhase>>,
     #[allow(dead_code)] // populated + consumed by the rmcp #[tool_router] macro
     tool_router: ToolRouter<Self>,
 }
@@ -89,6 +114,56 @@ impl AnnoRagServer {
 
     fn pipeline_arc(&self) -> Option<Arc<Pipeline>> {
         self.pipeline.get().cloned()
+    }
+
+    /// Return the initialized `Pipeline`, or a JSON error string ready to return to the caller.
+    ///
+    /// Returns `Err(json_string)` when warmup is in progress (phase `Loading`),
+    /// permanently failed, or models are still missing. Returns `Ok(&Pipeline)` when ready.
+    ///
+    /// Tool handlers replace `self.pipeline().await.map_err(|e| ...)` with this.
+    async fn require_models(&self) -> Result<&Pipeline, String> {
+        let phase = self.warmup_phase.read().await.clone();
+        match phase {
+            WarmupPhase::Loading { started_ms } => {
+                let elapsed_s = std::time::SystemTime::now()
+                    .duration_since(std::time::UNIX_EPOCH)
+                    .unwrap_or_default()
+                    .as_secs()
+                    .saturating_sub(started_ms / 1000);
+                return Err(serde_json::json!({
+                    "ok": false,
+                    "error": "models_loading",
+                    "message": format!(
+                        "anno-rag is loading ML models in the background \
+                         ({elapsed_s}s elapsed). This typically takes 60–120 s on \
+                         first startup. Please retry in a moment."
+                    ),
+                    "hint": "Run `anno-rag status` to check progress."
+                })
+                .to_string());
+            }
+            WarmupPhase::Failed { ref error } => {
+                return Err(serde_json::json!({
+                    "ok": false,
+                    "error": "models_failed",
+                    "message": format!("Model loading failed: {error}"),
+                    "hint": "Run `anno-rag download-models` in a terminal, then restart the MCP server."
+                })
+                .to_string());
+            }
+            WarmupPhase::Idle | WarmupPhase::Ready { .. } => {}
+        }
+        // Phase is Ready or Idle — fall through to normal pipeline check.
+        self.pipeline().await.map_err(|e| {
+            serde_json::json!({
+                "ok": false,
+                "error": "pipeline_error",
+                "message": e.to_string(),
+                "hint": "Run `anno-rag download-models` in a terminal, then restart the MCP server."
+            })
+            .to_string()
+        })
     }
 
     async fn knowledge(&self) -> anno_knowledge_store::Result<&crate::knowledge::KnowledgeService> {
@@ -276,6 +351,7 @@ impl AnnoRagServer {
             allowed_roots: allowed_roots_from_env(),
             tabular_storage: Arc::new(OnceCell::new()),
             extraction_status: Arc::new(RwLock::new(HashMap::new())),
+            warmup_phase: Arc::new(RwLock::new(WarmupPhase::Idle)),
             tool_router: Self::tool_router(),
         }
     }
@@ -293,6 +369,7 @@ impl AnnoRagServer {
             allowed_roots: allowed_roots_from_env(),
             tabular_storage: Arc::new(OnceCell::new()),
             extraction_status: Arc::new(RwLock::new(HashMap::new())),
+            warmup_phase: Arc::new(RwLock::new(WarmupPhase::Idle)),
             tool_router: Self::tool_router(),
         }
     }
@@ -3668,11 +3745,57 @@ pub async fn serve_stdio_lazy(cfg: AnnoRagConfig, key: [u8; 32]) -> anno_rag::er
         .map_err(|e| anno_rag::error::Error::Detect(format!("MCP server failed to start: {e}")))?;
 
     // Warm up models in background so first tool call doesn't block for ~78s.
+    // FIXED — builds pipeline then loads both ML models in parallel.
     tokio::spawn(async move {
         tracing::info!("anno-rag: background model warmup starting");
-        match warmup_server.pipeline().await {
-            Ok(_) => tracing::info!("anno-rag: background model warmup complete"),
-            Err(e) => tracing::warn!("anno-rag: background model warmup skipped: {e}"),
+
+        let started_ms = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap_or_default()
+            .as_millis() as u64;
+        *warmup_server.warmup_phase.write().await = WarmupPhase::Loading { started_ms };
+
+        // Step 1: init Pipeline struct (opens LanceDB + vault, ~2 s).
+        let pipeline_arc = match warmup_server.pipeline().await {
+            Ok(_) => warmup_server.pipeline_arc(),
+            Err(e) => {
+                tracing::warn!("anno-rag: warmup skipped — pipeline init failed: {e}");
+                *warmup_server.warmup_phase.write().await =
+                    WarmupPhase::Failed { error: e.to_string() };
+                return;
+            }
+        };
+
+        let Some(arc) = pipeline_arc else {
+            tracing::warn!("anno-rag: warmup skipped — pipeline_arc returned None after init");
+            *warmup_server.warmup_phase.write().await =
+                WarmupPhase::Failed { error: "pipeline_arc returned None".into() };
+            return;
+        };
+
+        // Step 2: load embedder + detector in parallel (detector in spawn_blocking).
+        let outcome = arc.warmup().await;
+
+        let elapsed_ms = (std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap_or_default()
+            .as_millis() as u64)
+            .saturating_sub(started_ms);
+
+        if outcome.all_ok() {
+            tracing::info!(elapsed_ms, "anno-rag: background model warmup complete");
+            *warmup_server.warmup_phase.write().await = WarmupPhase::Ready { elapsed_ms };
+        } else {
+            let error = [
+                outcome.embedder_error.map(|e| format!("embedder: {e}")),
+                outcome.detector_error.map(|e| format!("detector: {e}")),
+            ]
+            .into_iter()
+            .flatten()
+            .collect::<Vec<_>>()
+            .join("; ");
+            tracing::warn!(elapsed_ms, "anno-rag: background model warmup failed: {error}");
+            *warmup_server.warmup_phase.write().await = WarmupPhase::Failed { error };
         }
     });
 
@@ -4969,5 +5092,58 @@ mod lazy_tests {
                 "successful general index should include knowledge object: {result}"
             );
         }
+    }
+}
+
+#[cfg(test)]
+mod warmup_phase_tests {
+    use super::*;
+
+    #[test]
+    fn warmup_phase_debug_display() {
+        let phase = WarmupPhase::Loading { started_ms: 0 };
+        let s = format!("{phase:?}");
+        assert!(s.contains("Loading"));
+        let phase2 = WarmupPhase::Ready { elapsed_ms: 5000 };
+        assert!(format!("{phase2:?}").contains("5000"));
+    }
+
+    #[tokio::test(flavor = "current_thread")]
+    async fn serve_stdio_lazy_warmup_phase_starts_idle() {
+        let dir = tempfile::tempdir().unwrap();
+        let cfg = AnnoRagConfig {
+            data_dir: dir.path().to_path_buf(),
+            ..Default::default()
+        };
+        let _models_env = crate::model_inventory::test_env::ScopedAnnoModelsDir::unset();
+        let server = AnnoRagServer::new_lazy(cfg, [0u8; 32]);
+
+        // Phase must start Idle before any warmup is triggered.
+        let phase = server.warmup_phase.read().await.clone();
+        assert_eq!(phase, WarmupPhase::Idle, "phase must start Idle");
+    }
+
+    #[tokio::test(flavor = "current_thread")]
+    async fn require_models_returns_loading_when_warmup_in_progress() {
+        let dir = tempfile::tempdir().unwrap();
+        let cfg = AnnoRagConfig {
+            data_dir: dir.path().to_path_buf(),
+            ..Default::default()
+        };
+        let _models_env = crate::model_inventory::test_env::ScopedAnnoModelsDir::unset();
+        let server = AnnoRagServer::new_lazy(cfg, [0u8; 32]);
+
+        // Force phase to Loading.
+        *server.warmup_phase.write().await = WarmupPhase::Loading { started_ms: 0 };
+
+        let result = server.require_models().await;
+        assert!(result.is_err(), "must return Err during loading");
+        let json_str = match result {
+            Err(s) => s,
+            Ok(_) => panic!("expected Err but got Ok"),
+        };
+        let v: serde_json::Value = serde_json::from_str(&json_str).unwrap();
+        assert_eq!(v["ok"], false);
+        assert_eq!(v["error"], "models_loading");
     }
 }
