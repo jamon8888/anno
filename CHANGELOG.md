@@ -4,6 +4,12 @@ All notable changes to the `anno-rag` crate are documented here. Other crates in
 
 Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Semver: pre-1.0 minor versions may introduce breaking changes.
 
+## [0.13.3] — 2026-06-17
+
+### Fixed
+- **macOS aarch64 release** — `anno-privacy-gateway` was missing from the ORT rpath-patching loop in `release.yml`; `dyld` failed to find `libonnxruntime.dylib` at smoke-test time → SIGABRT (exit 134). The fix adds `anno-privacy-gateway` to the `ORT_RPATH_BINARIES` array alongside `anno-rag`, so both binaries receive `install_name_tool` patching before the boot smoke.
+- **Smoke script diagnostics** — `smoke-gateway.sh` / `smoke-gateway.ps1` now print gateway stdout/stderr inline on failure instead of only file paths.
+
 ## [0.13.2] — 2026-06-16
 
 ### Fixed
