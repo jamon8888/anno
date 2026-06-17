@@ -482,7 +482,7 @@ impl AnnoRagServer {
     }
 
     async fn legacy_search_impl(&self, params: SearchParams) -> Result<serde_json::Value, String> {
-        let p = self.pipeline().await.map_err(|e| e.to_string())?;
+        let p = self.require_models().await?;
         let result = if params.rerank {
             #[cfg(feature = "rerank")]
             {
@@ -532,7 +532,7 @@ impl AnnoRagServer {
     }
 
     async fn vault_stats_impl(&self) -> Result<serde_json::Value, String> {
-        let p = self.pipeline().await.map_err(|e| e.to_string())?;
+        let p = self.require_models().await?;
         let s = p.vault_stats().await;
         let wire = VaultStatsResult {
             total_mappings: s.total_mappings,
@@ -546,7 +546,7 @@ impl AnnoRagServer {
         p: PrivacyPrepareFolderParams,
     ) -> Result<serde_json::Value, String> {
         let source_root = self.validate_existing_mcp_path("source_root", &p.source_root)?;
-        let pipeline = self.pipeline().await.map_err(|e| e.to_string())?;
+        let pipeline = self.require_models().await?;
         let summary = pipeline
             .privacy_prepare_folder(&source_root, p.recursive)
             .await
@@ -559,7 +559,7 @@ impl AnnoRagServer {
         p: PrivacyFinalizeFolderParams,
     ) -> Result<serde_json::Value, String> {
         let workspace = self.validate_existing_mcp_path("workspace", &p.workspace)?;
-        let pipeline = self.pipeline().await.map_err(|e| e.to_string())?;
+        let pipeline = self.require_models().await?;
         let summary = pipeline
             .privacy_finalize_folder(&workspace)
             .await
@@ -588,7 +588,7 @@ impl AnnoRagServer {
     ) -> Result<serde_json::Value, String> {
         let folder = self.validate_existing_mcp_path("folder", &p.folder)?;
         let folder_string = folder.display().to_string();
-        let pipeline = self.pipeline().await.map_err(|e| e.to_string())?;
+        let pipeline = self.require_models().await?;
         let out = corpus_id
             .map(|corpus_id| corpus_legal_output_dir(self.cfg.as_ref(), corpus_id))
             .unwrap_or_else(|| folder.join("anon"));
@@ -691,7 +691,7 @@ impl AnnoRagServer {
         p: LegalSearchParams,
         effective: &anno_corpus_core::EffectiveCorpus,
     ) -> Result<serde_json::Value, String> {
-        let pipeline = self.pipeline().await.map_err(|e| e.to_string())?;
+        let pipeline = self.require_models().await?;
         let LegalSearchParams {
             query,
             top_k,
@@ -1147,7 +1147,7 @@ impl AnnoRagServer {
     async fn knowledge_sync_impl(&self, p: KnowledgeSyncParams) -> Result<SyncSummary, String> {
         let service = self.knowledge().await.map_err(|e| e.to_string())?;
         self.validate_knowledge_sync_paths(service, p.source_id.as_deref())?;
-        let pipeline = self.pipeline().await.map_err(|e| e.to_string())?;
+        let pipeline = self.require_models().await?;
         service
             .sync(
                 pipeline,
@@ -1215,7 +1215,7 @@ impl AnnoRagServer {
                     warnings.push(format!("knowledge source {source_id}: {error}"));
                     continue;
                 }
-                let pipeline = self.pipeline().await.map_err(|e| e.to_string())?;
+                let pipeline = self.require_models().await?;
                 match service
                     .sync(
                         pipeline,
@@ -1753,8 +1753,8 @@ impl AnnoRagServer {
             };
         }
 
-        if let Err(e) = self.pipeline().await {
-            let error = e.to_string();
+        if let Err(json) = self.require_models().await {
+            let error = json;
             self.extraction_status.write().await.insert(
                 review_id,
                 ReviewExtractionStatus::blocked(review_id, row_count, column_count, error.clone()),
@@ -2077,9 +2077,9 @@ impl AnnoRagServer {
         description = "Replace pseudo-tokens (PERSON_1, EMAIL_2, NIR_3, etc.) in text back with original PII from the local vault."
     )]
     async fn rehydrate(&self, Parameters(params): Parameters<RehydrateParams>) -> String {
-        let p = match self.pipeline().await {
+        let p = match self.require_models().await {
             Ok(p) => p,
-            Err(e) => return format!("Error: {e}"),
+            Err(json) => return json,
         };
         match p.rehydrate(&params.text).await {
             Ok(r) => {
@@ -2098,9 +2098,9 @@ impl AnnoRagServer {
         description = "Dry-run scan: detect PII in text without replacing. Returns category, source, confidence, and char offsets for each entity."
     )]
     async fn detect(&self, Parameters(params): Parameters<DetectParams>) -> String {
-        let p = match self.pipeline().await {
+        let p = match self.require_models().await {
             Ok(p) => p,
-            Err(e) => return format!("Error: {e}"),
+            Err(json) => return json,
         };
         match p.detect(&params.text) {
             Ok(entities) => {
@@ -2183,9 +2183,9 @@ impl AnnoRagServer {
         description = "Save a memory. Default async mode stores raw text immediately and enriches NER refs in the background. Returns the new id and stored text."
     )]
     async fn memory_save(&self, Parameters(p): Parameters<MemorySaveParams>) -> String {
-        let pipeline = match self.pipeline().await {
+        let pipeline = match self.require_models().await {
             Ok(p) => p,
-            Err(e) => return format!("Error: {e}"),
+            Err(json) => return json,
         };
         let start = std::time::Instant::now();
         let kind = p.kind.as_deref().and_then(parse_kind);
@@ -2256,9 +2256,9 @@ impl AnnoRagServer {
         description = "Recall memories by hybrid (vector + FTS) search. Returns rehydrated plaintext for the caller's tenant."
     )]
     async fn memory_recall(&self, Parameters(p): Parameters<MemoryRecallParams>) -> String {
-        let pipeline = match self.pipeline().await {
+        let pipeline = match self.require_models().await {
             Ok(p) => p,
-            Err(e) => return format!("Error: {e}"),
+            Err(json) => return json,
         };
         let start = std::time::Instant::now();
         let kinds = p
@@ -2354,9 +2354,9 @@ impl AnnoRagServer {
         description = "Forget memories by id or by query. Cascades to vault tokens no longer referenced. Returns the SLO note that physical erasure may take up to 24h."
     )]
     async fn memory_forget(&self, Parameters(p): Parameters<MemoryForgetParams>) -> String {
-        let pipeline = match self.pipeline().await {
+        let pipeline = match self.require_models().await {
             Ok(p) => p,
-            Err(e) => return format!("Error: {e}"),
+            Err(json) => return json,
         };
         let id = match &p.id {
             Some(s) => match uuid::Uuid::parse_str(s) {
@@ -2403,9 +2403,9 @@ impl AnnoRagServer {
     /// List memories with cursor pagination.
     #[tool(description = "List memories with optional session/kind filter and cursor pagination.")]
     async fn memory_list(&self, Parameters(p): Parameters<MemoryListParams>) -> String {
-        let pipeline = match self.pipeline().await {
+        let pipeline = match self.require_models().await {
             Ok(p) => p,
-            Err(e) => return format!("Error: {e}"),
+            Err(json) => return json,
         };
         let start = std::time::Instant::now();
         let kind = p.kind.as_deref().and_then(parse_kind);
@@ -2461,9 +2461,9 @@ impl AnnoRagServer {
         &self,
         Parameters(p): Parameters<MemoryGraphRecallParams>,
     ) -> String {
-        let pipeline = match self.pipeline().await {
+        let pipeline = match self.require_models().await {
             Ok(p) => p,
-            Err(e) => return format!("Error: {e}"),
+            Err(json) => return json,
         };
         let start = std::time::Instant::now();
         let r = pipeline
@@ -2502,9 +2502,9 @@ impl AnnoRagServer {
         description = "Mark a memory as no longer valid as of the given timestamp (default: now). No-op if valid_to is already set."
     )]
     async fn memory_invalidate(&self, Parameters(p): Parameters<MemoryInvalidateParams>) -> String {
-        let pipeline = match self.pipeline().await {
+        let pipeline = match self.require_models().await {
             Ok(p) => p,
-            Err(e) => return format!("Error: {e}"),
+            Err(json) => return json,
         };
         let id = match uuid::Uuid::parse_str(&p.id) {
             Ok(u) => anno_rag::memory::MemoryId(u),
@@ -2676,9 +2676,9 @@ impl AnnoRagServer {
                        Returns rows from the Cypher result set."
     )]
     async fn legal_graph_query(&self, Parameters(p): Parameters<LegalGraphQueryParams>) -> String {
-        let pipeline = match self.pipeline().await {
+        let pipeline = match self.require_models().await {
             Ok(p) => p,
-            Err(e) => return format!("Error: {e}"),
+            Err(json) => return json,
         };
         use anno_rag::legal::query::GraphIntent;
         let intent = match p.intent.as_str() {
@@ -2751,9 +2751,9 @@ impl AnnoRagServer {
         &self,
         Parameters(p): Parameters<LegalRehydrateCitationParams>,
     ) -> String {
-        let pipeline = match self.pipeline().await {
+        let pipeline = match self.require_models().await {
             Ok(p) => p,
-            Err(e) => return format!("Error: {e}"),
+            Err(json) => return json,
         };
         let chunk_id = match uuid::Uuid::parse_str(&p.chunk_id) {
             Ok(u) => u,
@@ -2802,9 +2802,9 @@ impl AnnoRagServer {
         &self,
         Parameters(p): Parameters<LegalExtractContractParams>,
     ) -> String {
-        let pipeline = match self.pipeline().await {
+        let pipeline = match self.require_models().await {
             Ok(p) => p,
-            Err(e) => return format!("Error: {e}"),
+            Err(json) => return json,
         };
         let start = std::time::Instant::now();
         match pipeline.legal_extract_contract(&p.doc_id).await {
@@ -2832,9 +2832,9 @@ impl AnnoRagServer {
         &self,
         Parameters(p): Parameters<LegalExtractCaseFileParams>,
     ) -> String {
-        let pipeline = match self.pipeline().await {
+        let pipeline = match self.require_models().await {
             Ok(p) => p,
-            Err(e) => return format!("Error: {e}"),
+            Err(json) => return json,
         };
         let start = std::time::Instant::now();
         match pipeline.legal_extract_case_file(&p.dossier_id).await {
@@ -2858,9 +2858,9 @@ impl AnnoRagServer {
                        Returns events (kind, event_date, deadline_date, chunk_id) \
                        in chronological order.")]
     async fn legal_timeline(&self, Parameters(p): Parameters<LegalTimelineParams>) -> String {
-        let pipeline = match self.pipeline().await {
+        let pipeline = match self.require_models().await {
             Ok(p) => p,
-            Err(e) => return format!("Error: {e}"),
+            Err(json) => return json,
         };
         let start = std::time::Instant::now();
         match pipeline.legal_timeline(&p.dossier_id).await {
@@ -2887,9 +2887,9 @@ impl AnnoRagServer {
                        lawyer recommendations."
     )]
     async fn legal_risk_review(&self, Parameters(p): Parameters<LegalRiskReviewParams>) -> String {
-        let pipeline = match self.pipeline().await {
+        let pipeline = match self.require_models().await {
             Ok(p) => p,
-            Err(e) => return format!("Error: {e}"),
+            Err(json) => return json,
         };
         let start = std::time::Instant::now();
         match pipeline.legal_risk_review(&p.scope_id, p.is_dossier).await {
@@ -2923,9 +2923,9 @@ impl AnnoRagServer {
         &self,
         Parameters(p): Parameters<LegalMandatoryClauseAuditParams>,
     ) -> String {
-        let pipeline = match self.pipeline().await {
+        let pipeline = match self.require_models().await {
             Ok(p) => p,
-            Err(e) => return format!("Error: {e}"),
+            Err(json) => return json,
         };
         let doc_id = match uuid::Uuid::parse_str(&p.doc_id) {
             Ok(u) => u,
@@ -3020,9 +3020,9 @@ impl AnnoRagServer {
         &self,
         Parameters(p): Parameters<LegalValidateFieldParams>,
     ) -> String {
-        let pipeline = match self.pipeline().await {
+        let pipeline = match self.require_models().await {
             Ok(p) => p,
-            Err(e) => return format!("Error: {e}"),
+            Err(json) => return json,
         };
         let chunk_id = match uuid::Uuid::parse_str(&p.chunk_id) {
             Ok(u) => u,
@@ -3203,9 +3203,9 @@ impl AnnoRagServer {
             Ok(ts) => ts,
             Err(e) => return format!("Error: {e}"),
         };
-        let _pipeline = match self.pipeline().await {
+        let _pipeline = match self.require_models().await {
             Ok(p) => p,
-            Err(e) => return format!("Error (pipeline): {e}"),
+            Err(json) => return json,
         };
         let review_id = match uuid::Uuid::parse_str(&p.review_id) {
             Ok(u) => anno_rag_tabular::ReviewId(u),
@@ -3577,16 +3577,8 @@ impl AnnoRagServer {
         if let Err(e) = self.knowledge().await {
             return format!("Error: {e}");
         }
-        if self.pipeline().await.is_err() {
-            return serde_json::json!({
-                "ok": false,
-                "error": {
-                    "code": "models_missing",
-                    "message": "Models are not available. Fast FTS search works on already-indexed content; indexing is paused.",
-                    "next_action": "Run download_models or ask Anno to set up models."
-                }
-            })
-            .to_string();
+        if let Err(json) = self.require_models().await {
+            return json;
         }
         match self.knowledge_sync_impl(p).await {
             Ok(summary) => {
@@ -5098,6 +5090,29 @@ mod lazy_tests {
 #[cfg(test)]
 mod warmup_phase_tests {
     use super::*;
+
+    #[test]
+    fn all_pipeline_calls_replaced_with_require_models() {
+        let src = std::fs::read_to_string(
+            std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("src/lib.rs"),
+        )
+        .unwrap();
+        // Count only lines that contain the call but are NOT inside the sentinel test itself
+        // (the test body and the doc comment inside require_models add noise).
+        let needle = concat!("self", ".pipeline().await");
+        let remaining = src
+            .lines()
+            .filter(|l| l.contains(needle))
+            .filter(|l| !l.contains("all_pipeline_calls_replaced_with_require_models"))
+            .filter(|l| !l.contains("remaining"))
+            .filter(|l| !l.contains("///"))
+            .count();
+        // Only the definition of pipeline() itself and its use inside require_models() should remain.
+        assert!(
+            remaining <= 2,
+            "{remaining} remaining self.pipeline().await call-sites — expected ≤2"
+        );
+    }
 
     #[test]
     fn warmup_phase_debug_display() {
