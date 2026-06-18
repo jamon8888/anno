@@ -379,7 +379,7 @@ dependencies = [
 
 [[package]]
 name = "anno-rag-bin"
-version = "0.13.3"
+version = "0.13.4"
 dependencies = [
  "anno-config-meta",
  "anno-rag",
