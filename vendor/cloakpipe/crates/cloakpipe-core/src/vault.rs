@@ -114,9 +114,10 @@ impl Vault {
                     // .tmp written by a save() that was interrupted before
                     // rename completed.
                     if std::path::Path::new(&tmp_path).exists() {
-                        if let Ok(v) = Self::load(&tmp_path, &key) {
+                        if let Ok(mut v) = Self::load(&tmp_path, &key) {
                             // .tmp decrypts fine — restore it as the canonical file.
                             if std::fs::rename(&tmp_path, path).is_ok() {
+                                v.path = Some(path.to_string());
                                 return Ok(v);
                             }
                         }
@@ -128,8 +129,9 @@ impl Vault {
         // vault.enc missing — check for an orphaned .tmp left by a crash
         // between write and rename.
         if std::path::Path::new(&tmp_path).exists() {
-            if let Ok(v) = Self::load(&tmp_path, &key) {
+            if let Ok(mut v) = Self::load(&tmp_path, &key) {
                 if std::fs::rename(&tmp_path, path).is_ok() {
+                    v.path = Some(path.to_string());
                     return Ok(v);
                 }
             }
