@@ -180,6 +180,10 @@ fn default_ner_model_id() -> String {
     "SemplificaAI/gliner2-multi-v1-onnx".to_string()
 }
 
+fn default_ner_onnx_precision() -> String {
+    "fp16".to_string()
+}
+
 fn default_ner_candle_model_id() -> String {
     "fastino/gliner2-multi-v1".to_string()
 }
@@ -312,6 +316,17 @@ pub struct AnnoRagConfig {
     )]
     #[serde(default = "default_ner_model_id")]
     pub ner_model_id: String,
+
+    /// ONNX graph precision for the NER detector: "fp16" (default, ~250 MB)
+    /// or "fp32" (~500 MB, exact). fp16 is near-lossless for inference.
+    #[config_meta(
+        env = "ANNO_RAG_NER_ONNX_PRECISION",
+        cli = "--ner-onnx-precision",
+        doc = "ONNX graph precision for NER: fp16 (default, ~250 MB) or fp32 (~500 MB). Default: fp16",
+        since = "0.13"
+    )]
+    #[serde(default = "default_ner_onnx_precision")]
+    pub ner_onnx_precision: String,
 
     /// HuggingFace model ID for the Candle GLiNER2 detector backend.
     #[config_meta(
@@ -738,6 +753,7 @@ impl Default for AnnoRagConfig {
             vector_index_threshold: default_vector_index_threshold(),
             ner_warmup_model: default_ner_warmup_model(),
             ner_model_id: default_ner_model_id(),
+            ner_onnx_precision: default_ner_onnx_precision(),
             ner_candle_model_id: default_ner_candle_model_id(),
             mcp_server_name: default_mcp_server_name(),
             ocr_mode: default_ocr_mode(),
@@ -851,6 +867,9 @@ impl AnnoRagConfig {
         if let Ok(v) = std::env::var("ANNO_RAG_NER_MODEL") {
             self.ner_model_id = v;
         }
+        if let Ok(v) = std::env::var("ANNO_RAG_NER_ONNX_PRECISION") {
+            self.ner_onnx_precision = v;
+        }
         if let Ok(v) = std::env::var("ANNO_RAG_NER_CANDLE_MODEL") {
             self.ner_candle_model_id = v;
         }
@@ -944,6 +963,9 @@ impl AnnoRagConfig {
         }
         if let Some(v) = ov.ner_model_id.clone() {
             self.ner_model_id = v;
+        }
+        if let Some(v) = ov.ner_onnx_precision.clone() {
+            self.ner_onnx_precision = v;
         }
         if let Some(v) = ov.ner_candle_model_id.clone() {
             self.ner_candle_model_id = v;
@@ -1568,5 +1590,18 @@ mod tests {
         let mut cfg = AnnoRagConfig::default();
         cfg.embed_model = "local-model".to_string();
         assert_eq!(cfg.embedder_dir(), "local-model");
+    }
+
+    #[test]
+    fn ner_onnx_precision_defaults_to_fp16() {
+        let c = AnnoRagConfig::default();
+        assert_eq!(c.ner_onnx_precision, "fp16");
+    }
+
+    #[test]
+    fn ner_onnx_precision_round_trips_fp32() {
+        let json = r#"{"ner_onnx_precision":"fp32"}"#;
+        let c: AnnoRagConfig = serde_json::from_str(json).unwrap();
+        assert_eq!(c.ner_onnx_precision, "fp32");
     }
 }

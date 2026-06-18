@@ -18,6 +18,18 @@ const NER_ONNX_BASES: &[&str] = &[
     "classifier",
 ];
 
+/// Ordered HF-relative candidate paths for one ONNX graph `base`, preferring
+/// `precision` ("fp16" or "fp32") and falling back to the other.
+fn onnx_candidates(base: &str, precision: &str) -> Vec<String> {
+    let fp16 = format!("fp16_v2/{base}_fp16.onnx");
+    let fp32 = format!("fp32_v2/{base}_fp32.onnx");
+    if precision == "fp32" {
+        vec![fp32, fp16]
+    } else {
+        vec![fp16, fp32]
+    }
+}
+
 /// Download both model families into `cfg.models_cache()` using the layout
 /// that `Embedder::load` and `Detector::new` expect when `ANNO_MODELS_DIR`
 /// is set.
@@ -40,7 +52,13 @@ pub async fn download(cfg: &AnnoRagConfig) -> Result<PathBuf> {
     }
     migrate_legacy_cache(&models_dir, cfg);
     download_embedder(&models_dir, &cfg.embed_model).await?;
-    download_ner(&models_dir, &cfg.ner_model_id, &cfg.ner_onnx_dir()).await?;
+    download_ner(
+        &models_dir,
+        &cfg.ner_model_id,
+        &cfg.ner_onnx_dir(),
+        cfg.ner_onnx_precision.as_str(),
+    )
+    .await?;
     #[cfg(any(feature = "gpu-metal", feature = "gliner2-candle-cpu"))]
     download_candle_ner(&models_dir, &cfg.ner_candle_model_id, &cfg.ner_candle_dir()).await?;
     Ok(models_dir)
@@ -97,14 +115,20 @@ async fn download_embedder(models_dir: &Path, model_id: &str) -> Result<()> {
     Ok(())
 }
 
-async fn download_ner(models_dir: &Path, model_id: &str, ner_dir_name: &str) -> Result<()> {
+async fn download_ner(
+    models_dir: &Path,
+    model_id: &str,
+    ner_dir_name: &str,
+    precision: &str,
+) -> Result<()> {
     let ner_dir = models_dir.join(ner_dir_name);
     tokio::fs::create_dir_all(&ner_dir).await?;
 
     // GLiNER2 uses the sync hf-hub API internally; run in spawn_blocking
     let ner_dir_clone = ner_dir.clone();
     let model_id = model_id.to_string();
-    tokio::task::spawn_blocking(move || download_ner_sync(&ner_dir_clone, &model_id))
+    let precision = precision.to_string();
+    tokio::task::spawn_blocking(move || download_ner_sync(&ner_dir_clone, &model_id, &precision))
         .await
         .map_err(|e| Error::Detect(format!("spawn_blocking panic: {e}")))?
 }
@@ -140,18 +164,19 @@ async fn download_candle_ner(
     Ok(())
 }
 
-fn download_ner_sync(ner_dir: &Path, model_id: &str) -> Result<()> {
+fn download_ner_sync(ner_dir: &Path, model_id: &str, precision: &str) -> Result<()> {
     use hf_hub::api::sync::Api;
 
     let api = Api::new().map_err(|e| Error::Detect(format!("hf-hub init: {e}")))?;
     let repo = api.model(model_id.to_string());
 
-    // Tokenizer — try fp32_v2/ first (matches from_pretrained fallback order)
-    let tokenizer_candidates = [
-        "fp32_v2/tokenizer.json",
-        "fp16_v2/tokenizer.json",
-        "tokenizer.json",
-    ];
+    // Tokenizer — try precision-matching subdir first, then the other, then bare root.
+    let (preferred_tok, fallback_tok) = if precision == "fp32" {
+        ("fp32_v2/tokenizer.json", "fp16_v2/tokenizer.json")
+    } else {
+        ("fp16_v2/tokenizer.json", "fp32_v2/tokenizer.json")
+    };
+    let tokenizer_candidates = [preferred_tok, fallback_tok, "tokenizer.json"];
     let (tokenizer_src, tokenizer_rel) = tokenizer_candidates
         .iter()
         .find_map(|&rel| repo.get(rel).ok().map(|p| (p, rel)))
@@ -165,16 +190,12 @@ fn download_ner_sync(ner_dir: &Path, model_id: &str) -> Result<()> {
         .get("fp32_v2/config.json")
         .or_else(|_| repo.get("config.json"));
 
-    // 8 ONNX files — fp32_v2 preferred, fp16_v2 fallback
+    // 8 ONNX files — preferred precision first, fallback to the other
     for base in NER_ONNX_BASES {
-        let candidates = [
-            format!("fp32_v2/{base}_fp32.onnx"),
-            format!("fp16_v2/{base}_fp16.onnx"),
-        ];
-        let c_refs: Vec<&str> = candidates.iter().map(String::as_str).collect();
-        c_refs
+        let candidates = onnx_candidates(base, precision);
+        candidates
             .iter()
-            .find_map(|c| repo.get(c).ok())
+            .find_map(|c| repo.get(c.as_str()).ok())
             .ok_or_else(|| Error::Detect(format!("gliner2 onnx graph '{base}' not found")))?;
     }
 
@@ -234,6 +255,20 @@ fn mirror_dir(src_root: &Path, dest_root: &Path) -> Result<()> {
 mod tests {
     use super::*;
     use crate::AnnoRagConfig;
+
+    #[test]
+    fn onnx_candidates_fp16_first_when_precision_fp16() {
+        let c = onnx_candidates("encoder", "fp16");
+        assert_eq!(c[0], "fp16_v2/encoder_fp16.onnx");
+        assert_eq!(c[1], "fp32_v2/encoder_fp32.onnx");
+    }
+
+    #[test]
+    fn onnx_candidates_fp32_first_when_precision_fp32() {
+        let c = onnx_candidates("encoder", "fp32");
+        assert_eq!(c[0], "fp32_v2/encoder_fp32.onnx");
+        assert_eq!(c[1], "fp16_v2/encoder_fp16.onnx");
+    }
 
     #[test]
     fn download_targets_models_cache_path() {

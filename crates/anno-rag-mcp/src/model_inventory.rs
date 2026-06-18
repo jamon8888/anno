@@ -73,6 +73,26 @@ pub fn gliner_onnx_required_files(ner_onnx_dir: &str) -> Vec<String> {
     files
 }
 
+/// Generate required ONNX NER file paths for a given `precision` ("fp16" or "fp32")
+/// relative to the models directory.
+///
+/// Used to report what files would be downloaded for a given precision choice.
+/// For readiness checks, prefer [`inspect_onnx_gliner_family`] which accepts either
+/// precision variant.
+pub fn ner_onnx_files(ner_onnx_dir: &str, precision: &str) -> Vec<String> {
+    let (subdir, suffix) = if precision == "fp32" {
+        ("fp32_v2", "fp32")
+    } else {
+        ("fp16_v2", "fp16")
+    };
+    let mut files: Vec<String> = GLINER_ONNX_BASES
+        .iter()
+        .map(|base| format!("{ner_onnx_dir}/{subdir}/{base}_{suffix}.onnx"))
+        .collect();
+    files.push(format!("{ner_onnx_dir}/{subdir}/tokenizer.json"));
+    files
+}
+
 /// Generate required Candle GLiNER file paths relative to the models directory.
 pub fn candle_gliner_required_files(candle_dir: &str) -> Vec<String> {
     vec![
@@ -530,6 +550,70 @@ mod tests {
 
         assert!(inventory.ready);
         assert_eq!(inventory.detector_backend, "onnx");
+        assert!(inventory.gliner.ready);
+    }
+
+    #[test]
+    fn fp32_only_cache_is_ready_even_when_config_precision_is_fp16() {
+        // Simulate a cache that was populated with fp32 files (old default).
+        // Even with the new fp16 default, the inventory must report READY.
+        let tmp = tempfile::tempdir().expect("tempdir");
+        let models_dir = tmp.path().join("models");
+        let cfg = AnnoRagConfig {
+            data_dir: tmp.path().to_path_buf(),
+            accelerator: AcceleratorPreference::Cpu,
+            ner_onnx_precision: "fp16".to_string(), // config asks for fp16
+            ..Default::default()
+        };
+        let embedder_dir = cfg.embedder_dir();
+        let ner_onnx_dir = cfg.ner_onnx_dir();
+        // Populate only fp32 files (old-style cache)
+        let mut rels: Vec<String> = embedder_required_files(&embedder_dir);
+        rels.extend(gliner_onnx_required_files(&ner_onnx_dir));
+        for rel in &rels {
+            let path = models_dir.join(rel);
+            std::fs::create_dir_all(path.parent().expect("parent")).unwrap();
+            std::fs::write(path, b"test model file").unwrap();
+        }
+        let _models_env = test_env::ScopedAnnoModelsDir::unset();
+
+        let inventory = ModelInventoryService::new(&cfg).inspect();
+
+        assert!(
+            inventory.ready,
+            "fp32-populated cache must be READY even when config precision is fp16"
+        );
+        assert_eq!(inventory.state, ModelInventoryState::Ready);
+        assert!(inventory.gliner.ready);
+    }
+
+    #[test]
+    fn fp16_only_cache_is_ready() {
+        // Simulate a cache that was populated only with fp16 files.
+        let tmp = tempfile::tempdir().expect("tempdir");
+        let models_dir = tmp.path().join("models");
+        let cfg = AnnoRagConfig {
+            data_dir: tmp.path().to_path_buf(),
+            accelerator: AcceleratorPreference::Cpu,
+            ner_onnx_precision: "fp16".to_string(),
+            ..Default::default()
+        };
+        let embedder_dir = cfg.embedder_dir();
+        let ner_onnx_dir = cfg.ner_onnx_dir();
+        // Populate only fp16 files
+        let mut rels: Vec<String> = embedder_required_files(&embedder_dir);
+        rels.extend(ner_onnx_files(&ner_onnx_dir, "fp16"));
+        for rel in &rels {
+            let path = models_dir.join(rel);
+            std::fs::create_dir_all(path.parent().expect("parent")).unwrap();
+            std::fs::write(path, b"test model file").unwrap();
+        }
+        let _models_env = test_env::ScopedAnnoModelsDir::unset();
+
+        let inventory = ModelInventoryService::new(&cfg).inspect();
+
+        assert!(inventory.ready, "fp16-only cache must be READY");
+        assert_eq!(inventory.state, ModelInventoryState::Ready);
         assert!(inventory.gliner.ready);
     }
 
