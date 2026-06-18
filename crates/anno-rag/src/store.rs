@@ -1269,7 +1269,8 @@ impl Store {
         let mut builder =
             IvfHnswSqIndexBuilder::default().distance_type(distance_from_str(&self.index_distance));
         if let Some(parts) = self.index_num_partitions {
-            builder = builder.num_partitions(parts as u32);
+            let parts_u32 = u32::try_from(parts).unwrap_or(u32::MAX);
+            builder = builder.num_partitions(parts_u32);
         }
         self.tbl
             .create_index(&["vector"], Index::IvfHnswSq(builder))
