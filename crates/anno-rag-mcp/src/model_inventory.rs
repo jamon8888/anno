@@ -344,7 +344,10 @@ mod lock_tests {
         let dir = tempfile::tempdir().unwrap();
         let lock = dir.path().join(".download-lock");
         std::fs::write(&lock, b"downloading").unwrap();
-        assert!(!is_lock_stale(&lock), "a just-written lock must not be stale");
+        assert!(
+            !is_lock_stale(&lock),
+            "a just-written lock must not be stale"
+        );
     }
 
     #[test]
@@ -353,11 +356,7 @@ mod lock_tests {
         let lock = dir.path().join(".download-lock");
         std::fs::write(&lock, b"downloading").unwrap();
         let stale_time = SystemTime::now() - Duration::from_secs(660);
-        filetime::set_file_mtime(
-            &lock,
-            filetime::FileTime::from_system_time(stale_time),
-        )
-        .unwrap();
+        filetime::set_file_mtime(&lock, filetime::FileTime::from_system_time(stale_time)).unwrap();
         assert!(is_lock_stale(&lock), "lock >10 min old must be stale");
     }
 
