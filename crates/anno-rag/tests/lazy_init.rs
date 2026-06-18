@@ -33,7 +33,7 @@ async fn warmup_loads_both_models() {
     assert!(!pipeline.embedder_loaded());
     assert!(!pipeline.detector_loaded());
 
-    let outcome = pipeline.warmup().await;
+    let outcome = std::sync::Arc::clone(&pipeline).warmup().await;
     assert!(
         outcome.embedder_ok,
         "embedder failed: {:?}",
