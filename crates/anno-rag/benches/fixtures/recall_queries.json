@@ -1,0 +1,7 @@
+[
+  { "query": "résiliation du contrat avec préavis", "relevant_substring": "résiliation" },
+  { "query": "clause de confidentialité entre les parties", "relevant_substring": "confidentialit" },
+  { "query": "calcul de l'indemnité de licenciement", "relevant_substring": "licenciement" },
+  { "query": "obligations de l'employeur envers le salarié", "relevant_substring": "employeur" },
+  { "query": "résolution amiable des litiges par médiation", "relevant_substring": "médiation" }
+]
