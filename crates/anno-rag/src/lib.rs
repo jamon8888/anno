@@ -55,4 +55,4 @@ pub mod vault_admin;
 
 pub use config::AnnoRagConfig;
 pub use error::{Error, Result};
-pub use pipeline::Pipeline;
+pub use pipeline::{Pipeline, WarmupOutcome};

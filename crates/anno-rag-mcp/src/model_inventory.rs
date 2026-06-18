@@ -186,7 +186,17 @@ impl ModelInventoryService {
     #[must_use]
     pub fn inspect(&self) -> ModelInventory {
         let path = self.effective.path.clone();
-        let downloading = path.join(".download-lock").exists();
+        let lock_path = path.join(".download-lock");
+        let lock_exists = lock_path.exists();
+        let lock_stale = is_lock_stale(&lock_path);
+        let downloading = lock_exists && !lock_stale;
+        if lock_stale && lock_exists {
+            tracing::warn!(
+                lock = %lock_path.display(),
+                "stale .download-lock found (>10 min old) — treating as absent"
+            );
+            let _ = std::fs::remove_file(&lock_path);
+        }
         let embedder_files = embedder_required_files(&self.embedder_dir);
         let embedder_file_refs: Vec<&str> = embedder_files.iter().map(String::as_str).collect();
         let e5 = inspect_family(&path, &self.embedder_dir, &embedder_file_refs);
@@ -260,6 +270,25 @@ pub fn effective_models_dir(cfg: &AnnoRagConfig) -> EffectiveModelsDir {
     }
 }
 
+const LOCK_STALE_SECS: u64 = 600; // 10 minutes
+
+/// Return `true` when a `.download-lock` file exists but its mtime is older
+/// than `LOCK_STALE_SECS` — meaning the process that created it is no longer running.
+pub(crate) fn is_lock_stale(lock: &Path) -> bool {
+    let meta = match std::fs::metadata(lock) {
+        Ok(m) => m,
+        Err(_) => return false, // does not exist — not stale
+    };
+    let mtime = match meta.modified() {
+        Ok(t) => t,
+        Err(_) => return false, // can't read mtime — be conservative
+    };
+    match std::time::SystemTime::now().duration_since(mtime) {
+        Ok(age) => age.as_secs() > LOCK_STALE_SECS,
+        Err(_) => false,
+    }
+}
+
 fn inspect_family(root: &Path, name: &str, required_files: &[&str]) -> ModelFamilyStatus {
     let missing_files = required_files
         .iter()
@@ -303,6 +332,39 @@ fn inspect_onnx_gliner_family(root: &Path, ner_onnx_dir: &str) -> ModelFamilySta
     let required = gliner_onnx_required_files(ner_onnx_dir);
     let refs: Vec<&str> = required.iter().map(String::as_str).collect();
     inspect_family(root, ner_onnx_dir, &refs)
+}
+
+#[cfg(test)]
+mod lock_tests {
+    use super::*;
+    use std::time::{Duration, SystemTime};
+
+    #[test]
+    fn fresh_lock_is_not_stale() {
+        let dir = tempfile::tempdir().unwrap();
+        let lock = dir.path().join(".download-lock");
+        std::fs::write(&lock, b"downloading").unwrap();
+        assert!(
+            !is_lock_stale(&lock),
+            "a just-written lock must not be stale"
+        );
+    }
+
+    #[test]
+    fn lock_older_than_10_min_is_stale() {
+        let dir = tempfile::tempdir().unwrap();
+        let lock = dir.path().join(".download-lock");
+        std::fs::write(&lock, b"downloading").unwrap();
+        let stale_time = SystemTime::now() - Duration::from_secs(660);
+        filetime::set_file_mtime(&lock, filetime::FileTime::from_system_time(stale_time)).unwrap();
+        assert!(is_lock_stale(&lock), "lock >10 min old must be stale");
+    }
+
+    #[test]
+    fn missing_lock_is_not_stale() {
+        let dir = tempfile::tempdir().unwrap();
+        assert!(!is_lock_stale(&dir.path().join(".download-lock")));
+    }
 }
 
 #[cfg(test)]

@@ -286,7 +286,7 @@ dependencies = [
 
 [[package]]
 name = "anno-privacy-gateway"
-version = "0.13.2"
+version = "0.13.3"
 dependencies = [
  "async-stream",
  "axum",
@@ -379,7 +379,7 @@ dependencies = [
 
 [[package]]
 name = "anno-rag-bin"
-version = "0.13.2"
+version = "0.13.3"
 dependencies = [
  "anno-config-meta",
  "anno-rag",
@@ -413,6 +413,7 @@ dependencies = [
  "anno-source-local",
  "async-trait",
  "chrono",
+ "filetime",
  "keyring",
  "lancedb",
  "rmcp",
@@ -11346,7 +11347,6 @@ dependencies = [
  "hyper-util",
  "icu_locale_core",
  "icu_provider",
- "kreuzberg",
  "litemap",
  "log",
  "matrixmultiply",

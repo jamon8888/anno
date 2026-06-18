@@ -281,6 +281,51 @@ impl Pipeline {
     pub fn detector_loaded(&self) -> bool {
         self.detector.initialized()
     }
+}
+
+/// Outcome of a background model warmup pass.
+#[derive(Debug, Clone)]
+pub struct WarmupOutcome {
+    /// Whether the embedder loaded successfully.
+    pub embedder_ok: bool,
+    /// Error message from the embedder, if any.
+    pub embedder_error: Option<String>,
+    /// Whether the detector loaded successfully.
+    pub detector_ok: bool,
+    /// Error message from the detector, if any.
+    pub detector_error: Option<String>,
+}
+
+impl WarmupOutcome {
+    /// Returns `true` if both models loaded without error.
+    #[must_use]
+    pub fn all_ok(&self) -> bool {
+        self.embedder_ok && self.detector_ok
+    }
+}
+
+impl Pipeline {
+    /// Load embedder and detector concurrently. Idempotent — safe to call multiple times.
+    /// Detector runs in `spawn_blocking` (CPU-bound ORT compilation, 30-120 s).
+    pub async fn warmup(self: Arc<Self>) -> WarmupOutcome {
+        let arc_for_det = Arc::clone(&self);
+        let (embed_result, det_join) = tokio::join!(
+            async { self.embedder().await.err().map(|e| e.to_string()) },
+            tokio::task::spawn_blocking(move || {
+                arc_for_det
+                    .detector_get_or_init()
+                    .err()
+                    .map(|e| e.to_string())
+            })
+        );
+        let det_result = det_join.unwrap_or_else(|e| Some(format!("spawn_blocking panic: {e}")));
+        WarmupOutcome {
+            embedder_ok: embed_result.is_none(),
+            embedder_error: embed_result,
+            detector_ok: det_result.is_none(),
+            detector_error: det_result,
+        }
+    }
 
     /// List distinct raw legal corpus folder paths from the chunks table.
     /// Intended for local/admin bookkeeping; do not expose these paths in MCP

@@ -42,6 +42,30 @@ use std::{collections::HashMap, sync::Arc};
 use tokio::sync::{OnceCell, RwLock};
 use wire::*;
 
+/// Warmup lifecycle for background model loading.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) enum WarmupPhase {
+    /// Background warmup has not started yet.
+    Idle,
+    /// Warmup in progress. `started_ms` = Unix epoch milliseconds at spawn time.
+    Loading { started_ms: u64 },
+    /// Both models loaded successfully.
+    Ready { elapsed_ms: u64 },
+    /// One or both models failed to load.
+    Failed { error: String },
+}
+
+impl WarmupPhase {
+    fn as_str(&self) -> &'static str {
+        match self {
+            Self::Idle => "idle",
+            Self::Loading { .. } => "loading",
+            Self::Ready { .. } => "ready",
+            Self::Failed { .. } => "failed",
+        }
+    }
+}
+
 /// State held by the MCP server: either a pre-built Pipeline (eager) or a
 /// lazily-initialised one (deferred until the first tool call).
 #[derive(Clone)]
@@ -55,6 +79,7 @@ pub struct AnnoRagServer {
     allowed_roots: AllowedRoots,
     tabular_storage: Arc<OnceCell<Arc<anno_rag_tabular::storage::StorageHandle>>>,
     extraction_status: Arc<RwLock<HashMap<anno_rag_tabular::ReviewId, ReviewExtractionStatus>>>,
+    warmup_phase: Arc<RwLock<WarmupPhase>>,
     #[allow(dead_code)] // populated + consumed by the rmcp #[tool_router] macro
     tool_router: ToolRouter<Self>,
 }
@@ -72,12 +97,29 @@ impl AnnoRagServer {
                     let inventory =
                         crate::model_inventory::ModelInventoryService::new(&cfg).inspect();
                     if !inventory.ready {
+                        let mut missing: Vec<&str> = Vec::new();
+                        if !inventory.e5.ready {
+                            missing.extend(inventory.e5.missing_files.iter().map(String::as_str));
+                        }
+                        if !inventory.gliner.ready {
+                            missing
+                                .extend(inventory.gliner.missing_files.iter().map(String::as_str));
+                        }
+                        let missing_summary = if missing.is_empty() {
+                            String::new()
+                        } else {
+                            format!(" Missing files: {}.", missing.join(", "))
+                        };
+                        let env_hint = if inventory.from_env {
+                            format!(" (ANNO_MODELS_DIR={})", inventory.path)
+                        } else {
+                            String::new()
+                        };
                         return Err(anno_rag::error::Error::Config(format!(
-                            "Models not ready at {} (state={}). Ask me to 'Set up anno-rag' \
-                             or run `anno-rag download-models` in a terminal, \
-                             then restart the extension.",
-                            inventory.path,
-                            inventory.state.as_str()
+                            "Models not ready at {path}{env_hint} (state={state}).{missing_summary} \
+                             Run `anno-rag download-models` in a terminal, then restart the MCP server.",
+                            path = inventory.path,
+                            state = inventory.state.as_str(),
                         )));
                     }
                     Pipeline::new((*cfg).clone(), key).await.map(Arc::new)
@@ -89,6 +131,56 @@ impl AnnoRagServer {
 
     fn pipeline_arc(&self) -> Option<Arc<Pipeline>> {
         self.pipeline.get().cloned()
+    }
+
+    /// Return the initialized `Pipeline`, or a JSON error string ready to return to the caller.
+    ///
+    /// Returns `Err(json_string)` when warmup is in progress (phase `Loading`),
+    /// permanently failed, or models are still missing. Returns `Ok(&Pipeline)` when ready.
+    ///
+    /// Tool handlers replace `self.pipeline().await.map_err(|e| ...)` with this.
+    async fn require_models(&self) -> Result<&Pipeline, String> {
+        let phase = self.warmup_phase.read().await.clone();
+        match phase {
+            WarmupPhase::Loading { started_ms } => {
+                let elapsed_s = std::time::SystemTime::now()
+                    .duration_since(std::time::UNIX_EPOCH)
+                    .unwrap_or_default()
+                    .as_secs()
+                    .saturating_sub(started_ms / 1000);
+                return Err(serde_json::json!({
+                    "ok": false,
+                    "error": "models_loading",
+                    "message": format!(
+                        "anno-rag is loading ML models in the background \
+                         ({elapsed_s}s elapsed). This typically takes 60–120 s on \
+                         first startup. Please retry in a moment."
+                    ),
+                    "hint": "Run `anno-rag status` to check progress."
+                })
+                .to_string());
+            }
+            WarmupPhase::Failed { ref error } => {
+                return Err(serde_json::json!({
+                    "ok": false,
+                    "error": "models_failed",
+                    "message": format!("Model loading failed: {error}"),
+                    "hint": "Run `anno-rag download-models` in a terminal, then restart the MCP server."
+                })
+                .to_string());
+            }
+            WarmupPhase::Idle | WarmupPhase::Ready { .. } => {}
+        }
+        // Phase is Ready or Idle — fall through to normal pipeline check.
+        self.pipeline().await.map_err(|e| {
+            serde_json::json!({
+                "ok": false,
+                "error": "pipeline_error",
+                "message": e.to_string(),
+                "hint": "Run `anno-rag download-models` in a terminal, then restart the MCP server."
+            })
+            .to_string()
+        })
     }
 
     async fn knowledge(&self) -> anno_knowledge_store::Result<&crate::knowledge::KnowledgeService> {
@@ -276,6 +368,7 @@ impl AnnoRagServer {
             allowed_roots: allowed_roots_from_env(),
             tabular_storage: Arc::new(OnceCell::new()),
             extraction_status: Arc::new(RwLock::new(HashMap::new())),
+            warmup_phase: Arc::new(RwLock::new(WarmupPhase::Idle)),
             tool_router: Self::tool_router(),
         }
     }
@@ -293,6 +386,7 @@ impl AnnoRagServer {
             allowed_roots: allowed_roots_from_env(),
             tabular_storage: Arc::new(OnceCell::new()),
             extraction_status: Arc::new(RwLock::new(HashMap::new())),
+            warmup_phase: Arc::new(RwLock::new(WarmupPhase::Idle)),
             tool_router: Self::tool_router(),
         }
     }
@@ -405,7 +499,7 @@ impl AnnoRagServer {
     }
 
     async fn legacy_search_impl(&self, params: SearchParams) -> Result<serde_json::Value, String> {
-        let p = self.pipeline().await.map_err(|e| e.to_string())?;
+        let p = self.require_models().await?;
         let result = if params.rerank {
             #[cfg(feature = "rerank")]
             {
@@ -455,7 +549,7 @@ impl AnnoRagServer {
     }
 
     async fn vault_stats_impl(&self) -> Result<serde_json::Value, String> {
-        let p = self.pipeline().await.map_err(|e| e.to_string())?;
+        let p = self.require_models().await?;
         let s = p.vault_stats().await;
         let wire = VaultStatsResult {
             total_mappings: s.total_mappings,
@@ -469,7 +563,7 @@ impl AnnoRagServer {
         p: PrivacyPrepareFolderParams,
     ) -> Result<serde_json::Value, String> {
         let source_root = self.validate_existing_mcp_path("source_root", &p.source_root)?;
-        let pipeline = self.pipeline().await.map_err(|e| e.to_string())?;
+        let pipeline = self.require_models().await?;
         let summary = pipeline
             .privacy_prepare_folder(&source_root, p.recursive)
             .await
@@ -482,7 +576,7 @@ impl AnnoRagServer {
         p: PrivacyFinalizeFolderParams,
     ) -> Result<serde_json::Value, String> {
         let workspace = self.validate_existing_mcp_path("workspace", &p.workspace)?;
-        let pipeline = self.pipeline().await.map_err(|e| e.to_string())?;
+        let pipeline = self.require_models().await?;
         let summary = pipeline
             .privacy_finalize_folder(&workspace)
             .await
@@ -511,7 +605,7 @@ impl AnnoRagServer {
     ) -> Result<serde_json::Value, String> {
         let folder = self.validate_existing_mcp_path("folder", &p.folder)?;
         let folder_string = folder.display().to_string();
-        let pipeline = self.pipeline().await.map_err(|e| e.to_string())?;
+        let pipeline = self.require_models().await?;
         let out = corpus_id
             .map(|corpus_id| corpus_legal_output_dir(self.cfg.as_ref(), corpus_id))
             .unwrap_or_else(|| folder.join("anon"));
@@ -614,7 +708,7 @@ impl AnnoRagServer {
         p: LegalSearchParams,
         effective: &anno_corpus_core::EffectiveCorpus,
     ) -> Result<serde_json::Value, String> {
-        let pipeline = self.pipeline().await.map_err(|e| e.to_string())?;
+        let pipeline = self.require_models().await?;
         let LegalSearchParams {
             query,
             top_k,
@@ -779,10 +873,32 @@ impl AnnoRagServer {
         let inventory =
             crate::model_inventory::ModelInventoryService::new(self.cfg.as_ref()).inspect();
         let loaded = self.pipeline_arc();
+        let warmup_info = {
+            let phase = self.warmup_phase.read().await;
+            match &*phase {
+                WarmupPhase::Idle => serde_json::json!({ "phase": "idle" }),
+                WarmupPhase::Loading { started_ms } => {
+                    let elapsed_s = std::time::SystemTime::now()
+                        .duration_since(std::time::UNIX_EPOCH)
+                        .unwrap_or_default()
+                        .as_secs()
+                        .saturating_sub(started_ms / 1000);
+                    serde_json::json!({ "phase": "loading", "elapsed_s": elapsed_s })
+                }
+                WarmupPhase::Ready { elapsed_ms } => {
+                    serde_json::json!({ "phase": "ready", "elapsed_ms": elapsed_ms })
+                }
+                WarmupPhase::Failed { error } => {
+                    serde_json::json!({ "phase": "failed", "error": error })
+                }
+            }
+        };
         let models = serde_json::json!({
             "inventory": inventory,
             "embedder_loaded": loaded.as_ref().is_some_and(|p| p.embedder_loaded()),
             "detector_loaded": loaded.as_ref().is_some_and(|p| p.detector_loaded()),
+            "warmup_phase": warmup_info["phase"],
+            "warmup": warmup_info,
         });
 
         serde_json::json!({
@@ -1070,7 +1186,7 @@ impl AnnoRagServer {
     async fn knowledge_sync_impl(&self, p: KnowledgeSyncParams) -> Result<SyncSummary, String> {
         let service = self.knowledge().await.map_err(|e| e.to_string())?;
         self.validate_knowledge_sync_paths(service, p.source_id.as_deref())?;
-        let pipeline = self.pipeline().await.map_err(|e| e.to_string())?;
+        let pipeline = self.require_models().await?;
         service
             .sync(
                 pipeline,
@@ -1138,7 +1254,7 @@ impl AnnoRagServer {
                     warnings.push(format!("knowledge source {source_id}: {error}"));
                     continue;
                 }
-                let pipeline = self.pipeline().await.map_err(|e| e.to_string())?;
+                let pipeline = self.require_models().await?;
                 match service
                     .sync(
                         pipeline,
@@ -1676,8 +1792,8 @@ impl AnnoRagServer {
             };
         }
 
-        if let Err(e) = self.pipeline().await {
-            let error = e.to_string();
+        if let Err(json) = self.require_models().await {
+            let error = json;
             self.extraction_status.write().await.insert(
                 review_id,
                 ReviewExtractionStatus::blocked(review_id, row_count, column_count, error.clone()),
@@ -2000,9 +2116,9 @@ impl AnnoRagServer {
         description = "Replace pseudo-tokens (PERSON_1, EMAIL_2, NIR_3, etc.) in text back with original PII from the local vault."
     )]
     async fn rehydrate(&self, Parameters(params): Parameters<RehydrateParams>) -> String {
-        let p = match self.pipeline().await {
+        let p = match self.require_models().await {
             Ok(p) => p,
-            Err(e) => return format!("Error: {e}"),
+            Err(json) => return json,
         };
         match p.rehydrate(&params.text).await {
             Ok(r) => {
@@ -2021,9 +2137,9 @@ impl AnnoRagServer {
         description = "Dry-run scan: detect PII in text without replacing. Returns category, source, confidence, and char offsets for each entity."
     )]
     async fn detect(&self, Parameters(params): Parameters<DetectParams>) -> String {
-        let p = match self.pipeline().await {
+        let p = match self.require_models().await {
             Ok(p) => p,
-            Err(e) => return format!("Error: {e}"),
+            Err(json) => return json,
         };
         match p.detect(&params.text) {
             Ok(entities) => {
@@ -2106,9 +2222,9 @@ impl AnnoRagServer {
         description = "Save a memory. Default async mode stores raw text immediately and enriches NER refs in the background. Returns the new id and stored text."
     )]
     async fn memory_save(&self, Parameters(p): Parameters<MemorySaveParams>) -> String {
-        let pipeline = match self.pipeline().await {
+        let pipeline = match self.require_models().await {
             Ok(p) => p,
-            Err(e) => return format!("Error: {e}"),
+            Err(json) => return json,
         };
         let start = std::time::Instant::now();
         let kind = p.kind.as_deref().and_then(parse_kind);
@@ -2179,9 +2295,9 @@ impl AnnoRagServer {
         description = "Recall memories by hybrid (vector + FTS) search. Returns rehydrated plaintext for the caller's tenant."
     )]
     async fn memory_recall(&self, Parameters(p): Parameters<MemoryRecallParams>) -> String {
-        let pipeline = match self.pipeline().await {
+        let pipeline = match self.require_models().await {
             Ok(p) => p,
-            Err(e) => return format!("Error: {e}"),
+            Err(json) => return json,
         };
         let start = std::time::Instant::now();
         let kinds = p
@@ -2277,9 +2393,9 @@ impl AnnoRagServer {
         description = "Forget memories by id or by query. Cascades to vault tokens no longer referenced. Returns the SLO note that physical erasure may take up to 24h."
     )]
     async fn memory_forget(&self, Parameters(p): Parameters<MemoryForgetParams>) -> String {
-        let pipeline = match self.pipeline().await {
+        let pipeline = match self.require_models().await {
             Ok(p) => p,
-            Err(e) => return format!("Error: {e}"),
+            Err(json) => return json,
         };
         let id = match &p.id {
             Some(s) => match uuid::Uuid::parse_str(s) {
@@ -2326,9 +2442,9 @@ impl AnnoRagServer {
     /// List memories with cursor pagination.
     #[tool(description = "List memories with optional session/kind filter and cursor pagination.")]
     async fn memory_list(&self, Parameters(p): Parameters<MemoryListParams>) -> String {
-        let pipeline = match self.pipeline().await {
+        let pipeline = match self.require_models().await {
             Ok(p) => p,
-            Err(e) => return format!("Error: {e}"),
+            Err(json) => return json,
         };
         let start = std::time::Instant::now();
         let kind = p.kind.as_deref().and_then(parse_kind);
@@ -2384,9 +2500,9 @@ impl AnnoRagServer {
         &self,
         Parameters(p): Parameters<MemoryGraphRecallParams>,
     ) -> String {
-        let pipeline = match self.pipeline().await {
+        let pipeline = match self.require_models().await {
             Ok(p) => p,
-            Err(e) => return format!("Error: {e}"),
+            Err(json) => return json,
         };
         let start = std::time::Instant::now();
         let r = pipeline
@@ -2425,9 +2541,9 @@ impl AnnoRagServer {
         description = "Mark a memory as no longer valid as of the given timestamp (default: now). No-op if valid_to is already set."
     )]
     async fn memory_invalidate(&self, Parameters(p): Parameters<MemoryInvalidateParams>) -> String {
-        let pipeline = match self.pipeline().await {
+        let pipeline = match self.require_models().await {
             Ok(p) => p,
-            Err(e) => return format!("Error: {e}"),
+            Err(json) => return json,
         };
         let id = match uuid::Uuid::parse_str(&p.id) {
             Ok(u) => anno_rag::memory::MemoryId(u),
@@ -2599,9 +2715,9 @@ impl AnnoRagServer {
                        Returns rows from the Cypher result set."
     )]
     async fn legal_graph_query(&self, Parameters(p): Parameters<LegalGraphQueryParams>) -> String {
-        let pipeline = match self.pipeline().await {
+        let pipeline = match self.require_models().await {
             Ok(p) => p,
-            Err(e) => return format!("Error: {e}"),
+            Err(json) => return json,
         };
         use anno_rag::legal::query::GraphIntent;
         let intent = match p.intent.as_str() {
@@ -2674,9 +2790,9 @@ impl AnnoRagServer {
         &self,
         Parameters(p): Parameters<LegalRehydrateCitationParams>,
     ) -> String {
-        let pipeline = match self.pipeline().await {
+        let pipeline = match self.require_models().await {
             Ok(p) => p,
-            Err(e) => return format!("Error: {e}"),
+            Err(json) => return json,
         };
         let chunk_id = match uuid::Uuid::parse_str(&p.chunk_id) {
             Ok(u) => u,
@@ -2725,9 +2841,9 @@ impl AnnoRagServer {
         &self,
         Parameters(p): Parameters<LegalExtractContractParams>,
     ) -> String {
-        let pipeline = match self.pipeline().await {
+        let pipeline = match self.require_models().await {
             Ok(p) => p,
-            Err(e) => return format!("Error: {e}"),
+            Err(json) => return json,
         };
         let start = std::time::Instant::now();
         match pipeline.legal_extract_contract(&p.doc_id).await {
@@ -2755,9 +2871,9 @@ impl AnnoRagServer {
         &self,
         Parameters(p): Parameters<LegalExtractCaseFileParams>,
     ) -> String {
-        let pipeline = match self.pipeline().await {
+        let pipeline = match self.require_models().await {
             Ok(p) => p,
-            Err(e) => return format!("Error: {e}"),
+            Err(json) => return json,
         };
         let start = std::time::Instant::now();
         match pipeline.legal_extract_case_file(&p.dossier_id).await {
@@ -2781,9 +2897,9 @@ impl AnnoRagServer {
                        Returns events (kind, event_date, deadline_date, chunk_id) \
                        in chronological order.")]
     async fn legal_timeline(&self, Parameters(p): Parameters<LegalTimelineParams>) -> String {
-        let pipeline = match self.pipeline().await {
+        let pipeline = match self.require_models().await {
             Ok(p) => p,
-            Err(e) => return format!("Error: {e}"),
+            Err(json) => return json,
         };
         let start = std::time::Instant::now();
         match pipeline.legal_timeline(&p.dossier_id).await {
@@ -2810,9 +2926,9 @@ impl AnnoRagServer {
                        lawyer recommendations."
     )]
     async fn legal_risk_review(&self, Parameters(p): Parameters<LegalRiskReviewParams>) -> String {
-        let pipeline = match self.pipeline().await {
+        let pipeline = match self.require_models().await {
             Ok(p) => p,
-            Err(e) => return format!("Error: {e}"),
+            Err(json) => return json,
         };
         let start = std::time::Instant::now();
         match pipeline.legal_risk_review(&p.scope_id, p.is_dossier).await {
@@ -2846,9 +2962,9 @@ impl AnnoRagServer {
         &self,
         Parameters(p): Parameters<LegalMandatoryClauseAuditParams>,
     ) -> String {
-        let pipeline = match self.pipeline().await {
+        let pipeline = match self.require_models().await {
             Ok(p) => p,
-            Err(e) => return format!("Error: {e}"),
+            Err(json) => return json,
         };
         let doc_id = match uuid::Uuid::parse_str(&p.doc_id) {
             Ok(u) => u,
@@ -2943,9 +3059,9 @@ impl AnnoRagServer {
         &self,
         Parameters(p): Parameters<LegalValidateFieldParams>,
     ) -> String {
-        let pipeline = match self.pipeline().await {
+        let pipeline = match self.require_models().await {
             Ok(p) => p,
-            Err(e) => return format!("Error: {e}"),
+            Err(json) => return json,
         };
         let chunk_id = match uuid::Uuid::parse_str(&p.chunk_id) {
             Ok(u) => u,
@@ -3126,9 +3242,9 @@ impl AnnoRagServer {
             Ok(ts) => ts,
             Err(e) => return format!("Error: {e}"),
         };
-        let _pipeline = match self.pipeline().await {
+        let _pipeline = match self.require_models().await {
             Ok(p) => p,
-            Err(e) => return format!("Error (pipeline): {e}"),
+            Err(json) => return json,
         };
         let review_id = match uuid::Uuid::parse_str(&p.review_id) {
             Ok(u) => anno_rag_tabular::ReviewId(u),
@@ -3500,16 +3616,8 @@ impl AnnoRagServer {
         if let Err(e) = self.knowledge().await {
             return format!("Error: {e}");
         }
-        if self.pipeline().await.is_err() {
-            return serde_json::json!({
-                "ok": false,
-                "error": {
-                    "code": "models_missing",
-                    "message": "Models are not available. Fast FTS search works on already-indexed content; indexing is paused.",
-                    "next_action": "Run download_models or ask Anno to set up models."
-                }
-            })
-            .to_string();
+        if let Err(json) = self.require_models().await {
+            return json;
         }
         match self.knowledge_sync_impl(p).await {
             Ok(summary) => {
@@ -3668,11 +3776,62 @@ pub async fn serve_stdio_lazy(cfg: AnnoRagConfig, key: [u8; 32]) -> anno_rag::er
         .map_err(|e| anno_rag::error::Error::Detect(format!("MCP server failed to start: {e}")))?;
 
     // Warm up models in background so first tool call doesn't block for ~78s.
+    // FIXED — builds pipeline then loads both ML models in parallel.
     tokio::spawn(async move {
         tracing::info!("anno-rag: background model warmup starting");
-        match warmup_server.pipeline().await {
-            Ok(_) => tracing::info!("anno-rag: background model warmup complete"),
-            Err(e) => tracing::warn!("anno-rag: background model warmup skipped: {e}"),
+
+        let started_ms = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap_or_default()
+            .as_millis() as u64;
+        *warmup_server.warmup_phase.write().await = WarmupPhase::Loading { started_ms };
+
+        // Step 1: init Pipeline struct (opens LanceDB + vault, ~2 s).
+        let pipeline_arc = match warmup_server.pipeline().await {
+            Ok(_) => warmup_server.pipeline_arc(),
+            Err(e) => {
+                tracing::warn!("anno-rag: warmup skipped — pipeline init failed: {e}");
+                *warmup_server.warmup_phase.write().await = WarmupPhase::Failed {
+                    error: e.to_string(),
+                };
+                return;
+            }
+        };
+
+        let Some(arc) = pipeline_arc else {
+            tracing::warn!("anno-rag: warmup skipped — pipeline_arc returned None after init");
+            *warmup_server.warmup_phase.write().await = WarmupPhase::Failed {
+                error: "pipeline_arc returned None".into(),
+            };
+            return;
+        };
+
+        // Step 2: load embedder + detector in parallel (detector in spawn_blocking).
+        let outcome = arc.warmup().await;
+
+        let elapsed_ms = (std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap_or_default()
+            .as_millis() as u64)
+            .saturating_sub(started_ms);
+
+        if outcome.all_ok() {
+            tracing::info!(elapsed_ms, "anno-rag: background model warmup complete");
+            *warmup_server.warmup_phase.write().await = WarmupPhase::Ready { elapsed_ms };
+        } else {
+            let error = [
+                outcome.embedder_error.map(|e| format!("embedder: {e}")),
+                outcome.detector_error.map(|e| format!("detector: {e}")),
+            ]
+            .into_iter()
+            .flatten()
+            .collect::<Vec<_>>()
+            .join("; ");
+            tracing::warn!(
+                elapsed_ms,
+                "anno-rag: background model warmup failed: {error}"
+            );
+            *warmup_server.warmup_phase.write().await = WarmupPhase::Failed { error };
         }
     });
 
@@ -4196,6 +4355,28 @@ mod lazy_tests {
         assert!(
             result.contains("Models not ready") || result.contains("Models not downloaded"),
             "expected model readiness error in: {result}"
+        );
+    }
+
+    #[tokio::test(flavor = "current_thread")]
+    async fn pipeline_error_includes_missing_files_and_command() {
+        let dir = tempfile::tempdir().unwrap();
+        let cfg = AnnoRagConfig {
+            data_dir: dir.path().to_path_buf(),
+            ..Default::default()
+        };
+        let _models_env = ScopedAnnoModelsDir::unset();
+        let server = AnnoRagServer::new_lazy(cfg, [0u8; 32]);
+
+        let err = server
+            .pipeline()
+            .await
+            .err()
+            .expect("pipeline must fail when models are absent");
+        let msg = err.to_string();
+        assert!(
+            msg.contains("anno-rag download-models"),
+            "error must mention the fix command: {msg}"
         );
     }
 
@@ -4801,6 +4982,22 @@ mod lazy_tests {
         assert!(server.pipeline_arc().is_none());
     }
 
+    #[tokio::test(flavor = "current_thread")]
+    async fn status_includes_warmup_phase() {
+        let dir = tempfile::tempdir().unwrap();
+        let cfg = AnnoRagConfig {
+            data_dir: dir.path().to_path_buf(),
+            ..Default::default()
+        };
+        let _models_env = ScopedAnnoModelsDir::unset();
+        let server = AnnoRagServer::new_lazy(cfg, [0u8; 32]);
+        *server.warmup_phase.write().await = WarmupPhase::Loading { started_ms: 0 };
+
+        let status_json = server.status_impl_routing().await;
+        let v: serde_json::Value = serde_json::from_str(&status_json).unwrap();
+        assert_eq!(v["models"]["warmup_phase"], "loading");
+    }
+
     /// When all required model files exist, download_models reports already_present.
     #[tokio::test(flavor = "current_thread")]
     async fn download_models_tool_reports_already_present() {
@@ -4969,5 +5166,81 @@ mod lazy_tests {
                 "successful general index should include knowledge object: {result}"
             );
         }
+    }
+}
+
+#[cfg(test)]
+mod warmup_phase_tests {
+    use super::*;
+
+    #[test]
+    fn all_pipeline_calls_replaced_with_require_models() {
+        let src = std::fs::read_to_string(
+            std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("src/lib.rs"),
+        )
+        .unwrap();
+        // Count only lines that contain the call but are NOT inside the sentinel test itself
+        // (the test body and the doc comment inside require_models add noise).
+        let needle = concat!("self", ".pipeline().await");
+        let remaining = src
+            .lines()
+            .filter(|l| l.contains(needle))
+            .filter(|l| !l.contains("all_pipeline_calls_replaced_with_require_models"))
+            .filter(|l| !l.contains("remaining"))
+            .filter(|l| !l.contains("///"))
+            .count();
+        // Only the definition of pipeline() itself and its use inside require_models() should remain.
+        assert!(
+            remaining <= 2,
+            "{remaining} remaining self.pipeline().await call-sites — expected ≤2"
+        );
+    }
+
+    #[test]
+    fn warmup_phase_debug_display() {
+        let phase = WarmupPhase::Loading { started_ms: 0 };
+        let s = format!("{phase:?}");
+        assert!(s.contains("Loading"));
+        let phase2 = WarmupPhase::Ready { elapsed_ms: 5000 };
+        assert!(format!("{phase2:?}").contains("5000"));
+    }
+
+    #[tokio::test(flavor = "current_thread")]
+    async fn serve_stdio_lazy_warmup_phase_starts_idle() {
+        let dir = tempfile::tempdir().unwrap();
+        let cfg = AnnoRagConfig {
+            data_dir: dir.path().to_path_buf(),
+            ..Default::default()
+        };
+        let _models_env = crate::model_inventory::test_env::ScopedAnnoModelsDir::unset();
+        let server = AnnoRagServer::new_lazy(cfg, [0u8; 32]);
+
+        // Phase must start Idle before any warmup is triggered.
+        let phase = server.warmup_phase.read().await.clone();
+        assert_eq!(phase, WarmupPhase::Idle, "phase must start Idle");
+    }
+
+    #[tokio::test(flavor = "current_thread")]
+    async fn require_models_returns_loading_when_warmup_in_progress() {
+        let dir = tempfile::tempdir().unwrap();
+        let cfg = AnnoRagConfig {
+            data_dir: dir.path().to_path_buf(),
+            ..Default::default()
+        };
+        let _models_env = crate::model_inventory::test_env::ScopedAnnoModelsDir::unset();
+        let server = AnnoRagServer::new_lazy(cfg, [0u8; 32]);
+
+        // Force phase to Loading.
+        *server.warmup_phase.write().await = WarmupPhase::Loading { started_ms: 0 };
+
+        let result = server.require_models().await;
+        assert!(result.is_err(), "must return Err during loading");
+        let json_str = match result {
+            Err(s) => s,
+            Ok(_) => panic!("expected Err but got Ok"),
+        };
+        let v: serde_json::Value = serde_json::from_str(&json_str).unwrap();
+        assert_eq!(v["ok"], false);
+        assert_eq!(v["error"], "models_loading");
     }
 }
