@@ -35,7 +35,7 @@ use review::*;
 use rmcp::{
     handler::server::{router::tool::ToolRouter, wrapper::Parameters},
     model::{Implementation, ServerCapabilities, ServerInfo},
-    schemars, tool, tool_handler, tool_router, ServerHandler, ServiceExt,
+    tool, tool_handler, tool_router, ServerHandler, ServiceExt,
 };
 use search::*;
 use std::{collections::HashMap, sync::Arc};
@@ -55,16 +55,6 @@ pub(crate) enum WarmupPhase {
     Failed { error: String },
 }
 
-impl WarmupPhase {
-    fn as_str(&self) -> &'static str {
-        match self {
-            Self::Idle => "idle",
-            Self::Loading { .. } => "loading",
-            Self::Ready { .. } => "ready",
-            Self::Failed { .. } => "failed",
-        }
-    }
-}
 
 /// State held by the MCP server: either a pre-built Pipeline (eager) or a
 /// lazily-initialised one (deferred until the first tool call).
