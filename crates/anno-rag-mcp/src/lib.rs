@@ -97,12 +97,29 @@ impl AnnoRagServer {
                     let inventory =
                         crate::model_inventory::ModelInventoryService::new(&cfg).inspect();
                     if !inventory.ready {
+                        let mut missing: Vec<&str> = Vec::new();
+                        if !inventory.e5.ready {
+                            missing.extend(inventory.e5.missing_files.iter().map(String::as_str));
+                        }
+                        if !inventory.gliner.ready {
+                            missing
+                                .extend(inventory.gliner.missing_files.iter().map(String::as_str));
+                        }
+                        let missing_summary = if missing.is_empty() {
+                            String::new()
+                        } else {
+                            format!(" Missing files: {}.", missing.join(", "))
+                        };
+                        let env_hint = if inventory.from_env {
+                            format!(" (ANNO_MODELS_DIR={})", inventory.path)
+                        } else {
+                            String::new()
+                        };
                         return Err(anno_rag::error::Error::Config(format!(
-                            "Models not ready at {} (state={}). Ask me to 'Set up anno-rag' \
-                             or run `anno-rag download-models` in a terminal, \
-                             then restart the extension.",
-                            inventory.path,
-                            inventory.state.as_str()
+                            "Models not ready at {path}{env_hint} (state={state}).{missing_summary} \
+                             Run `anno-rag download-models` in a terminal, then restart the MCP server.",
+                            path = inventory.path,
+                            state = inventory.state.as_str(),
                         )));
                     }
                     Pipeline::new((*cfg).clone(), key).await.map(Arc::new)
@@ -856,10 +873,32 @@ impl AnnoRagServer {
         let inventory =
             crate::model_inventory::ModelInventoryService::new(self.cfg.as_ref()).inspect();
         let loaded = self.pipeline_arc();
+        let warmup_info = {
+            let phase = self.warmup_phase.read().await;
+            match &*phase {
+                WarmupPhase::Idle => serde_json::json!({ "phase": "idle" }),
+                WarmupPhase::Loading { started_ms } => {
+                    let elapsed_s = std::time::SystemTime::now()
+                        .duration_since(std::time::UNIX_EPOCH)
+                        .unwrap_or_default()
+                        .as_secs()
+                        .saturating_sub(started_ms / 1000);
+                    serde_json::json!({ "phase": "loading", "elapsed_s": elapsed_s })
+                }
+                WarmupPhase::Ready { elapsed_ms } => {
+                    serde_json::json!({ "phase": "ready", "elapsed_ms": elapsed_ms })
+                }
+                WarmupPhase::Failed { error } => {
+                    serde_json::json!({ "phase": "failed", "error": error })
+                }
+            }
+        };
         let models = serde_json::json!({
             "inventory": inventory,
             "embedder_loaded": loaded.as_ref().is_some_and(|p| p.embedder_loaded()),
             "detector_loaded": loaded.as_ref().is_some_and(|p| p.detector_loaded()),
+            "warmup_phase": warmup_info["phase"],
+            "warmup": warmup_info,
         });
 
         serde_json::json!({
@@ -3752,16 +3791,18 @@ pub async fn serve_stdio_lazy(cfg: AnnoRagConfig, key: [u8; 32]) -> anno_rag::er
             Ok(_) => warmup_server.pipeline_arc(),
             Err(e) => {
                 tracing::warn!("anno-rag: warmup skipped — pipeline init failed: {e}");
-                *warmup_server.warmup_phase.write().await =
-                    WarmupPhase::Failed { error: e.to_string() };
+                *warmup_server.warmup_phase.write().await = WarmupPhase::Failed {
+                    error: e.to_string(),
+                };
                 return;
             }
         };
 
         let Some(arc) = pipeline_arc else {
             tracing::warn!("anno-rag: warmup skipped — pipeline_arc returned None after init");
-            *warmup_server.warmup_phase.write().await =
-                WarmupPhase::Failed { error: "pipeline_arc returned None".into() };
+            *warmup_server.warmup_phase.write().await = WarmupPhase::Failed {
+                error: "pipeline_arc returned None".into(),
+            };
             return;
         };
 
@@ -3786,7 +3827,10 @@ pub async fn serve_stdio_lazy(cfg: AnnoRagConfig, key: [u8; 32]) -> anno_rag::er
             .flatten()
             .collect::<Vec<_>>()
             .join("; ");
-            tracing::warn!(elapsed_ms, "anno-rag: background model warmup failed: {error}");
+            tracing::warn!(
+                elapsed_ms,
+                "anno-rag: background model warmup failed: {error}"
+            );
             *warmup_server.warmup_phase.write().await = WarmupPhase::Failed { error };
         }
     });
@@ -4311,6 +4355,28 @@ mod lazy_tests {
         assert!(
             result.contains("Models not ready") || result.contains("Models not downloaded"),
             "expected model readiness error in: {result}"
+        );
+    }
+
+    #[tokio::test(flavor = "current_thread")]
+    async fn pipeline_error_includes_missing_files_and_command() {
+        let dir = tempfile::tempdir().unwrap();
+        let cfg = AnnoRagConfig {
+            data_dir: dir.path().to_path_buf(),
+            ..Default::default()
+        };
+        let _models_env = ScopedAnnoModelsDir::unset();
+        let server = AnnoRagServer::new_lazy(cfg, [0u8; 32]);
+
+        let err = server
+            .pipeline()
+            .await
+            .err()
+            .expect("pipeline must fail when models are absent");
+        let msg = err.to_string();
+        assert!(
+            msg.contains("anno-rag download-models"),
+            "error must mention the fix command: {msg}"
         );
     }
 
@@ -4914,6 +4980,22 @@ mod lazy_tests {
         assert_eq!(v["models"]["embedder_loaded"], false);
         assert_eq!(v["models"]["detector_loaded"], false);
         assert!(server.pipeline_arc().is_none());
+    }
+
+    #[tokio::test(flavor = "current_thread")]
+    async fn status_includes_warmup_phase() {
+        let dir = tempfile::tempdir().unwrap();
+        let cfg = AnnoRagConfig {
+            data_dir: dir.path().to_path_buf(),
+            ..Default::default()
+        };
+        let _models_env = ScopedAnnoModelsDir::unset();
+        let server = AnnoRagServer::new_lazy(cfg, [0u8; 32]);
+        *server.warmup_phase.write().await = WarmupPhase::Loading { started_ms: 0 };
+
+        let status_json = server.status_impl_routing().await;
+        let v: serde_json::Value = serde_json::from_str(&status_json).unwrap();
+        assert_eq!(v["models"]["warmup_phase"], "loading");
     }
 
     /// When all required model files exist, download_models reports already_present.
