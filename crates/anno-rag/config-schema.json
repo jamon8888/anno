@@ -90,6 +90,51 @@
     "type_name": "String"
   },
   {
+    "name": "ner_onnx_precision",
+    "env_var": "ANNO_RAG_NER_ONNX_PRECISION",
+    "cli_flag": "--ner-onnx-precision",
+    "doc": "ONNX graph precision for NER: fp16 (default, ~250 MB) or fp32 (~500 MB). Default: fp16",
+    "default_value": "\"fp16\"",
+    "since": "0.13",
+    "type_name": "String"
+  },
+  {
+    "name": "index_distance",
+    "env_var": "ANNO_RAG_INDEX_DISTANCE",
+    "cli_flag": "--index-distance",
+    "doc": "Vector index distance: cosine (default), l2, or dot. Default: cosine",
+    "default_value": "\"cosine\"",
+    "since": "0.13",
+    "type_name": "String"
+  },
+  {
+    "name": "index_num_partitions",
+    "env_var": "ANNO_RAG_INDEX_NUM_PARTITIONS",
+    "cli_flag": "--index-num-partitions",
+    "doc": "IVF partitions for the vector index. Default: auto (unset)",
+    "default_value": "null",
+    "since": "0.13",
+    "type_name": "Option<usize>"
+  },
+  {
+    "name": "search_nprobes",
+    "env_var": "ANNO_RAG_SEARCH_NPROBES",
+    "cli_flag": "--search-nprobes",
+    "doc": "IVF partitions probed per query (recall vs speed). Default: 20",
+    "default_value": "20",
+    "since": "0.13",
+    "type_name": "usize"
+  },
+  {
+    "name": "search_refine_factor",
+    "env_var": "ANNO_RAG_SEARCH_REFINE_FACTOR",
+    "cli_flag": "--search-refine-factor",
+    "doc": "SQ refine factor (1 = off, 10 = default). Default: 10",
+    "default_value": "10",
+    "since": "0.13",
+    "type_name": "u32"
+  },
+  {
     "name": "ner_candle_model_id",
     "env_var": "ANNO_RAG_NER_CANDLE_MODEL",
     "cli_flag": "--ner-candle-model",

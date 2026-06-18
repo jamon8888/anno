@@ -55,7 +55,6 @@ pub(crate) enum WarmupPhase {
     Failed { error: String },
 }
 
-
 /// State held by the MCP server: either a pre-built Pipeline (eager) or a
 /// lazily-initialised one (deferred until the first tool call).
 #[derive(Clone)]
