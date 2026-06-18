@@ -42,6 +42,22 @@ use std::{collections::HashMap, sync::Arc};
 use tokio::sync::{OnceCell, RwLock};
 use wire::*;
 
+/// Time budget for a single `knowledge_sync` / `index` MCP call.
+///
+/// The MCP transport enforces a ~60 s request timeout.  On CPU-only machines
+/// each file costs ~6 s (GLiNER ONNX + Solon-large embedder), so processing
+/// more than ~10 files in a single call would reliably timeout.
+///
+/// `max_millis` in `SyncOptions` makes the sync loop check elapsed time after
+/// each file and return a truncated summary when the budget is exhausted.
+/// The caller sees `{"summary": {"truncated": true, ...}}` and should call
+/// again — already-indexed files are skipped in O(1) via the content-hash
+/// cache, so each subsequent call makes forward progress.
+///
+/// 45 s leaves 15 s of headroom for warmup checks, path validation, DB
+/// writes, and response serialization within the 60 s MCP window.
+const MCP_SYNC_BUDGET_MILLIS: u64 = 45_000;
+
 /// Warmup lifecycle for background model loading.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) enum WarmupPhase {
@@ -1181,7 +1197,10 @@ impl AnnoRagServer {
                 pipeline,
                 self.cfg.as_ref(),
                 p.source_id.as_deref(),
-                crate::indexer::SyncOptions::default(),
+                crate::indexer::SyncOptions {
+                    max_millis: Some(MCP_SYNC_BUDGET_MILLIS),
+                    ..crate::indexer::SyncOptions::default()
+                },
             )
             .await
     }
@@ -1427,12 +1446,26 @@ impl AnnoRagServer {
                         .await
                     {
                         Ok(summary) => {
-                            if let Some(issue) = knowledge_sync_issue(&summary) {
-                                errors.push(issue);
+                            // Only hard failures go into errors (makes ok=false).
+                            // truncated=true means the 45 s MCP time budget was
+                            // reached — that is expected behaviour, not a failure.
+                            // Callers should retry: already-indexed files are
+                            // skipped in O(1) via content-hash, so each call
+                            // makes forward progress.
+                            if summary.failed > 0 {
+                                errors.push(format!(
+                                    "knowledge sync: {} file(s) failed",
+                                    summary.failed
+                                ));
                             }
                             knowledge = serde_json::json!({
                                 "source_id": source_id,
                                 "summary": summary,
+                                "hint": if summary.truncated {
+                                    Some("Time budget reached — call index() again to continue. Already-indexed files are skipped automatically.")
+                                } else {
+                                    None
+                                },
                             });
                         }
                         Err(e) => errors.push(format!("knowledge sync: {e}")),
@@ -3766,14 +3799,18 @@ pub async fn serve_stdio_lazy(cfg: AnnoRagConfig, key: [u8; 32]) -> anno_rag::er
 
     // Warm up models in background so first tool call doesn't block for ~78s.
     // FIXED — builds pipeline then loads both ML models in parallel.
+    //
+    // Set Loading phase BEFORE spawn so that any tool call arriving between
+    // tokio::spawn and the task's first await sees Loading (not Idle) and
+    // returns the "retry in a moment" JSON immediately rather than falling
+    // through to a blocking detector_get_or_init (100 s on ONNX cold start).
+    let started_ms = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_millis() as u64;
+    *warmup_server.warmup_phase.write().await = WarmupPhase::Loading { started_ms };
     tokio::spawn(async move {
         tracing::info!("anno-rag: background model warmup starting");
-
-        let started_ms = std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
-            .unwrap_or_default()
-            .as_millis() as u64;
-        *warmup_server.warmup_phase.write().await = WarmupPhase::Loading { started_ms };
 
         // Step 1: init Pipeline struct (opens LanceDB + vault, ~2 s).
         let pipeline_arc = match warmup_server.pipeline().await {

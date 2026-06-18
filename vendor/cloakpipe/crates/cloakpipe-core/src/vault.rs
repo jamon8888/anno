@@ -97,22 +97,56 @@ pub struct MatchedMapping {
 
 impl Vault {
     /// Create or load a vault from the given path.
+    ///
+    /// Recovery: if `path` is missing or fails to decrypt, tries `path.tmp`
+    /// as a fallback (orphaned from a crash between write and rename), then
+    /// renames it to `path` on success.
     pub fn open(path: &str, key: Vec<u8>) -> Result<Self> {
         if key.len() != 32 {
             bail!("Vault key must be exactly 32 bytes (AES-256)");
         }
+        let tmp_path = format!("{}.tmp", path);
         if std::path::Path::new(path).exists() {
-            Self::load(path, &key)
-        } else {
-            Ok(Self {
-                forward: HashMap::new(),
-                reverse: HashMap::new(),
-                counters: HashMap::new(),
-                path: Some(path.to_string()),
-                key: SensitiveBytes(key),
-                resolver: None,
-            })
+            match Self::load(path, &key) {
+                Ok(v) => return Ok(v),
+                Err(primary_err) => {
+                    // vault.enc exists but decryption failed.  Try the orphaned
+                    // .tmp written by a save() that was interrupted before
+                    // rename completed.
+                    if std::path::Path::new(&tmp_path).exists() {
+                        if let Ok(mut v) = Self::load(&tmp_path, &key) {
+                            // .tmp decrypts fine — restore it as the canonical file.
+                            if std::fs::rename(&tmp_path, path).is_ok() {
+                                v.path = Some(path.to_string());
+                                return Ok(v);
+                            }
+                        }
+                    }
+                    return Err(primary_err);
+                }
+            }
         }
+        // vault.enc missing — check for an orphaned .tmp left by a crash
+        // between write and rename.
+        if std::path::Path::new(&tmp_path).exists() {
+            if let Ok(mut v) = Self::load(&tmp_path, &key) {
+                if std::fs::rename(&tmp_path, path).is_ok() {
+                    v.path = Some(path.to_string());
+                    return Ok(v);
+                }
+            }
+            // .tmp exists but doesn't decrypt or can't be renamed — remove it
+            // so it doesn't confuse future opens, then fall through to new vault.
+            let _ = std::fs::remove_file(&tmp_path);
+        }
+        Ok(Self {
+            forward: HashMap::new(),
+            reverse: HashMap::new(),
+            counters: HashMap::new(),
+            path: Some(path.to_string()),
+            key: SensitiveBytes(key),
+            resolver: None,
+        })
     }
 
     /// Create an ephemeral (in-memory only) vault for testing.
@@ -256,12 +290,21 @@ impl Vault {
 
         let encrypted = self.encrypt(&json)?;
 
-        // Atomic write: write to .tmp, then rename
+        // Atomic write: write to .tmp, fsync, then rename.
+        // fsync ensures bytes reach disk before rename so a crash between
+        // write and rename never leaves vault.enc with new-nonce but old data.
         let tmp_path = format!("{}.tmp", path);
         if let Some(parent) = std::path::Path::new(path).parent() {
             std::fs::create_dir_all(parent).context("Failed to create vault directory")?;
         }
-        std::fs::write(&tmp_path, &encrypted).context("Failed to write vault temp file")?;
+        {
+            use std::io::Write as _;
+            let mut f =
+                std::fs::File::create(&tmp_path).context("Failed to create vault temp file")?;
+            f.write_all(&encrypted)
+                .context("Failed to write vault temp file")?;
+            f.sync_all().context("Failed to sync vault temp file")?;
+        }
         std::fs::rename(&tmp_path, path).context("Failed to rename vault file")?;
 
         Ok(())
