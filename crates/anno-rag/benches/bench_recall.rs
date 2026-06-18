@@ -2,6 +2,12 @@
 //! queries, computes recall@10, and writes a JSON baseline. Set
 //! `ANNO_RECALL_FLOOR=<0.0-1.0>` to fail the run when recall drops below it
 //! (used by CI to enforce ">= 95% of baseline" on footprint-changing PRs).
+//!
+//! NOTE: recall is matched against `SearchHit::text_pseudo`, which is
+//! pseudonymized. Every `relevant_substring` in the fixture MUST be a
+//! non-PII word (e.g. a legal term) that survives pseudonymization — a
+//! name/org/email substring would be replaced by a vault token and never
+//! match, causing a false failure.
 // Bench harness: unwrap panics are acceptable (a failed bench is a failed
 // run), and criterion_group! expands to an undocumented `pub fn benches`.
 #![allow(clippy::unwrap_used, missing_docs)]
@@ -27,6 +33,11 @@ fn bench_recall(c: &mut Criterion) {
     let rt = Runtime::new().unwrap();
     let queries = load_ref_queries();
 
+    assert!(
+        !queries.is_empty(),
+        "recall_queries.json contains no entries — fixture missing or empty"
+    );
+
     let (pipeline, _tmp) = rt.block_on(async {
         let (p, tmp) = common::pipeline_in_tempdir().await;
         let n = p
@@ -48,6 +59,7 @@ fn bench_recall(c: &mut Criterion) {
     for q in &queries {
         let hits = rt.block_on(pipeline.search(&q.query, 10)).unwrap();
         let needle = q.relevant_substring.to_lowercase();
+        // text_pseudo is pseudonymized — needle must be a non-PII term that survives vault substitution
         if hits
             .iter()
             .any(|h| h.text_pseudo.to_lowercase().contains(&needle))
@@ -58,9 +70,12 @@ fn bench_recall(c: &mut Criterion) {
     let recall = relevant as f64 / queries.len() as f64;
     eprintln!("recall@10 = {recall:.3} ({relevant}/{})", queries.len());
 
-    let out =
-        std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("target/recall_baseline.json");
-    let _ = std::fs::write(&out, format!("{{\"recall_at_10\": {recall}}}"));
+    let target_dir = std::env::var("CARGO_TARGET_DIR")
+        .unwrap_or_else(|_| format!("{}/target", env!("CARGO_MANIFEST_DIR")));
+    let out = std::path::PathBuf::from(target_dir).join("recall_baseline.json");
+    if let Err(e) = std::fs::write(&out, format!("{{\"recall_at_10\": {recall}}}")) {
+        eprintln!("warning: could not write {}: {e}", out.display());
+    }
 
     if let Ok(floor) = std::env::var("ANNO_RECALL_FLOOR") {
         let floor: f64 = floor.parse().expect("ANNO_RECALL_FLOOR must be a float");
