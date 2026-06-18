@@ -3767,14 +3767,18 @@ pub async fn serve_stdio_lazy(cfg: AnnoRagConfig, key: [u8; 32]) -> anno_rag::er
 
     // Warm up models in background so first tool call doesn't block for ~78s.
     // FIXED — builds pipeline then loads both ML models in parallel.
+    //
+    // Set Loading phase BEFORE spawn so that any tool call arriving between
+    // tokio::spawn and the task's first await sees Loading (not Idle) and
+    // returns the "retry in a moment" JSON immediately rather than falling
+    // through to a blocking detector_get_or_init (100 s on ONNX cold start).
+    let started_ms = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_millis() as u64;
+    *warmup_server.warmup_phase.write().await = WarmupPhase::Loading { started_ms };
     tokio::spawn(async move {
         tracing::info!("anno-rag: background model warmup starting");
-
-        let started_ms = std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
-            .unwrap_or_default()
-            .as_millis() as u64;
-        *warmup_server.warmup_phase.write().await = WarmupPhase::Loading { started_ms };
 
         // Step 1: init Pipeline struct (opens LanceDB + vault, ~2 s).
         let pipeline_arc = match warmup_server.pipeline().await {
