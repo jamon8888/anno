@@ -196,6 +196,20 @@ pub struct Store {
     memories_tbl: Table,
     memories_schema: Arc<Schema>,
     memory_embedding_dim: usize,
+    index_distance: String,
+    index_num_partitions: Option<usize>,
+    search_nprobes: usize,
+    search_refine_factor: u32,
+}
+
+/// Map a config distance string to a LanceDB metric. Unknown values fall back
+/// to cosine (the default), which matches the L2-normalized embedder output.
+fn distance_from_str(s: &str) -> lancedb::DistanceType {
+    match s {
+        "l2" => lancedb::DistanceType::L2,
+        "dot" => lancedb::DistanceType::Dot,
+        _ => lancedb::DistanceType::Cosine,
+    }
 }
 
 impl Store {
@@ -225,6 +239,10 @@ impl Store {
             memories_tbl,
             memories_schema,
             memory_embedding_dim: cfg.memory_embedding_dim,
+            index_distance: cfg.index_distance.clone(),
+            index_num_partitions: cfg.index_num_partitions,
+            search_nprobes: cfg.search_nprobes,
+            search_refine_factor: cfg.search_refine_factor,
         })
     }
 
@@ -866,6 +884,8 @@ impl Store {
             .tbl
             .query()
             .nearest_to(query_vec.to_vec())?
+            .nprobes(self.search_nprobes)
+            .refine_factor(self.search_refine_factor)
             .full_text_search(FullTextSearchQuery::new(query_text.to_string()))
             .rerank(Arc::new(RRFReranker::default()))
             .only_if(filter)
@@ -1183,10 +1203,14 @@ impl Store {
         // becomes a hybrid query; `rerank` is only valid on hybrid queries.
         // The FTS arm searches whichever column carries the FTS index —
         // currently only `text_pseudo` (see `maybe_build_fts_index`).
+        // nprobes + refine_factor must be set on the VectorQuery before chaining
+        // to full_text_search; they are no-ops when no IVF index exists yet.
         let stream = self
             .tbl
             .query()
             .nearest_to(query_vec.to_vec())?
+            .nprobes(self.search_nprobes)
+            .refine_factor(self.search_refine_factor)
             .full_text_search(FullTextSearchQuery::new(query_text.to_string()))
             .rerank(Arc::new(RRFReranker::default()))
             .limit(k)
@@ -1242,11 +1266,13 @@ impl Store {
             return Ok(false);
         }
 
+        let mut builder =
+            IvfHnswSqIndexBuilder::default().distance_type(distance_from_str(&self.index_distance));
+        if let Some(parts) = self.index_num_partitions {
+            builder = builder.num_partitions(parts as u32);
+        }
         self.tbl
-            .create_index(
-                &["vector"],
-                Index::IvfHnswSq(IvfHnswSqIndexBuilder::default()),
-            )
+            .create_index(&["vector"], Index::IvfHnswSq(builder))
             .execute()
             .await
             .map_err(|e| Error::Store(format!("create_index: {e}")))?;
@@ -1834,6 +1860,16 @@ mod tests {
             ..Default::default()
         };
         (dir, cfg)
+    }
+
+    #[test]
+    fn distance_type_maps_from_config_string() {
+        use lancedb::DistanceType;
+        assert!(matches!(distance_from_str("cosine"), DistanceType::Cosine));
+        assert!(matches!(distance_from_str("l2"), DistanceType::L2));
+        assert!(matches!(distance_from_str("dot"), DistanceType::Dot));
+        // Unknown strings fall back to the cosine default.
+        assert!(matches!(distance_from_str("garbage"), DistanceType::Cosine));
     }
 
     #[tokio::test]

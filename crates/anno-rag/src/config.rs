@@ -184,6 +184,18 @@ fn default_ner_onnx_precision() -> String {
     "fp16".to_string()
 }
 
+fn default_index_distance() -> String {
+    "cosine".to_string()
+}
+
+fn default_search_nprobes() -> usize {
+    20
+}
+
+fn default_search_refine_factor() -> u32 {
+    10
+}
+
 fn default_ner_candle_model_id() -> String {
     "fastino/gliner2-multi-v1".to_string()
 }
@@ -327,6 +339,54 @@ pub struct AnnoRagConfig {
     )]
     #[serde(default = "default_ner_onnx_precision")]
     pub ner_onnx_precision: String,
+
+    /// Vector index distance metric: "cosine" (default), "l2", or "dot".
+    /// Embeddings are L2-normalized so cosine and dot give the same ordering;
+    /// setting it explicitly guards against a future non-normalized embedder.
+    #[config_meta(
+        env = "ANNO_RAG_INDEX_DISTANCE",
+        cli = "--index-distance",
+        doc = "Vector index distance: cosine (default), l2, or dot. Default: cosine",
+        since = "0.13"
+    )]
+    #[serde(default = "default_index_distance")]
+    pub index_distance: String,
+
+    /// IVF partition count for the vector index. `None` = LanceDB auto
+    /// (approximately sqrt of the row count).
+    #[config_meta(
+        env = "ANNO_RAG_INDEX_NUM_PARTITIONS",
+        cli = "--index-num-partitions",
+        doc = "IVF partitions for the vector index. Default: auto (unset)",
+        since = "0.13"
+    )]
+    #[serde(default)]
+    pub index_num_partitions: Option<usize>,
+
+    /// IVF partitions probed per query. Default: 20.
+    /// Higher values recover recall at the cost of latency; tune against
+    /// `bench_recall` once an IVF index exists (table ≥ vector_index_threshold).
+    #[config_meta(
+        env = "ANNO_RAG_SEARCH_NPROBES",
+        cli = "--search-nprobes",
+        doc = "IVF partitions probed per query (recall vs speed). Default: 20",
+        since = "0.13"
+    )]
+    #[serde(default = "default_search_nprobes")]
+    pub search_nprobes: usize,
+
+    /// Refine-factor for IVF_HNSW_SQ queries. Default: 10.
+    /// The SQ index stores vectors as int8; `refine_factor=N` fetches N×
+    /// more candidates then reranks with the original float32 values to
+    /// recover the ~5 % recall gap from quantization. Set to 1 to disable.
+    #[config_meta(
+        env = "ANNO_RAG_SEARCH_REFINE_FACTOR",
+        cli = "--search-refine-factor",
+        doc = "SQ refine factor (1 = off, 10 = default). Default: 10",
+        since = "0.13"
+    )]
+    #[serde(default = "default_search_refine_factor")]
+    pub search_refine_factor: u32,
 
     /// HuggingFace model ID for the Candle GLiNER2 detector backend.
     #[config_meta(
@@ -754,6 +814,10 @@ impl Default for AnnoRagConfig {
             ner_warmup_model: default_ner_warmup_model(),
             ner_model_id: default_ner_model_id(),
             ner_onnx_precision: default_ner_onnx_precision(),
+            index_distance: default_index_distance(),
+            index_num_partitions: None,
+            search_nprobes: default_search_nprobes(),
+            search_refine_factor: default_search_refine_factor(),
             ner_candle_model_id: default_ner_candle_model_id(),
             mcp_server_name: default_mcp_server_name(),
             ocr_mode: default_ocr_mode(),
@@ -870,6 +934,24 @@ impl AnnoRagConfig {
         if let Ok(v) = std::env::var("ANNO_RAG_NER_ONNX_PRECISION") {
             self.ner_onnx_precision = v;
         }
+        if let Ok(v) = std::env::var("ANNO_RAG_INDEX_DISTANCE") {
+            self.index_distance = v;
+        }
+        if let Ok(v) = std::env::var("ANNO_RAG_INDEX_NUM_PARTITIONS") {
+            if let Ok(n) = v.parse::<usize>() {
+                self.index_num_partitions = Some(n);
+            }
+        }
+        if let Ok(v) = std::env::var("ANNO_RAG_SEARCH_NPROBES") {
+            if let Ok(n) = v.parse::<usize>() {
+                self.search_nprobes = n;
+            }
+        }
+        if let Ok(v) = std::env::var("ANNO_RAG_SEARCH_REFINE_FACTOR") {
+            if let Ok(n) = v.parse::<u32>() {
+                self.search_refine_factor = n;
+            }
+        }
         if let Ok(v) = std::env::var("ANNO_RAG_NER_CANDLE_MODEL") {
             self.ner_candle_model_id = v;
         }
@@ -966,6 +1048,18 @@ impl AnnoRagConfig {
         }
         if let Some(v) = ov.ner_onnx_precision.clone() {
             self.ner_onnx_precision = v;
+        }
+        if let Some(v) = ov.index_distance.clone() {
+            self.index_distance = v;
+        }
+        if let Some(v) = ov.index_num_partitions {
+            self.index_num_partitions = Some(v);
+        }
+        if let Some(v) = ov.search_nprobes {
+            self.search_nprobes = v;
+        }
+        if let Some(v) = ov.search_refine_factor {
+            self.search_refine_factor = v;
         }
         if let Some(v) = ov.ner_candle_model_id.clone() {
             self.ner_candle_model_id = v;
@@ -1603,5 +1697,14 @@ mod tests {
         let json = r#"{"ner_onnx_precision":"fp32"}"#;
         let c: AnnoRagConfig = serde_json::from_str(json).unwrap();
         assert_eq!(c.ner_onnx_precision, "fp32");
+    }
+
+    #[test]
+    fn index_tuning_defaults() {
+        let c = AnnoRagConfig::default();
+        assert_eq!(c.index_distance, "cosine");
+        assert_eq!(c.index_num_partitions, None);
+        assert_eq!(c.search_nprobes, 20);
+        assert_eq!(c.search_refine_factor, 10);
     }
 }
