@@ -62,17 +62,28 @@ Ce fix est inclus même si Candle n'est plus le défaut, pour que les utilisateu
 
 ## Déploiement zero-config
 
-### 1. Chemin modèles standardisé
+### 1. Chemin modèles standardisé (cross-platform)
 
-- **Chemin fixe** : `%APPDATA%\anno-rag\models` (Windows) / `~/.anno-rag/models` (Linux/Mac)
-- Le binaire résout ce chemin en priorité, avant `ANNO_RAG_VAULT_PASSPHRASE`
+| Plateforme | Chemin par défaut |
+|------------|-------------------|
+| Windows | `%APPDATA%\anno-rag\models` |
+| macOS | `~/Library/Application Support/anno-rag/models` |
+| Linux | `~/.local/share/anno-rag/models` |
+
+- Résolution via `dirs::data_dir()` (crate `dirs`) — pas de code conditionnel par plateforme
 - `ANNO_MODELS_DIR` reste supporté comme override avancé, mais n'est plus requis
 
-### 2. Vault sans passphrase manuelle
+### 2. Vault sans passphrase manuelle (cross-platform)
 
-- Par défaut : clé dérivée via **Windows DPAPI** (keyring système, lié à la session Windows)
+| Plateforme | Backend keyring | Comportement |
+|------------|-----------------|--------------|
+| Windows | DPAPI (`keyring` crate → Windows Credential Manager) | Lié à la session Windows |
+| macOS | Keychain (`keyring` crate → macOS Keychain) | Lié au compte utilisateur |
+| Linux | Secret Service / libsecret | Lié au trousseau GNOME/KDE |
+
 - Aucun `ANNO_RAG_VAULT_PASSPHRASE` dans claude_desktop_config.json
 - `ANNO_RAG_VAULT_PASSPHRASE` reste supporté pour les power users et les déploiements serveur
+- La crate `keyring` (déjà dans le workspace) abstrait les trois plateformes
 
 ### 3. Auto-download au premier lancement
 
@@ -115,9 +126,8 @@ Aucune `env` nécessaire. Zéro variable à configurer.
 - Auto-download avec progression dans `status`
 
 **Hors périmètre (itération suivante) :**
-- Custom Action WiX pour claude_desktop_config.json (nécessite refonte installer)
+- Custom Action WiX/pkg pour claude_desktop_config.json (nécessite refonte installer)
 - GUI de progression pendant le téléchargement
-- Support Mac/Linux du chemin standardisé
 
 ---
 
@@ -125,6 +135,6 @@ Aucune `env` nécessaire. Zéro variable à configurer.
 
 1. `cargo build --profile dev-fast -p anno-rag-bin` sans `--features gliner2-candle-cpu` → binaire ONNX
 2. `detect` répond en <2s sur CPU Windows (froid après premier warmup)
-3. Premier lancement sans `ANNO_MODELS_DIR` → modèles téléchargés dans `%APPDATA%\anno-rag\models`
-4. Premier lancement sans `ANNO_RAG_VAULT_PASSPHRASE` → vault disponible via DPAPI
+3. Premier lancement sans `ANNO_MODELS_DIR` → modèles dans le chemin plateforme (`%APPDATA%`, `~/Library/Application Support`, `~/.local/share`)
+4. Premier lancement sans `ANNO_RAG_VAULT_PASSPHRASE` → vault disponible via keyring système (DPAPI / Keychain / Secret Service)
 5. `status` montre `download_progress_pct` pendant le premier téléchargement
