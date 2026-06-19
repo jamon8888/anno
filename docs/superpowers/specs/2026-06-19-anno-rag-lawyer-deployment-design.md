@@ -25,12 +25,12 @@
 | Rôle | Modèle actuel | Modèle cible | Taille |
 |------|---------------|--------------|--------|
 | NER / détection PII | SemplificaAI/gliner2-multi-v1-onnx (fp16) | **identique** | ~250 MB |
-| Embedding | OrdalieTech/Solon-embeddings-large-0.1 | **nomic-ai/nomic-embed-text-v1.5** | ~274 MB |
-| **Total download** | ~2.6 GB | **~524 MB** | −80% |
+| Embedding | OrdalieTech/Solon-embeddings-large-0.1 | **BAAI/bge-m3** | ~568 MB |
+| **Total download** | ~2.6 GB | **~818 MB** | −80% |
 
-**Pourquoi nomic-embed-text-v1.5 :**
+**Pourquoi BAAI/bge-m3 :**
 - MTEB score comparable ou supérieur à Solon sur texte multilingue
-- 274 MB vs 2136 MB — facteur 8x plus petit
+- 568 MB vs 2136 MB — facteur 8x plus petit
 - Licence Apache 2.0, disponible HF Hub
 - Supporte les instructions de requête (`search_query:`, `search_document:`) pour meilleure précision RAG
 
@@ -101,7 +101,7 @@ Un nouveau crate `anno-rag-setup` (Tauri + webview) produit les installeurs nati
 L'assisteur s'ouvre automatiquement à l'issue de l'installation et effectue **sans intervention utilisateur** :
 
 1. **Patch `claude_desktop_config.json`** — détecte le chemin selon la plateforme, injecte l'entrée `anno-rag` sans écraser les autres serveurs MCP, écriture atomique
-2. **Téléchargement des modèles** — barre de progression (~524 MB), téléchargés dans le chemin standardisé `dirs::data_dir()`
+2. **Téléchargement des modèles** — barre de progression (~818 MB), téléchargés dans le chemin standardisé `dirs::data_dir()`
 3. **Initialisation du vault** — clé générée et stockée dans le keyring système (DPAPI / Keychain)
 4. **Confirmation finale** — "Anno-RAG est prêt. Redémarrez Claude Desktop."
 
@@ -187,7 +187,7 @@ Chaque job :
 **Inclus — runtime anno-rag :**
 - `default = []` dans `anno-rag-bin/Cargo.toml` (ONNX par défaut)
 - Fix narrow panic dans `pipeline.rs` (Candle, pour utilisateurs GPU)
-- `default_embed_model()` → `nomic-ai/nomic-embed-text-v1.5`
+- `default_embed_model()` → `BAAI/bge-m3`
 - Chemin modèles cross-platform via `dirs::data_dir()`, sans `ANNO_MODELS_DIR`
 - Vault keyring cross-platform (DPAPI / Keychain / Secret Service), sans passphrase manuelle
 - Auto-download avec progression dans `status` (`download_progress_pct`)
