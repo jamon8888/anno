@@ -4,7 +4,7 @@
 
 **Goal:** Make anno-rag work out-of-the-box for non-technical users on Windows and macOS — no env vars, no manual model download, no passphrase to configure.
 
-**Architecture:** Five targeted changes to the existing runtime: (1) flip default Cargo features to ONNX, (2) fix Candle narrow panic for GPU users, (3) swap embedding model to nomic-embed-text-v1.5, (4) use `dirs::data_dir()` for cross-platform model/data paths, (5) auto-download models on MCP startup with progress in `status`. The vault keyring fallback already works correctly — no change needed there.
+**Architecture:** Five targeted changes to the existing runtime: (1) flip default Cargo features to ONNX, (2) fix Candle narrow panic for GPU users, (3) swap embedding model to BAAI/bge-m3, (4) use `dirs::data_dir()` for cross-platform model/data paths, (5) auto-download models on MCP startup with progress in `status`. The vault keyring fallback already works correctly — no change needed there.
 
 **Tech Stack:** Rust, `dirs` crate (already in workspace), `hf-hub` (already used in download_models), ONNX Runtime, Candle (GPU opt-in)
 
@@ -16,7 +16,7 @@
 |------|--------|
 | `crates/anno-rag-bin/Cargo.toml` | `default = []` — remove `gliner2-candle-cpu` |
 | `crates/anno/src/backends/gliner2_fastino_candle/pipeline.rs` | Truncate seq_len to max_position_embeddings in both `run_pipeline_candle` and `run_classify_pipeline_candle` |
-| `crates/anno-rag/src/config.rs` | Change `default_embed_model()` → `nomic-ai/nomic-embed-text-v1.5`, `default_embed_dim()` → 768, `default_data_dir()` → `dirs::data_dir()` |
+| `crates/anno-rag/src/config.rs` | Change `default_embed_model()` → `BAAI/bge-m3`, `default_embed_dim: 1024, `default_data_dir()` → `dirs::data_dir()` |
 | `crates/anno-rag-mcp/src/model_inventory.rs` | Add nomic-embed required files |
 | `crates/anno-rag-mcp/src/lib.rs` | Add `WarmupPhase::Downloading`, auto-download before warmup, expose `download_progress_pct` in status |
 
@@ -191,13 +191,13 @@ git commit -m "fix(candle): truncate input to max_position_embeddings to prevent
 
 ---
 
-### Task 3: Switch embedding model to nomic-embed-text-v1.5
+### Task 3: Switch embedding model to BAAI/bge-m3
 
 **Files:**
 - Modify: `crates/anno-rag/src/config.rs:203-208`
 - Modify: `crates/anno-rag-mcp/src/model_inventory.rs` (embedder_required_files)
 
-nomic-embed-text-v1.5 output dimension is **768** (not 1024 like Solon). The LanceDB index stores vectors at the dimension configured at creation time — changing `embed_dim` on an existing index causes a silent mismatch. The auto-download (Task 5) will always create a fresh index on first run for new installs, so this is safe for new deployments.
+BAAI/bge-m3 output dimension is **768** (not 1024 like Solon). The LanceDB index stores vectors at the dimension configured at creation time — changing `embed_dim` on an existing index causes a silent mismatch. The auto-download (Task 5) will always create a fresh index on first run for new installs, so this is safe for new deployments.
 
 - [ ] **Step 1: Write config test**
 
@@ -207,8 +207,8 @@ Add to `crates/anno-rag/src/config.rs` tests:
 #[test]
 fn default_embed_model_is_nomic() {
     let c = AnnoRagConfig::default();
-    assert_eq!(c.embed_model, "nomic-ai/nomic-embed-text-v1.5");
-    assert_eq!(c.embed_dim, 768);
+    assert_eq!(c.embed_model, "BAAI/bge-m3");
+    assert_eq!(c.embed_dim: 1024);
 }
 ```
 
@@ -219,7 +219,7 @@ $env:CARGO_TARGET_DIR = "E:\cargo-target"
 cargo test -p anno-rag -- default_embed_model_is_nomic 2>&1 | tail -8
 ```
 
-Expected: FAIL — `"OrdalieTech/Solon-embeddings-large-0.1" != "nomic-ai/nomic-embed-text-v1.5"`
+Expected: FAIL — `"OrdalieTech/Solon-embeddings-large-0.1" != "BAAI/bge-m3"`
 
 - [ ] **Step 3: Update defaults in config.rs**
 
@@ -239,7 +239,7 @@ To:
 
 ```rust
 fn default_embed_model() -> String {
-    "nomic-ai/nomic-embed-text-v1.5".to_string()
+    "BAAI/bge-m3".to_string()
 }
 
 fn default_embed_dim() -> usize {
@@ -249,7 +249,7 @@ fn default_embed_dim() -> usize {
 
 - [ ] **Step 4: Update model_inventory.rs — required files for nomic-embed**
 
-In `crates/anno-rag-mcp/src/model_inventory.rs`, find `embedder_required_files()` and verify it only uses the last path segment (model dir name), not the full HF repo ID. nomic-embed-text-v1.5 exposes the same files as Solon:
+In `crates/anno-rag-mcp/src/model_inventory.rs`, find `embedder_required_files()` and verify it only uses the last path segment (model dir name), not the full HF repo ID. BAAI/bge-m3 exposes the same files as Solon:
 
 ```
 {dir}/config.json
@@ -281,7 +281,7 @@ Fix any tests that assert `embed_model == "OrdalieTech/Solon-embeddings-large-0.
 
 ```powershell
 git add crates/anno-rag/src/config.rs crates/anno-rag-mcp/src/model_inventory.rs
-git commit -m "feat(embed): switch default embedder to nomic-ai/nomic-embed-text-v1.5 (768d, 274 MB)"
+git commit -m "feat(embed): switch default embedder to BAAI/bge-m3 (1024d, 568 MB)"
 ```
 
 ---
@@ -557,7 +557,7 @@ gh pr create --title "feat: zero-config runtime — ONNX default, nomic-embed, p
 ## Changes
 - \`default = []\` in anno-rag-bin: ONNX backend by default, Candle opt-in
 - Fix Candle narrow panic: truncate to max_position_embeddings (512)
-- Switch embedder to nomic-ai/nomic-embed-text-v1.5 (768d, ~274 MB vs 2.1 GB)
+- Switch embedder to BAAI/bge-m3 (1024d, ~568 MB vs 2.1 GB)
 - Cross-platform data dir via dirs::data_dir() (%APPDATA%, ~/Library/Application Support, ~/.local/share)
 - Auto-download models on MCP startup with download_progress_pct in status
 
@@ -575,7 +575,7 @@ gh pr create --title "feat: zero-config runtime — ONNX default, nomic-embed, p
 **Spec coverage:**
 - ✅ `default = []` — Task 1
 - ✅ Narrow panic fix — Task 2
-- ✅ nomic-embed-text-v1.5 — Task 3
+- ✅ BAAI/bge-m3 — Task 3
 - ✅ `dirs::data_dir()` cross-platform — Task 4
 - ✅ Auto-download + progress in status — Task 5
 - ✅ Vault keyring — already works, no change needed (vault.rs uses keyring when `ANNO_RAG_VAULT_PASSPHRASE` is absent)
