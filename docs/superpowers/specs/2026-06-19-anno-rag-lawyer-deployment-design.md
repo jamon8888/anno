@@ -22,22 +22,32 @@
 
 ### Modèles
 
-| Rôle | Modèle actuel | Modèle cible | Taille |
-|------|---------------|--------------|--------|
-| NER / détection PII | SemplificaAI/gliner2-multi-v1-onnx (fp16) | **identique** | ~250 MB |
-| Embedding | OrdalieTech/Solon-embeddings-large-0.1 | **BAAI/bge-m3** | ~568 MB |
-| **Total download** | ~2.6 GB | **~818 MB** | −80% |
+| Rôle | Modèle actuel | Modèle cible | Format | Taille |
+|------|---------------|--------------|--------|--------|
+| NER / PII | SemplificaAI/gliner2-multi-v1-onnx (fp16) | **fastino/gliner2-privacy-filter-PII-multi** | ONNX FP16 (converti Plan 3) | ~150 MB |
+| NER / Juridique | _(identique au PII, généraliste)_ | **SemplificaAI/gliner2-multi-v1-onnx** | ONNX FP16 (existant) | ~250 MB |
+| Embedding | OrdalieTech/Solon-embeddings-large-0.1 | **BAAI/bge-m3 dense-only int8** | ONNX INT8 | ~145 MB |
+| **Total download** | ~2.6 GB | **~545 MB** | | **−79 %** |
 
-**Pourquoi BAAI/bge-m3 :**
-- MTEB score comparable ou supérieur à Solon sur texte multilingue
-- 568 MB vs 2136 MB — facteur 8x plus petit
-- Licence Apache 2.0, disponible HF Hub
-- Supporte les instructions de requête (`search_query:`, `search_document:`) pour meilleure précision RAG
+**Architecture dual-model NER :**
+- `gliner2-privacy-filter-PII-multi` : spécialisé 42 types PII, 7 langues, F1 SOTA — utilisé par `detect` et le pipeline privacy
+- `gliner2-multi-v1-onnx` : généraliste — utilisé par `legal_ingest`, `legal_extract_contract`, `legal_extract_case_file`
+- Les deux sont label-conditioned (le schéma est un input) — aucun changement d'API MCP
 
-**Pourquoi garder ONNX (pas Candle/fastino) :**
-- `fastino/gliner2-multi-v1` et `SemplificaAI/gliner2-multi-v1-onnx` sont les mêmes poids
-- ONNX = <1s/inférence sur CPU Windows ; Candle CPU = 60-120s → timeout MCP systématique
-- Pour avocat sans GPU, ONNX est le seul backend viable
+**Pourquoi bge-m3 int8 dense-only :**
+- MTEB SOTA multilingual 2026, excellent français juridique, 8192 tokens max
+- Dense-only suffisant pour LanceDB (pas de ColBERT ni sparse dans anno-rag)
+- INT8 ONNX : 2x plus rapide que fp16, perte de qualité négligeable pour retrieval
+- `AlpEge/bge-m3-onnx-int8` déjà disponible sur HF — pas de conversion nécessaire
+- dim=1024 (identique à Solon) → aucune migration d'index LanceDB existant
+
+**Pourquoi FP16 et pas INT8 pour GLiNER2 :**
+- INT8 dynamique casse le scoring des spans GLiNER2 (issue connue) → listes vides à threshold standard
+- FP16 = sweet spot : 2x plus petit que fp32, aucune dégradation de précision
+
+**Pourquoi ONNX (pas Candle) :**
+- ONNX = <1s/inférence sur CPU ; Candle CPU = 60-120s → timeout MCP systématique
+- Pour avocats sans GPU, ONNX est le seul backend viable
 
 ### Backend par défaut
 
@@ -184,13 +194,20 @@ Chaque job :
 
 ## Périmètre de cette itération
 
-**Inclus — runtime anno-rag :**
+**Inclus — runtime anno-rag (Plan 1) :**
 - `default = []` dans `anno-rag-bin/Cargo.toml` (ONNX par défaut)
 - Fix narrow panic dans `pipeline.rs` (Candle, pour utilisateurs GPU)
-- `default_embed_model()` → `BAAI/bge-m3`
+- `default_embed_model()` → `BAAI/bge-m3` int8 dense-only ONNX (dim=1024)
+- Config dual-model NER : `ner_pii_model` (PII) + `ner_legal_model` (juridique)
+- Download des 3 modèles : bge-m3-int8 + gliner2-PII-fp16 + gliner2-multi-fp16
 - Chemin modèles cross-platform via `dirs::data_dir()`, sans `ANNO_MODELS_DIR`
 - Vault keyring cross-platform (DPAPI / Keychain / Secret Service), sans passphrase manuelle
 - Auto-download avec progression dans `status` (`download_progress_pct`)
+
+**Inclus — conversion ONNX (Plan 3) :**
+- Script de conversion `fastino/gliner2-privacy-filter-PII-multi` → ONNX FP16
+- Via `gliner2-onnx 0.1.1` (Python, exécuté une seule fois en CI)
+- Artifact hébergé sur HF ou GitHub Releases pour que download_models puisse le récupérer
 
 **Inclus — installeur Tauri :**
 - Crate `anno-rag-setup` (Tauri) : assistant de setup cross-platform
