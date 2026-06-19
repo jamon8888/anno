@@ -163,7 +163,10 @@ jobs:
       # API rate limits in tag release jobs.
       - name: Install protoc (Linux)
         if: runner.os == 'Linux'
-        run: sudo apt-get update && sudo apt-get install -y protobuf-compiler
+        run: |
+          curl -fsSL "https://github.com/protocolbuffers/protobuf/releases/download/v25.4/protoc-25.4-linux-x86_64.zip" -o /tmp/protoc.zip
+          unzip -o /tmp/protoc.zip -d /tmp/protoc
+          sudo cp /tmp/protoc/bin/protoc /usr/local/bin/protoc
       - name: Install protoc (macOS)
         if: runner.os == 'macOS'
         run: brew list protobuf >/dev/null 2>&1 || brew install protobuf
@@ -662,7 +665,10 @@ jobs:
       # ── protoc (required by lance-encoding/prost) ─────────────────────
       - name: Install protoc (Linux)
         if: matrix.os == 'linux'
-        run: sudo apt-get update && sudo apt-get install -y protobuf-compiler
+        run: |
+          curl -fsSL "https://github.com/protocolbuffers/protobuf/releases/download/v25.4/protoc-25.4-linux-x86_64.zip" -o /tmp/protoc.zip
+          unzip -o /tmp/protoc.zip -d /tmp/protoc
+          sudo cp /tmp/protoc/bin/protoc /usr/local/bin/protoc
       - name: Install protoc (macOS)
         if: matrix.os == 'macos'
         run: brew list protobuf >/dev/null 2>&1 || brew install protobuf
