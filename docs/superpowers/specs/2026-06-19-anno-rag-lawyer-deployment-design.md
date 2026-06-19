@@ -92,38 +92,33 @@ Ce fix est inclus même si Candle n'est plus le défaut, pour que les utilisateu
 - Pas de blocage : le MCP répond aux appels non-modèles (vault_stats, memory) pendant le download
 - `detect`, `search`, `index` retournent `{"error": "models_loading", "progress_pct": 42}` pendant le download
 
-### 4. Commande `anno-rag install` (cross-platform)
+### 4. Installeur Tauri — assistant de setup (cross-platform)
 
-Le binaire expose une sous-commande `install` qui patch `claude_desktop_config.json` :
+Un nouveau crate `anno-rag-setup` (Tauri + webview) produit les installeurs natifs :
+- Windows : `.msi` via WiX bundle Tauri
+- macOS : `.dmg` via Tauri macOS target
 
-```
-anno-rag install
-```
+L'assisteur s'ouvre automatiquement à l'issue de l'installation et effectue **sans intervention utilisateur** :
 
-Comportement :
-1. Détecte le chemin Claude Desktop selon la plateforme :
-   - Windows : `%APPDATA%\Claude\claude_desktop_config.json`
-   - macOS : `~/Library/Application Support/Claude/claude_desktop_config.json`
-   - Linux : `~/.config/Claude/claude_desktop_config.json`
-2. Lit le JSON existant (ou crée `{}` si absent)
-3. Injecte ou met à jour l'entrée `anno-rag` — sans écraser les autres serveurs MCP
-4. Écrit le fichier atomiquement (write + rename)
-5. Avertit si Claude Desktop est en cours d'exécution (demande de redémarrage)
+1. **Patch `claude_desktop_config.json`** — détecte le chemin selon la plateforme, injecte l'entrée `anno-rag` sans écraser les autres serveurs MCP, écriture atomique
+2. **Téléchargement des modèles** — barre de progression (~524 MB), téléchargés dans le chemin standardisé `dirs::data_dir()`
+3. **Initialisation du vault** — clé générée et stockée dans le keyring système (DPAPI / Keychain)
+4. **Confirmation finale** — "Anno-RAG est prêt. Redémarrez Claude Desktop."
 
 ```json
 {
   "mcpServers": {
     "anno-rag": {
-      "command": "/usr/local/bin/anno-rag",
+      "command": "/Applications/anno-rag.app/Contents/MacOS/anno-rag",
       "args": ["mcp"]
     }
   }
 }
 ```
 
-Aucune `env` nécessaire — vault via keyring système, modèles via chemin standardisé.
+Aucune `env` nécessaire. L'avocat ne voit jamais un terminal.
 
-Le `.msi` (Windows) et le `.pkg` (macOS) exécutent `anno-rag install` en post-install automatiquement.
+Anno-rag reste un **binaire MCP pur** — Tauri est uniquement utilisé pour le setup, pas pour le runtime.
 
 ---
 
@@ -136,12 +131,12 @@ Le `.msi` (Windows) et le `.pkg` (macOS) exécutent `anno-rag install` en post-i
 - Chemin modèles standardisé cross-platform via `dirs::data_dir()`, sans `ANNO_MODELS_DIR`
 - Vault via keyring système cross-platform (DPAPI / Keychain / Secret Service), sans passphrase
 - Auto-download avec progression dans `status` (`download_progress_pct`)
-- Commande `anno-rag install` : patch `claude_desktop_config.json` cross-platform
-- `.msi` (Windows) et `.pkg` (macOS) exécutent `anno-rag install` en post-install
+- Crate `anno-rag-setup` (Tauri) : assistant de setup cross-platform (Windows `.msi` + macOS `.dmg`)
+- Setup automatique : patch `claude_desktop_config.json`, download modèles avec barre de progression, init vault keyring
 
 **Hors périmètre (itération suivante) :**
-- GUI de progression pendant le téléchargement
 - Commande `anno-rag uninstall` (retrait de claude_desktop_config.json)
+- Linux packaging (.deb / .AppImage)
 
 ---
 
