@@ -29,11 +29,15 @@ pub(crate) fn run_pipeline_candle(
 ) -> crate::Result<(ScorerOutput, usize)> {
     let device = &model.device;
 
-    // 1. Build input tensors.
-    let seq_len = record.input_ids.len();
-    let input_ids = Tensor::from_slice(&record.input_ids[..], (1, seq_len), device)
+    // 1. Build input tensors — truncate to encoder position limit (DeBERTa: 512).
+    let max_seq = model.encoder.config.max_position_embeddings as usize;
+    let seq_len = record.input_ids.len().min(max_seq);
+    let input_ids = Tensor::from_slice(&record.input_ids[..seq_len], (1, seq_len), device)
         .map_err(|e| Error::Backend(format!("candle input_ids: {e}")))?;
-    let attn_mask: Vec<u32> = record.attention_mask.iter().map(|&v| v as u32).collect();
+    let attn_mask: Vec<u32> = record.attention_mask[..seq_len]
+        .iter()
+        .map(|&v| v as u32)
+        .collect();
     let attention_mask = Tensor::from_slice(&attn_mask[..], (1, seq_len), device)
         .map_err(|e| Error::Backend(format!("candle attn_mask: {e}")))?;
 
@@ -45,12 +49,18 @@ pub(crate) fn run_pipeline_candle(
     // hidden: [1, S, H]
 
     // 3. Token gather → text_emb.
-    let num_words = record.word_to_token_maps.len();
+    // Filter word_to_token_maps to spans within the truncated sequence.
+    let filtered_maps: Vec<(usize, usize)> = record
+        .word_to_token_maps
+        .iter()
+        .copied()
+        .filter(|&(_start, end)| end <= seq_len)
+        .collect();
+    let num_words = filtered_maps.len();
     if num_words == 0 {
         return Ok((empty_scorer_output(), 0));
     }
-    let word_starts: Vec<u32> = record
-        .word_to_token_maps
+    let word_starts: Vec<u32> = filtered_maps
         .iter()
         .map(|&(start, _)| start as u32)
         .collect();
@@ -155,10 +165,14 @@ pub(crate) fn run_classify_pipeline_candle(
     task: &TaskMapping,
 ) -> crate::Result<Vec<f32>> {
     let device = &model.device;
-    let seq_len = record.input_ids.len();
-    let input_ids = Tensor::from_slice(&record.input_ids[..], (1, seq_len), device)
+    let max_seq = model.encoder.config.max_position_embeddings as usize;
+    let seq_len = record.input_ids.len().min(max_seq);
+    let input_ids = Tensor::from_slice(&record.input_ids[..seq_len], (1, seq_len), device)
         .map_err(|e| Error::Backend(format!("candle input_ids: {e}")))?;
-    let attn_mask: Vec<u32> = record.attention_mask.iter().map(|&v| v as u32).collect();
+    let attn_mask: Vec<u32> = record.attention_mask[..seq_len]
+        .iter()
+        .map(|&v| v as u32)
+        .collect();
     let attention_mask = Tensor::from_slice(&attn_mask[..], (1, seq_len), device)
         .map_err(|e| Error::Backend(format!("candle attn_mask: {e}")))?;
 

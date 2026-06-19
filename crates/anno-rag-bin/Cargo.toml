@@ -10,7 +10,7 @@ homepage.workspace     = true
 description       = "anno-rag CLI binary — splits out so anno-rag-mcp can depend on anno-rag without a cycle."
 
 [features]
-default = ["gliner2-candle-cpu"]
+default = []
 gpu-metal = ["anno-rag/gpu-metal", "anno-rag-mcp/gpu-metal"]
 gpu-cuda = ["anno-rag/gpu-cuda", "anno-rag-mcp/gpu-cuda"]
 gliner2-candle-cpu = ["anno-rag/gliner2-candle-cpu", "anno-rag-mcp/gliner2-candle-cpu"]
