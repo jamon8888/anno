@@ -1,0 +1,49 @@
+name: Convert gliner2-PII -> ONNX FP16 (one-shot)
+
+on:
+  workflow_dispatch:
+    inputs:
+      push_to:
+        description: 'HF repo to push converted model (e.g. anno-rag/gliner2-privacy-filter-PII-multi-onnx-fp16)'
+        required: true
+        default: 'anno-rag/gliner2-privacy-filter-PII-multi-onnx-fp16'
+
+jobs:
+  convert:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        run: pip install -r scripts/convert-pii-onnx/requirements.txt
+
+      - name: Convert to ONNX FP16
+        run: |
+          python scripts/convert-pii-onnx/convert.py \
+            --model fastino/gliner2-privacy-filter-PII-multi \
+            --out /tmp/pii-onnx \
+            --push-to ${{ github.event.inputs.push_to }} \
+            --token ${{ secrets.HF_WRITE_TOKEN }}
+
+      - name: Verify output
+        run: |
+          python - <<'EOF'
+          import onnxruntime as ort
+          sess = ort.InferenceSession("/tmp/pii-onnx/model_fp16_v2.onnx")
+          inputs = [i.name for i in sess.get_inputs()]
+          print("ONNX inputs:", inputs)
+          assert "input_ids" in inputs
+          print("ONNX validation OK")
+          EOF
+
+      - name: Upload ONNX artifact (CI cache)
+        uses: actions/upload-artifact@v4
+        with:
+          name: gliner2-pii-onnx-fp16
+          path: /tmp/pii-onnx/
+          retention-days: 14
