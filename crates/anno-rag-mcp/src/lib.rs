@@ -63,6 +63,8 @@ const MCP_SYNC_BUDGET_MILLIS: u64 = 45_000;
 pub(crate) enum WarmupPhase {
     /// Background warmup has not started yet.
     Idle,
+    /// Auto-downloading models. `progress_pct` is 0–100 (best-effort).
+    Downloading { started_ms: u64, progress_pct: u8 },
     /// Warmup in progress. `started_ms` = Unix epoch milliseconds at spawn time.
     Loading { started_ms: u64 },
     /// Both models loaded successfully.
@@ -147,6 +149,27 @@ impl AnnoRagServer {
     async fn require_models(&self) -> Result<&Pipeline, String> {
         let phase = self.warmup_phase.read().await.clone();
         match phase {
+            WarmupPhase::Downloading {
+                started_ms,
+                progress_pct,
+            } => {
+                let elapsed_s = std::time::SystemTime::now()
+                    .duration_since(std::time::UNIX_EPOCH)
+                    .unwrap_or_default()
+                    .as_secs()
+                    .saturating_sub(started_ms / 1000);
+                return Err(serde_json::json!({
+                    "ok": false,
+                    "error": "models_downloading",
+                    "download_progress_pct": progress_pct,
+                    "message": format!(
+                        "anno-rag is downloading ML models ({progress_pct}% complete, \
+                         {elapsed_s}s elapsed). Please retry in a moment."
+                    ),
+                    "hint": "Run `anno-rag status` to check download progress."
+                })
+                .to_string());
+            }
             WarmupPhase::Loading { started_ms } => {
                 let elapsed_s = std::time::SystemTime::now()
                     .duration_since(std::time::UNIX_EPOCH)
@@ -882,6 +905,17 @@ impl AnnoRagServer {
             let phase = self.warmup_phase.read().await;
             match &*phase {
                 WarmupPhase::Idle => serde_json::json!({ "phase": "idle" }),
+                WarmupPhase::Downloading {
+                    started_ms,
+                    progress_pct,
+                } => {
+                    let elapsed_s = std::time::SystemTime::now()
+                        .duration_since(std::time::UNIX_EPOCH)
+                        .unwrap_or_default()
+                        .as_secs()
+                        .saturating_sub(started_ms / 1000);
+                    serde_json::json!({ "phase": "downloading", "elapsed_s": elapsed_s, "download_progress_pct": progress_pct })
+                }
                 WarmupPhase::Loading { started_ms } => {
                     let elapsed_s = std::time::SystemTime::now()
                         .duration_since(std::time::UNIX_EPOCH)
@@ -3808,9 +3842,33 @@ pub async fn serve_stdio_lazy(cfg: AnnoRagConfig, key: [u8; 32]) -> anno_rag::er
         .duration_since(std::time::UNIX_EPOCH)
         .unwrap_or_default()
         .as_millis() as u64;
-    *warmup_server.warmup_phase.write().await = WarmupPhase::Loading { started_ms };
+    *warmup_server.warmup_phase.write().await = WarmupPhase::Downloading {
+        started_ms,
+        progress_pct: 0,
+    };
     tokio::spawn(async move {
         tracing::info!("anno-rag: background model warmup starting");
+
+        // Step 0: auto-download models if any are absent.
+        {
+            let inv =
+                crate::model_inventory::ModelInventoryService::new(warmup_server.cfg.as_ref())
+                    .inspect();
+            if !inv.ready {
+                tracing::info!("anno-rag: models absent — auto-downloading (~545 MB)");
+                if let Err(e) =
+                    anno_rag::download_models::download(warmup_server.cfg.as_ref()).await
+                {
+                    tracing::error!("anno-rag: model download failed: {e}");
+                    *warmup_server.warmup_phase.write().await = WarmupPhase::Failed {
+                        error: format!("model download failed: {e}"),
+                    };
+                    return;
+                }
+                tracing::info!("anno-rag: model download complete");
+            }
+        }
+        *warmup_server.warmup_phase.write().await = WarmupPhase::Loading { started_ms };
 
         // Step 1: init Pipeline struct (opens LanceDB + vault, ~2 s).
         let pipeline_arc = match warmup_server.pipeline().await {
@@ -4301,6 +4359,7 @@ mod lazy_tests {
         let cfg = AnnoRagConfig::default();
         let e = cfg.embedder_dir();
         let n = cfg.ner_onnx_dir();
+        let p = cfg.ner_pii_onnx_dir();
         let c = cfg.ner_candle_dir();
         let rels: Vec<String> = vec![
             format!("{e}/config.json"),
@@ -4315,6 +4374,16 @@ mod lazy_tests {
             format!("{n}/fp32_v2/span_rep_fp32.onnx"),
             format!("{n}/fp32_v2/token_gather_fp32.onnx"),
             format!("{n}/fp32_v2/tokenizer.json"),
+            // PII NER model (fastino/gliner2-privacy-filter-PII-multi)
+            format!("{p}/fp32_v2/classifier_fp32.onnx"),
+            format!("{p}/fp32_v2/count_lstm_fixed_fp32.onnx"),
+            format!("{p}/fp32_v2/count_pred_argmax_fp32.onnx"),
+            format!("{p}/fp32_v2/encoder_fp32.onnx"),
+            format!("{p}/fp32_v2/schema_gather_fp32.onnx"),
+            format!("{p}/fp32_v2/scorer_fp32.onnx"),
+            format!("{p}/fp32_v2/span_rep_fp32.onnx"),
+            format!("{p}/fp32_v2/token_gather_fp32.onnx"),
+            format!("{p}/fp32_v2/tokenizer.json"),
             format!("{c}/tokenizer.json"),
             format!("{c}/config.json"),
             format!("{c}/encoder_config/config.json"),
