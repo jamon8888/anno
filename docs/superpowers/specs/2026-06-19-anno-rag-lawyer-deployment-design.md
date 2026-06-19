@@ -122,21 +122,90 @@ Anno-rag reste un **binaire MCP pur** — Tauri est uniquement utilisé pour le 
 
 ---
 
+## CI — Matrice de builds
+
+### Matrice cible
+
+| Target | Runner CI | Features | Artifact produit |
+|--------|-----------|----------|-----------------|
+| `x86_64-pc-windows-msvc` | `windows-latest` | `default=[]` (ONNX CPU) | `.msi` Tauri + `.zip` binaire |
+| `x86_64-pc-windows-msvc` | `self-hosted` CUDA | `gpu-cuda` | `.msi` CUDA + `.zip` binaire |
+| `aarch64-apple-darwin` | `macos-14` | `default=[]` (ONNX CPU) | `.dmg` Tauri + `.tar.gz` binaire |
+| `aarch64-apple-darwin` | `macos-14` | `gpu-metal` | `.dmg` Metal + `.tar.gz` binaire |
+| `x86_64-apple-darwin` | `macos-13` | `default=[]` (ONNX CPU) | `.dmg` Tauri + `.tar.gz` binaire |
+
+### Nommage des artifacts
+
+```
+anno-rag-{version}-{target}-{variant}.{ext}
+
+Exemples :
+anno-rag-0.14.0-x86_64-pc-windows-msvc-cpu.msi
+anno-rag-0.14.0-aarch64-apple-darwin-metal.dmg
+anno-rag-0.14.0-aarch64-apple-darwin-cpu.dmg
+anno-rag-0.14.0-x86_64-apple-darwin-cpu.dmg
+```
+
+### Workflow GitHub Actions
+
+Un workflow unifié `release-all.yml` remplace `release-binaries.yml` et `release-accelerated.yml` :
+
+```yaml
+strategy:
+  matrix:
+    include:
+      - os: windows-latest
+        target: x86_64-pc-windows-msvc
+        features: ""           # ONNX CPU
+        variant: cpu
+      - os: [self-hosted, windows, cuda]
+        target: x86_64-pc-windows-msvc
+        features: gpu-cuda
+        variant: cuda
+      - os: macos-14
+        target: aarch64-apple-darwin
+        features: ""           # ONNX CPU
+        variant: cpu
+      - os: macos-14
+        target: aarch64-apple-darwin
+        features: gpu-metal
+        variant: metal
+      - os: macos-13
+        target: x86_64-apple-darwin
+        features: ""           # ONNX CPU Intel
+        variant: cpu
+```
+
+Chaque job :
+1. `cargo build --release -p anno-rag-bin --features {features}`
+2. Smoke test : `anno-rag --help` + `anno-rag diagnose-gpu` si GPU
+3. `tauri build` → produit `.msi` (Windows) ou `.dmg` (macOS)
+4. Upload artifact nommé avec `{target}-{variant}`
+
 ## Périmètre de cette itération
 
-**Inclus :**
-- Changer `default_embed_model()` vers `nomic-ai/nomic-embed-text-v1.5`
-- Changer `default = []` dans `anno-rag-bin/Cargo.toml` (ONNX par défaut)
+**Inclus — runtime anno-rag :**
+- `default = []` dans `anno-rag-bin/Cargo.toml` (ONNX par défaut)
 - Fix narrow panic dans `pipeline.rs` (Candle, pour utilisateurs GPU)
-- Chemin modèles standardisé cross-platform via `dirs::data_dir()`, sans `ANNO_MODELS_DIR`
-- Vault via keyring système cross-platform (DPAPI / Keychain / Secret Service), sans passphrase
+- `default_embed_model()` → `nomic-ai/nomic-embed-text-v1.5`
+- Chemin modèles cross-platform via `dirs::data_dir()`, sans `ANNO_MODELS_DIR`
+- Vault keyring cross-platform (DPAPI / Keychain / Secret Service), sans passphrase manuelle
 - Auto-download avec progression dans `status` (`download_progress_pct`)
-- Crate `anno-rag-setup` (Tauri) : assistant de setup cross-platform (Windows `.msi` + macOS `.dmg`)
-- Setup automatique : patch `claude_desktop_config.json`, download modèles avec barre de progression, init vault keyring
+
+**Inclus — installeur Tauri :**
+- Crate `anno-rag-setup` (Tauri) : assistant de setup cross-platform
+- Patch automatique `claude_desktop_config.json`, download modèles, init vault keyring
+- Artifacts : `.msi` Windows + `.dmg` macOS (arm64 + x86_64)
+
+**Inclus — CI :**
+- Workflow `release-all.yml` unifié remplaçant `release-binaries.yml` + `release-accelerated.yml`
+- Matrice : 5 jobs (Windows CPU, Windows CUDA, macOS arm64 CPU, macOS arm64 Metal, macOS x86_64 CPU)
+- Tauri build intégré dans chaque job pour produire les installeurs natifs
 
 **Hors périmètre (itération suivante) :**
-- Commande `anno-rag uninstall` (retrait de claude_desktop_config.json)
+- `anno-rag uninstall`
 - Linux packaging (.deb / .AppImage)
+- GPU CUDA macOS (non supporté par CUDA)
 
 ---
 
