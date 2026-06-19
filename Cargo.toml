@@ -22,6 +22,7 @@ members = [
     "crates/anno-knowledge-store",
     "crates/anno-source-local",
     "workspace-hack",
+    "crates/anno-rag-setup",
 ]
 exclude = ["vendor"]
 resolver = "2"

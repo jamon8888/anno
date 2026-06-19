@@ -886,6 +886,19 @@ fn parse_hex_key(hex: &str) -> Result<[u8; 32]> {
     Ok(key)
 }
 
+/// Generate a random 32-byte vault key and persist it in the OS keyring
+/// (falling back to a Windows DPAPI-protected file when the keyring is
+/// unavailable). Intended for first-run setup by the Tauri installer.
+///
+/// If a key already exists in the keyring it is overwritten with a fresh one.
+/// This function never reads or returns key material — it only stores it.
+///
+/// # Errors
+/// Returns [`Error::Vault`] if both the keyring and the DPAPI fallback fail.
+pub fn init_keyring(_cfg: &crate::config::AnnoRagConfig) -> Result<()> {
+    generate_key_with_keyring_or_dpapi().map(|_| ())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
