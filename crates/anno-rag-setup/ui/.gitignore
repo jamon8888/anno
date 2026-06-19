@@ -1,0 +1,2 @@
+# Allow the wizard UI HTML — root .gitignore excludes *.html globally
+!*.html

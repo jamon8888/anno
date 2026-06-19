@@ -1,0 +1,146 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Anno-RAG — Installation</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: system-ui, sans-serif; background: #f8f9fa; color: #212529; display: flex; align-items: center; justify-content: center; height: 100vh; }
+    .card { background: white; border-radius: 12px; box-shadow: 0 4px 24px rgba(0,0,0,.08); padding: 40px; width: 520px; }
+    h1 { font-size: 1.5rem; margin-bottom: 8px; }
+    .subtitle { color: #6c757d; margin-bottom: 32px; font-size: .95rem; }
+    .step { display: none; }
+    .step.active { display: block; }
+    .btn { background: #1a56db; color: white; border: none; border-radius: 8px; padding: 12px 28px; font-size: 1rem; cursor: pointer; margin-top: 24px; }
+    .btn:disabled { background: #adb5bd; cursor: not-allowed; }
+    .progress-bar { background: #e9ecef; border-radius: 6px; height: 12px; margin: 16px 0; }
+    .progress-fill { background: #1a56db; border-radius: 6px; height: 100%; transition: width .3s ease; }
+    .status { color: #6c757d; font-size: .88rem; min-height: 20px; }
+    .ok { color: #198754; font-weight: 600; }
+    .err { color: #dc3545; font-weight: 600; }
+    .steps-nav { display: flex; gap: 8px; margin-bottom: 32px; }
+    .dot { width: 10px; height: 10px; border-radius: 50%; background: #dee2e6; }
+    .dot.done { background: #1a56db; }
+    .dot.current { background: #1a56db; box-shadow: 0 0 0 3px rgba(26,86,219,.2); }
+  </style>
+</head>
+<body>
+<div class="card">
+  <div class="steps-nav" id="nav">
+    <div class="dot current" id="d0"></div>
+    <div class="dot" id="d1"></div>
+    <div class="dot" id="d2"></div>
+    <div class="dot" id="d3"></div>
+  </div>
+
+  <!-- Step 0: Welcome -->
+  <div class="step active" id="s0">
+    <h1>Bienvenue dans Anno-RAG</h1>
+    <p class="subtitle">Cet assistant va configurer Anno-RAG pour Claude Desktop en 3 etapes rapides.<br><br>Duree estimee : 5-10 min (telechargement inclus).</p>
+    <button class="btn" onclick="gotoStep(1)">Commencer</button>
+  </div>
+
+  <!-- Step 1: Patch Claude config -->
+  <div class="step" id="s1">
+    <h1>Configuration Claude Desktop</h1>
+    <p class="subtitle">Anno-RAG sera ajout&eacute; automatiquement &agrave; votre fichier de configuration Claude Desktop.</p>
+    <div class="status" id="st1">En attente&hellip;</div>
+    <button class="btn" id="btn1" onclick="runPatchConfig()">Configurer</button>
+  </div>
+
+  <!-- Step 2: Download models -->
+  <div class="step" id="s2">
+    <h1>T&eacute;l&eacute;chargement des mod&egrave;les IA</h1>
+    <p class="subtitle">3 mod&egrave;les (~545 MB) vont &ecirc;tre t&eacute;l&eacute;charg&eacute;s depuis Hugging Face.<br>Une connexion internet est requise.</p>
+    <div class="progress-bar"><div class="progress-fill" id="pf" style="width:0%"></div></div>
+    <div class="status" id="st2">En attente&hellip;</div>
+    <button class="btn" id="btn2" onclick="runDownload()">T&eacute;l&eacute;charger</button>
+  </div>
+
+  <!-- Step 3: Vault -->
+  <div class="step" id="s3">
+    <h1>Initialisation du coffre-fort</h1>
+    <p class="subtitle">Une cl&eacute; de chiffrement s&eacute;curis&eacute;e est g&eacute;n&eacute;r&eacute;e et stock&eacute;e dans le trousseau de votre syst&egrave;me d'exploitation.</p>
+    <div class="status" id="st3">En attente&hellip;</div>
+    <button class="btn" id="btn3" onclick="runVault()">Initialiser</button>
+  </div>
+
+  <!-- Step 4: Done -->
+  <div class="step" id="s4">
+    <h1 class="ok">&#10003; Anno-RAG est pr&ecirc;t</h1>
+    <p class="subtitle" style="margin-top:16px">Red&eacute;marrez Claude Desktop pour activer le serveur MCP.<br><br>Vous pouvez maintenant fermer cette fen&ecirc;tre.</p>
+    <button class="btn" onclick="window.__TAURI__.window.getCurrentWindow().close()">Fermer</button>
+  </div>
+</div>
+
+<script type="module">
+import { invoke } from 'https://unpkg.com/@tauri-apps/api@2/core';
+import { Channel } from 'https://unpkg.com/@tauri-apps/api@2/core';
+
+let currentStep = 0;
+
+window.gotoStep = function(n) {
+  document.getElementById('s' + currentStep).classList.remove('active');
+  document.getElementById('d' + currentStep).classList.replace('current', 'done');
+  currentStep = n;
+  document.getElementById('s' + n).classList.add('active');
+  if (n < 4) {
+    document.getElementById('d' + n).classList.add('current');
+  }
+};
+
+window.runPatchConfig = async function() {
+  const btn = document.getElementById('btn1');
+  const st = document.getElementById('st1');
+  btn.disabled = true;
+  st.textContent = 'Configuration en cours…';
+  const r = await invoke('patch_claude_config');
+  if (r.ok) {
+    st.innerHTML = '<span class="ok">✓ ' + r.message + '</span>';
+    setTimeout(() => gotoStep(2), 1200);
+  } else {
+    st.innerHTML = '<span class="err">✗ ' + r.message + '</span>';
+    btn.disabled = false;
+  }
+};
+
+window.runDownload = async function() {
+  const btn = document.getElementById('btn2');
+  const st = document.getElementById('st2');
+  const pf = document.getElementById('pf');
+  btn.disabled = true;
+
+  const ch = new Channel();
+  ch.onmessage = (ev) => {
+    pf.style.width = ev.pct + '%';
+    st.textContent = ev.current_file + ' — ' + ev.downloaded_mb.toFixed(0) + ' / ' + ev.total_mb.toFixed(0) + ' MB';
+  };
+
+  const r = await invoke('download_models_progress', { onProgress: ch });
+  if (r.ok) {
+    st.innerHTML = '<span class="ok">✓ ' + r.message + '</span>';
+    setTimeout(() => gotoStep(3), 1200);
+  } else {
+    st.innerHTML = '<span class="err">✗ ' + r.message + '</span>';
+    btn.disabled = false;
+  }
+};
+
+window.runVault = async function() {
+  const btn = document.getElementById('btn3');
+  const st = document.getElementById('st3');
+  btn.disabled = true;
+  st.textContent = 'Génération de la clé…';
+  const r = await invoke('init_vault_keyring');
+  if (r.ok) {
+    st.innerHTML = '<span class="ok">✓ ' + r.message + '</span>';
+    setTimeout(() => gotoStep(4), 1200);
+  } else {
+    st.innerHTML = '<span class="err">✗ ' + r.message + '</span>';
+    btn.disabled = false;
+  }
+};
+</script>
+</body>
+</html>

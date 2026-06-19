@@ -1,0 +1,175 @@
+name: Release — All Targets
+
+on:
+  push:
+    tags:
+      - 'v[0-9]+.[0-9]+.[0-9]+'
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Release tag (e.g. v0.14.0)'
+        required: true
+
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          # Windows CPU (ONNX only)
+          - os: windows-latest
+            target: x86_64-pc-windows-msvc
+            features: ""
+            variant: cpu
+            tauri_target: windows
+            artifact_ext: msi
+
+          # Windows CUDA (GPU, self-hosted runner required)
+          - os: [self-hosted, windows, cuda]
+            target: x86_64-pc-windows-msvc
+            features: gpu-cuda
+            variant: cuda
+            tauri_target: windows
+            artifact_ext: msi
+
+          # macOS arm64 CPU
+          - os: macos-14
+            target: aarch64-apple-darwin
+            features: ""
+            variant: cpu
+            tauri_target: macos
+            artifact_ext: dmg
+
+          # macOS arm64 Metal (GPU)
+          - os: macos-14
+            target: aarch64-apple-darwin
+            features: gpu-metal
+            variant: metal
+            tauri_target: macos
+            artifact_ext: dmg
+
+          # macOS x86_64 CPU (Intel)
+          - os: macos-13
+            target: x86_64-apple-darwin
+            features: ""
+            variant: cpu
+            tauri_target: macos
+            artifact_ext: dmg
+
+    runs-on: ${{ matrix.os }}
+    name: ${{ matrix.target }}-${{ matrix.variant }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
+
+      - name: Setup sccache
+        uses: mozilla-actions/sccache-action@v0.0.5
+
+      - name: Setup Node.js (Tauri CLI)
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Install Tauri CLI
+        run: npm install -g @tauri-apps/cli@^2
+
+      - name: Cache Cargo registry
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry/index/
+            ~/.cargo/registry/cache/
+            ~/.cargo/git/db/
+          key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
+
+      - name: Build anno-rag-bin
+        env:
+          RUSTC_WRAPPER: sccache
+          CARGO_INCREMENTAL: "0"
+          SCCACHE_GHA_ENABLED: "true"
+        run: >
+          cargo build --release
+          -p anno-rag-bin
+          --target ${{ matrix.target }}
+          ${{ matrix.features != '' && format('--features {0}', matrix.features) || '' }}
+
+      - name: Smoke test binary
+        run: |
+          ./target/${{ matrix.target }}/release/anno-rag${{ runner.os == 'Windows' && '.exe' || '' }} --help
+
+      - name: Build Tauri installer
+        env:
+          RUSTC_WRAPPER: sccache
+          CARGO_INCREMENTAL: "0"
+          SCCACHE_GHA_ENABLED: "true"
+        run: >
+          tauri build
+          --target ${{ matrix.target }}
+          ${{ matrix.features != '' && format('--features {0}', matrix.features) || '' }}
+          --config '{"version": "${{ github.ref_name || inputs.tag }}"}'
+        working-directory: crates/anno-rag-setup
+
+      - name: Rename artifact
+        shell: bash
+        run: |
+          VERSION=${{ github.ref_name || inputs.tag }}
+          SRC_DIR=crates/anno-rag-setup/target/${{ matrix.target }}/release/bundle/${{ matrix.tauri_target }}
+          DEST=anno-rag-${VERSION}-${{ matrix.target }}-${{ matrix.variant }}.${{ matrix.artifact_ext }}
+          mv ${SRC_DIR}/*.${artifact_ext} ${DEST}
+          echo "ARTIFACT=${DEST}" >> $GITHUB_ENV
+        env:
+          artifact_ext: ${{ matrix.artifact_ext }}
+
+      - name: Upload installer artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: anno-rag-${{ matrix.target }}-${{ matrix.variant }}
+          path: ${{ env.ARTIFACT }}
+          retention-days: 30
+
+      - name: Upload binary (zip/tar.gz)
+        shell: bash
+        run: |
+          VERSION=${{ github.ref_name || inputs.tag }}
+          BIN=./target/${{ matrix.target }}/release/anno-rag${{ runner.os == 'Windows' && '.exe' || '' }}
+          if [[ "${{ runner.os }}" == "Windows" ]]; then
+            zip anno-rag-${VERSION}-${{ matrix.target }}-${{ matrix.variant }}.zip ${BIN}
+            echo "BIN_ARTIFACT=anno-rag-${VERSION}-${{ matrix.target }}-${{ matrix.variant }}.zip" >> $GITHUB_ENV
+          else
+            tar -czf anno-rag-${VERSION}-${{ matrix.target }}-${{ matrix.variant }}.tar.gz ${BIN}
+            echo "BIN_ARTIFACT=anno-rag-${VERSION}-${{ matrix.target }}-${{ matrix.variant }}.tar.gz" >> $GITHUB_ENV
+          fi
+
+      - name: Upload binary artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: anno-rag-bin-${{ matrix.target }}-${{ matrix.variant }}
+          path: ${{ env.BIN_ARTIFACT }}
+          retention-days: 30
+
+  release:
+    needs: build
+    runs-on: ubuntu-latest
+    if: startsWith(github.ref, 'refs/tags/')
+    permissions:
+      contents: write
+    steps:
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          merge-multiple: true
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            anno-rag-*.msi
+            anno-rag-*.dmg
+            anno-rag-*.zip
+            anno-rag-*.tar.gz
+          generate_release_notes: true
