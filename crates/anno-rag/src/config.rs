@@ -205,7 +205,7 @@ fn default_embed_model() -> String {
 }
 
 fn default_ner_pii_model_id() -> String {
-    "fastino/gliner2-privacy-filter-PII-multi".to_string()
+    "anno-rag/gliner2-privacy-filter-PII-multi-onnx-fp16".to_string()
 }
 
 fn default_embed_dim() -> usize {
@@ -338,7 +338,7 @@ pub struct AnnoRagConfig {
     #[config_meta(
         env = "ANNO_RAG_NER_PII_MODEL",
         cli = "--ner-pii-model",
-        doc = "HuggingFace model ID for the ONNX PII NER detector. Default: fastino/gliner2-privacy-filter-PII-multi",
+        doc = "HuggingFace model ID for the ONNX PII NER detector. Default: anno-rag/gliner2-privacy-filter-PII-multi-onnx-fp16",
         since = "0.14"
     )]
     #[serde(default = "default_ner_pii_model_id")]
@@ -1289,7 +1289,7 @@ mod tests {
         let c = AnnoRagConfig::default();
         assert_eq!(
             c.ner_pii_model_id,
-            "fastino/gliner2-privacy-filter-PII-multi"
+            "anno-rag/gliner2-privacy-filter-PII-multi-onnx-fp16"
         );
         assert_eq!(c.ner_model_id, "SemplificaAI/gliner2-multi-v1-onnx");
     }

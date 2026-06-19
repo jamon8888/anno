@@ -331,7 +331,7 @@ fn inspect_family(root: &Path, name: &str, required_files: &[&str]) -> ModelFami
 }
 
 fn inspect_onnx_gliner_family(root: &Path, ner_onnx_dir: &str) -> ModelFamilyStatus {
-    for (variant_dir, suffix) in [("fp32_v2", "fp32"), ("fp16_v2", "fp16")] {
+    for (variant_dir, suffix) in [("fp16_v2", "fp16"), ("fp32_v2", "fp32")] {
         let graph_files = GLINER_ONNX_BASES
             .iter()
             .map(|base| format!("{ner_onnx_dir}/{variant_dir}/{base}_{suffix}.onnx"))
