@@ -92,26 +92,38 @@ Ce fix est inclus même si Candle n'est plus le défaut, pour que les utilisateu
 - Pas de blocage : le MCP répond aux appels non-modèles (vault_stats, memory) pendant le download
 - `detect`, `search`, `index` retournent `{"error": "models_loading", "progress_pct": 42}` pendant le download
 
-### 4. Installeur .msi qui configure Claude Desktop
+### 4. Commande `anno-rag install` (cross-platform)
 
-Le WiX installer exécute un Custom Action post-install qui :
-1. Détecte `%APPDATA%\Claude\claude_desktop_config.json`
-2. Injecte l'entrée `anno-rag` avec uniquement `command` et `args: ["mcp"]`
-3. N'écrase pas les autres serveurs MCP existants
-4. Affiche un message si Claude Desktop est ouvert (demande de redémarrage)
+Le binaire expose une sous-commande `install` qui patch `claude_desktop_config.json` :
+
+```
+anno-rag install
+```
+
+Comportement :
+1. Détecte le chemin Claude Desktop selon la plateforme :
+   - Windows : `%APPDATA%\Claude\claude_desktop_config.json`
+   - macOS : `~/Library/Application Support/Claude/claude_desktop_config.json`
+   - Linux : `~/.config/Claude/claude_desktop_config.json`
+2. Lit le JSON existant (ou crée `{}` si absent)
+3. Injecte ou met à jour l'entrée `anno-rag` — sans écraser les autres serveurs MCP
+4. Écrit le fichier atomiquement (write + rename)
+5. Avertit si Claude Desktop est en cours d'exécution (demande de redémarrage)
 
 ```json
 {
   "mcpServers": {
     "anno-rag": {
-      "command": "C:\\Program Files\\anno-rag\\anno-rag.exe",
+      "command": "/usr/local/bin/anno-rag",
       "args": ["mcp"]
     }
   }
 }
 ```
 
-Aucune `env` nécessaire. Zéro variable à configurer.
+Aucune `env` nécessaire — vault via keyring système, modèles via chemin standardisé.
+
+Le `.msi` (Windows) et le `.pkg` (macOS) exécutent `anno-rag install` en post-install automatiquement.
 
 ---
 
@@ -119,15 +131,17 @@ Aucune `env` nécessaire. Zéro variable à configurer.
 
 **Inclus :**
 - Changer `default_embed_model()` vers `nomic-ai/nomic-embed-text-v1.5`
-- Changer `default = []` dans `anno-rag-bin/Cargo.toml`
-- Fix narrow panic dans `pipeline.rs` (Candle)
-- Chemin modèles standardisé sans `ANNO_MODELS_DIR`
-- Vault DPAPI par défaut (sans passphrase)
-- Auto-download avec progression dans `status`
+- Changer `default = []` dans `anno-rag-bin/Cargo.toml` (ONNX par défaut)
+- Fix narrow panic dans `pipeline.rs` (Candle, pour utilisateurs GPU)
+- Chemin modèles standardisé cross-platform via `dirs::data_dir()`, sans `ANNO_MODELS_DIR`
+- Vault via keyring système cross-platform (DPAPI / Keychain / Secret Service), sans passphrase
+- Auto-download avec progression dans `status` (`download_progress_pct`)
+- Commande `anno-rag install` : patch `claude_desktop_config.json` cross-platform
+- `.msi` (Windows) et `.pkg` (macOS) exécutent `anno-rag install` en post-install
 
 **Hors périmètre (itération suivante) :**
-- Custom Action WiX/pkg pour claude_desktop_config.json (nécessite refonte installer)
 - GUI de progression pendant le téléchargement
+- Commande `anno-rag uninstall` (retrait de claude_desktop_config.json)
 
 ---
 
