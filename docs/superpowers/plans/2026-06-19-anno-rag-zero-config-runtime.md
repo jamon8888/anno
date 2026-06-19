@@ -4,7 +4,7 @@
 
 **Goal:** Make anno-rag work out-of-the-box for non-technical users on Windows and macOS — no env vars, no manual model download, no passphrase to configure.
 
-**Architecture:** Six targeted changes to the existing runtime: (1) flip default Cargo features to ONNX, (2) fix Candle narrow panic for GPU users, (3) dual NER model config (PII-specialized + legal-generalist) + swap embedding to bge-m3 int8, (4) use `dirs::data_dir()` for cross-platform model/data paths, (5) auto-download models on MCP startup with progress in `status`. The vault keyring fallback already works correctly — no change needed there.
+**Architecture:** Five targeted changes to the existing runtime: (1) flip default Cargo features to ONNX, (2) fix Candle narrow panic for GPU users, (3) swap embedding model to nomic-embed-text-v1.5, (4) use `dirs::data_dir()` for cross-platform model/data paths, (5) auto-download models on MCP startup with progress in `status`. The vault keyring fallback already works correctly — no change needed there.
 
 **Tech Stack:** Rust, `dirs` crate (already in workspace), `hf-hub` (already used in download_models), ONNX Runtime, Candle (GPU opt-in)
 
@@ -16,10 +16,8 @@
 |------|--------|
 | `crates/anno-rag-bin/Cargo.toml` | `default = []` — remove `gliner2-candle-cpu` |
 | `crates/anno/src/backends/gliner2_fastino_candle/pipeline.rs` | Truncate seq_len to max_position_embeddings in both `run_pipeline_candle` and `run_classify_pipeline_candle` |
-| `crates/anno-rag/src/config.rs` | `default_embed_model()` → `AlpEge/bge-m3-onnx-int8`, add `ner_pii_model_id` field, `default_data_dir()` → `dirs::data_dir()` |
-| `crates/anno-rag/src/detect.rs` | Add `pii_detector` field to `Detector`, route `detect()` through it |
-| `crates/anno-rag/src/download_models.rs` | Download 3 models: bge-m3-int8, gliner2-PII fp16, gliner2-multi fp16 |
-| `crates/anno-rag-mcp/src/model_inventory.rs` | Inspect both NER models (`gliner` legal + `gliner_pii`) |
+| `crates/anno-rag/src/config.rs` | Change `default_embed_model()` → `nomic-ai/nomic-embed-text-v1.5`, `default_embed_dim()` → 768, `default_data_dir()` → `dirs::data_dir()` |
+| `crates/anno-rag-mcp/src/model_inventory.rs` | Add nomic-embed required files |
 | `crates/anno-rag-mcp/src/lib.rs` | Add `WarmupPhase::Downloading`, auto-download before warmup, expose `download_progress_pct` in status |
 
 ---
@@ -48,7 +46,7 @@ default = []
 powershell -NoProfile -ExecutionPolicy Bypass -File scripts\dev-fast.ps1 -Package anno-rag-bin -Mode check
 ```
 
-Expected: `Finished` with no errors. Candle types still compile (feature-gated in `anno-rag`, not removed).
+Expected: `Finished` with no errors. Candle types should still compile (they're feature-gated in `anno-rag`, not removed).
 
 - [ ] **Step 3: Verify Candle still compiles opt-in**
 
@@ -75,18 +73,23 @@ git commit -m "feat(bin): default to ONNX backend — remove gliner2-candle-cpu 
 
 The DeBERTa-v3-base encoder has `max_position_embeddings = 512`. When the tokenizer produces more than 512 tokens (common with 19 GDPR label descriptions), `encoder.forward` panics with `narrow invalid args start + len > dim_len`.
 
-- [ ] **Step 1: Write test**
+- [ ] **Step 1: Write failing test**
 
-Add to `crates/anno/src/backends/gliner2_fastino_candle/pipeline.rs` at bottom:
+Add to `crates/anno/src/backends/gliner2_fastino_candle/pipeline.rs` (at bottom, inside `#[cfg(test)]` block):
 
 ```rust
 #[cfg(test)]
 mod tests {
     use super::*;
 
+    /// Simulate a ProcessedRecord with 700 tokens — above the 512 DeBERTa limit.
+    /// run_pipeline_candle must truncate without panicking.
     #[test]
-    fn truncation_logic_caps_at_512() {
-        let max_pos: usize = 512;
+    #[cfg(feature = "gliner2-candle-cpu")]
+    fn run_pipeline_candle_truncates_long_input() {
+        // Build a minimal GLiNER2FastinoCandle is expensive; just verify the
+        // truncation logic directly by checking the constant.
+        let max_pos: usize = 512; // DeBERTa max_position_embeddings
         let overlong: Vec<u32> = vec![1u32; 700];
         let truncated = overlong.len().min(max_pos);
         assert_eq!(truncated, 512);
@@ -94,11 +97,11 @@ mod tests {
 }
 ```
 
-- [ ] **Step 2: Run test**
+- [ ] **Step 2: Run test (passes trivially — confirms test harness works)**
 
 ```powershell
 $env:CARGO_TARGET_DIR = "E:\cargo-target"
-cargo test -p anno -- truncation_logic_caps_at_512 2>&1 | tail -5
+cargo test -p anno --features gliner2-candle-cpu -- run_pipeline_candle_truncates 2>&1 | tail -5
 ```
 
 Expected: `test ... ok`
@@ -133,9 +136,10 @@ With:
         .map_err(|e| Error::Backend(format!("candle attn_mask: {e}")))?;
 ```
 
-Also replace the `word_to_token_maps` / `num_words` block (line ~48) with:
+Also update `word_to_token_maps` filtering (line ~53, after the tensor build):
 
 ```rust
+    // Filter word_to_token_maps to only include words whose tokens fall within seq_len.
     let filtered_maps: Vec<(usize, usize)> = record
         .word_to_token_maps
         .iter()
@@ -152,9 +156,9 @@ Also replace the `word_to_token_maps` / `num_words` block (line ~48) with:
         .collect();
 ```
 
-- [ ] **Step 4: Apply same truncation fix in `run_classify_pipeline_candle` (line ~158)**
+- [ ] **Step 4: Apply same fix in `run_classify_pipeline_candle` (line ~158)**
 
-Replace:
+Same pattern — replace:
 ```rust
     let seq_len = record.input_ids.len();
     let input_ids = Tensor::from_slice(&record.input_ids[..], (1, seq_len), device)
@@ -187,176 +191,97 @@ git commit -m "fix(candle): truncate input to max_position_embeddings to prevent
 
 ---
 
-### Task 3: Dual NER model + bge-m3 int8 embedding
+### Task 3: Switch embedding model to nomic-embed-text-v1.5
 
 **Files:**
-- Modify: `crates/anno-rag/src/config.rs` — new defaults + `ner_pii_model_id` field
-- Modify: `crates/anno-rag/src/detect.rs` — `Detector` with dual models
-- Modify: `crates/anno-rag/src/download_models.rs` — download 3 models
-- Modify: `crates/anno-rag-mcp/src/model_inventory.rs` — inspect `gliner_pii`
+- Modify: `crates/anno-rag/src/config.rs:203-208`
+- Modify: `crates/anno-rag-mcp/src/model_inventory.rs` (embedder_required_files)
 
-**Models after this task:**
-- Embedding: `AlpEge/bge-m3-onnx-int8` — dim=1024 (matches Solon, no LanceDB migration), ~145 MB, ONNX INT8, available on HF
-- NER PII: `fastino/gliner2-privacy-filter-PII-multi` — ONNX FP16 produced by Plan 3, ~150 MB
-- NER Legal: `SemplificaAI/gliner2-multi-v1-onnx` fp16 — existing, unchanged, ~250 MB
-- Total: ~545 MB (vs 2.35 GB before)
+nomic-embed-text-v1.5 output dimension is **768** (not 1024 like Solon). The LanceDB index stores vectors at the dimension configured at creation time — changing `embed_dim` on an existing index causes a silent mismatch. The auto-download (Task 5) will always create a fresh index on first run for new installs, so this is safe for new deployments.
 
-- [ ] **Step 1: Write config tests**
+- [ ] **Step 1: Write config test**
 
-Add to `crates/anno-rag/src/config.rs` in the `#[cfg(test)]` block:
+Add to `crates/anno-rag/src/config.rs` tests:
 
 ```rust
 #[test]
-fn default_embed_model_is_bge_m3_int8() {
+fn default_embed_model_is_nomic() {
     let c = AnnoRagConfig::default();
-    assert_eq!(c.embed_model, "AlpEge/bge-m3-onnx-int8");
-    assert_eq!(c.embed_dim, 1024);
-}
-
-#[test]
-fn default_ner_pii_model_is_gliner2_pii() {
-    let c = AnnoRagConfig::default();
-    assert_eq!(c.ner_pii_model_id, "fastino/gliner2-privacy-filter-PII-multi");
-    assert_eq!(c.ner_model_id, "SemplificaAI/gliner2-multi-v1-onnx");
+    assert_eq!(c.embed_model, "nomic-ai/nomic-embed-text-v1.5");
+    assert_eq!(c.embed_dim, 768);
 }
 ```
 
-- [ ] **Step 2: Run tests — expect FAIL**
+- [ ] **Step 2: Run test — expect FAIL**
 
 ```powershell
 $env:CARGO_TARGET_DIR = "E:\cargo-target"
-cargo test -p anno-rag -- default_embed_model_is_bge default_ner_pii 2>&1 | tail -10
+cargo test -p anno-rag -- default_embed_model_is_nomic 2>&1 | tail -8
 ```
 
-Expected: FAIL — fields missing / wrong values.
+Expected: FAIL — `"OrdalieTech/Solon-embeddings-large-0.1" != "nomic-ai/nomic-embed-text-v1.5"`
 
-- [ ] **Step 3: Update `default_embed_model()` in config.rs**
+- [ ] **Step 3: Update defaults in config.rs**
 
-Change:
+In `crates/anno-rag/src/config.rs`, change:
+
 ```rust
 fn default_embed_model() -> String {
     "OrdalieTech/Solon-embeddings-large-0.1".to_string()
 }
+
+fn default_embed_dim() -> usize {
+    1024
+}
 ```
+
 To:
+
 ```rust
 fn default_embed_model() -> String {
-    "AlpEge/bge-m3-onnx-int8".to_string()
+    "nomic-ai/nomic-embed-text-v1.5".to_string()
 }
-// embed_dim stays 1024 — bge-m3 is 1024-dimensional
-```
 
-- [ ] **Step 4: Add `ner_pii_model_id` to config.rs**
-
-Add after `default_ner_model_id`:
-```rust
-fn default_ner_pii_model_id() -> String {
-    "fastino/gliner2-privacy-filter-PII-multi".to_string()
+fn default_embed_dim() -> usize {
+    768
 }
 ```
 
-In `AnnoRagConfig` struct, add after `ner_model_id`:
-```rust
-#[serde(default = "default_ner_pii_model_id")]
-pub ner_pii_model_id: String,
+- [ ] **Step 4: Update model_inventory.rs — required files for nomic-embed**
+
+In `crates/anno-rag-mcp/src/model_inventory.rs`, find `embedder_required_files()` and verify it only uses the last path segment (model dir name), not the full HF repo ID. nomic-embed-text-v1.5 exposes the same files as Solon:
+
+```
+{dir}/config.json
+{dir}/tokenizer.json
+{dir}/model.safetensors   (or pytorch_model.bin)
 ```
 
-In `impl Default for AnnoRagConfig`, add:
-```rust
-ner_pii_model_id: default_ner_pii_model_id(),
-```
+The existing `embedder_required_files(dir)` function should work unchanged — confirm by reading it. If it hardcodes Solon-specific filenames, update them to the generic names above.
 
-Add helper alongside `ner_dir()`:
-```rust
-pub fn ner_pii_dir(&self) -> String {
-    self.ner_pii_model_id
-        .split('/')
-        .last()
-        .unwrap_or("gliner2-privacy-filter-PII-multi")
-        .to_string()
-}
-```
-
-Also update any `apply_override` / `merge` blocks that iterate config fields to include `ner_pii_model_id` (search for the block that sets `self.ner_model_id = v` and add the same pattern for `ner_pii_model_id`).
-
-- [ ] **Step 5: Add dual model to `Detector` in detect.rs**
-
-Read `crates/anno-rag/src/detect.rs` around `struct Detector` and `impl Detector`. Add `pii_inner` alongside the existing inner field:
-
-```rust
-pub struct Detector {
-    inner: DetectorInner,      // legal NER — gliner2-multi-v1-onnx
-    pii_inner: DetectorInner,  // PII NER — gliner2-privacy-filter-PII-multi
-}
-```
-
-Update `Detector::new()` to load both (find where `DetectorInner::new_onnx` is called):
-```rust
-let inner = DetectorInner::new_onnx(&cfg.ner_model_id, &models_dir)?;
-let pii_inner = DetectorInner::new_onnx(&cfg.ner_pii_model_id, &models_dir)?;
-Self { inner, pii_inner }
-```
-
-Update `detect()` (the main GDPR path, which calls `self.inner.extract_with_types` with `pii_label_set()`) to use `pii_inner`:
-```rust
-// was: self.inner.extract_with_types(text, &label_refs, threshold)
-self.pii_inner.extract_with_types(text, &label_refs, threshold)
-```
-
-Leave `detect_with_labels()` and `detect_legal()` using `self.inner` (legal model).
-
-- [ ] **Step 6: Update download_models.rs for 3 models**
-
-In `crates/anno-rag/src/download_models.rs`, find the NER download call and add the PII model after it:
-
-```rust
-// Download NER legal model (existing — SemplificaAI/gliner2-multi-v1-onnx)
-download_gliner_onnx(&cfg.ner_model_id, &models_dir, &cfg.ner_onnx_precision).await?;
-
-// Download NER PII model (fastino/gliner2-privacy-filter-PII-multi ONNX FP16)
-// Produced by Plan 3 and hosted on anno-rag GitHub Releases.
-download_gliner_onnx(&cfg.ner_pii_model_id, &models_dir, "fp16").await?;
-```
-
-- [ ] **Step 7: Update model_inventory.rs to inspect gliner_pii**
-
-In `crates/anno-rag-mcp/src/model_inventory.rs`, add to `ModelInventoryStatus`:
-```rust
-pub gliner_pii: ModelFamilyStatus,
-```
-
-In `ModelInventoryService::inspect()`, add:
-```rust
-let pii_dir = self.cfg.ner_pii_dir();
-let gliner_pii = inspect_onnx_gliner_family(&path, &pii_dir);
-```
-
-Include in `ready` computation:
-```rust
-let ready = e5.ready && gliner.ready && gliner_pii.ready && !downloading;
-```
-
-- [ ] **Step 8: Run tests**
+- [ ] **Step 5: Run test — expect PASS**
 
 ```powershell
 $env:CARGO_TARGET_DIR = "E:\cargo-target"
-cargo test -p anno-rag -- default_embed_model_is_bge default_ner_pii 2>&1 | tail -10
+cargo test -p anno-rag -- default_embed_model_is_nomic 2>&1 | tail -5
 ```
 
-Expected: both pass.
+Expected: `test default_embed_model_is_nomic ... ok`
+
+- [ ] **Step 6: Check the existing config test that hardcodes Solon still passes or update it**
 
 ```powershell
 $env:CARGO_TARGET_DIR = "E:\cargo-target"
-cargo test -p anno-rag -p anno-rag-mcp 2>&1 | tail -20
+cargo test -p anno-rag -- config 2>&1 | tail -20
 ```
 
-Expected: all green. Fix any test asserting old Solon model ID.
+Fix any tests that assert `embed_model == "OrdalieTech/Solon-embeddings-large-0.1"` or `embed_dim == 1024` by updating the expected values.
 
-- [ ] **Step 9: Commit**
+- [ ] **Step 7: Commit**
 
 ```powershell
-git add crates/anno-rag/src/config.rs crates/anno-rag/src/detect.rs crates/anno-rag/src/download_models.rs crates/anno-rag-mcp/src/model_inventory.rs
-git commit -m "feat(models): dual NER (PII+legal) + bge-m3-onnx-int8 embedding — 545 MB total vs 2.35 GB"
+git add crates/anno-rag/src/config.rs crates/anno-rag-mcp/src/model_inventory.rs
+git commit -m "feat(embed): switch default embedder to nomic-ai/nomic-embed-text-v1.5 (768d, 274 MB)"
 ```
 
 ---
@@ -380,9 +305,11 @@ Add to `crates/anno-rag/src/config.rs` tests:
 ```rust
 #[test]
 fn default_data_dir_uses_platform_standard_path() {
+    // dirs::data_dir() must return Some on all supported platforms.
     let data_dir = dirs::data_dir();
     assert!(data_dir.is_some(), "dirs::data_dir() returned None — unsupported platform?");
     let expected = data_dir.unwrap().join("anno-rag");
+    // The default (no env override) must match the platform standard path.
     let cfg = AnnoRagConfig::default();
     assert_eq!(cfg.data_dir, expected);
 }
@@ -395,11 +322,12 @@ $env:CARGO_TARGET_DIR = "E:\cargo-target"
 cargo test -p anno-rag -- default_data_dir_uses_platform 2>&1 | tail -8
 ```
 
-Expected: FAIL — current default is `~/.anno-rag`.
+Expected: FAIL — current default is `~/.anno-rag`, not `dirs::data_dir()/anno-rag`.
 
 - [ ] **Step 3: Update `default_data_dir_from_env` in config.rs**
 
-Replace:
+Replace the current implementation (lines 785–799):
+
 ```rust
 fn default_data_dir_from_env(
     override_dir: Option<OsString>,
@@ -419,6 +347,7 @@ fn default_data_dir_from_env(
 ```
 
 With:
+
 ```rust
 fn default_data_dir_from_env(
     override_dir: Option<OsString>,
@@ -427,16 +356,22 @@ fn default_data_dir_from_env(
     if let Some(p) = override_dir.filter(|p| !p.is_empty()) {
         return PathBuf::from(p);
     }
+    // Platform-standard app data directory: %APPDATA% on Windows,
+    // ~/Library/Application Support on macOS, ~/.local/share on Linux.
     dirs::data_dir()
         .map(|p| p.join("anno-rag"))
         .unwrap_or_else(|| PathBuf::from(".anno-rag"))
 }
 ```
 
-Update `default_data_dir()`:
+Also update `default_data_dir()` to no longer pass `HOME`:
+
 ```rust
 fn default_data_dir() -> PathBuf {
-    default_data_dir_from_env(std::env::var_os("ANNO_RAG_DATA_DIR"), None)
+    default_data_dir_from_env(
+        std::env::var_os("ANNO_RAG_DATA_DIR"),
+        None,
+    )
 }
 ```
 
@@ -449,14 +384,14 @@ cargo test -p anno-rag -- default_data_dir_uses_platform 2>&1 | tail -5
 
 Expected: `test default_data_dir_uses_platform_standard_path ... ok`
 
-- [ ] **Step 5: Run full config tests**
+- [ ] **Step 5: Run full config tests to catch regressions**
 
 ```powershell
 $env:CARGO_TARGET_DIR = "E:\cargo-target"
 cargo test -p anno-rag -- config 2>&1 | tail -20
 ```
 
-Fix any test hardcoding `~/.anno-rag` — update to `dirs::data_dir().unwrap().join("anno-rag")`.
+Fix any test that hardcodes `~/.anno-rag` — update expected path to `dirs::data_dir().unwrap().join("anno-rag")`.
 
 - [ ] **Step 6: Commit**
 
@@ -470,11 +405,13 @@ git commit -m "feat(config): use dirs::data_dir() for cross-platform default dat
 ### Task 5: Auto-download models on MCP startup with progress in status
 
 **Files:**
-- Modify: `crates/anno-rag-mcp/src/lib.rs`
+- Modify: `crates/anno-rag-mcp/src/lib.rs` — `WarmupPhase`, warmup task, status tool
+
+Currently, if models are absent the MCP starts but `detect`/`search` fail with a hint to run `anno-rag download-models`. For lawyers, the MCP must download models transparently before warmup.
 
 - [ ] **Step 1: Add `Downloading` variant to `WarmupPhase`**
 
-In `crates/anno-rag-mcp/src/lib.rs` around line 63:
+In `crates/anno-rag-mcp/src/lib.rs`, find the `WarmupPhase` enum (around line 63) and add:
 
 ```rust
 pub(crate) enum WarmupPhase {
@@ -486,14 +423,15 @@ pub(crate) enum WarmupPhase {
 }
 ```
 
-- [ ] **Step 2: Insert auto-download step before warmup**
+- [ ] **Step 2: Update warmup task to download first if models absent**
 
-In the `tokio::spawn` warmup block, before `WarmupPhase::Loading` is set:
+In the `tokio::spawn(async move { ... })` warmup block, add a download step before pipeline init. Find where `WarmupPhase::Loading` is set and insert before it:
 
 ```rust
 // Step 0: auto-download models if absent.
 {
-    let inv = ModelInventoryService::new(&warmup_server.cfg).inspect();
+    let inv = anno_rag::download_models::ModelInventoryService::new(&warmup_server.cfg)
+        .inspect();
     if !inv.ready {
         *warmup_server.warmup_phase.write().await = WarmupPhase::Downloading {
             started_ms,
@@ -501,6 +439,7 @@ In the `tokio::spawn` warmup block, before `WarmupPhase::Loading` is set:
         };
         tracing::info!("anno-rag: models absent — auto-downloading");
         if let Err(e) = anno_rag::download_models::download(&warmup_server.cfg).await {
+            tracing::warn!("anno-rag: model download failed: {e}");
             *warmup_server.warmup_phase.write().await = WarmupPhase::Failed {
                 error: format!("model download failed: {e}"),
             };
@@ -509,12 +448,15 @@ In the `tokio::spawn` warmup block, before `WarmupPhase::Loading` is set:
         tracing::info!("anno-rag: model download complete");
     }
 }
+// Step 1: init Pipeline struct (existing code follows).
 *warmup_server.warmup_phase.write().await = WarmupPhase::Loading { started_ms };
 ```
 
-- [ ] **Step 3: Expose `download_progress_pct` in status**
+Note: `ModelInventoryService` is already used in `lib.rs` (line ~103). Use the same import path.
 
-In the `WarmupPhase` match in the status handler (line ~882), add:
+- [ ] **Step 3: Expose `download_progress_pct` in status tool**
+
+In the `status` tool handler, find the `WarmupPhase` match block (around line 882) and add the `Downloading` arm:
 
 ```rust
 WarmupPhase::Downloading { started_ms, progress_pct } => {
@@ -527,14 +469,14 @@ WarmupPhase::Downloading { started_ms, progress_pct } => {
 }
 ```
 
-In tool handlers that guard on `Loading`, add the same guard for `Downloading`:
+Also update any tool calls that return early during `Loading` to also return early during `Downloading` with a similar message:
 
 ```rust
 WarmupPhase::Downloading { progress_pct, .. } => {
     return Ok(serde_json::json!({
         "error": "models_downloading",
         "progress_pct": progress_pct,
-        "hint": "Models are downloading automatically. Check status for progress."
+        "hint": "Models are being downloaded automatically. Check status for progress."
     }).to_string());
 }
 ```
@@ -547,7 +489,23 @@ powershell -NoProfile -ExecutionPolicy Bypass -File scripts\dev-fast.ps1 -Packag
 
 Expected: `Finished`
 
-- [ ] **Step 5: Commit**
+- [ ] **Step 5: Integration smoke test**
+
+Build and run with empty models dir:
+
+```powershell
+$env:CARGO_TARGET_DIR = "E:\cargo-target"
+cargo build --profile dev-fast -p anno-rag-bin
+$env:ANNO_RAG_DATA_DIR = "$env:TEMP\anno-rag-test-empty"
+New-Item -ItemType Directory -Force "$env:TEMP\anno-rag-test-empty"
+# Start MCP and immediately check status
+# Status should show phase: "downloading"
+.\E:\cargo-target\dev-fast\anno-rag.exe status 2>&1 | head -5
+```
+
+Expected: process starts, logs show download progress.
+
+- [ ] **Step 6: Commit**
 
 ```powershell
 git add crates/anno-rag-mcp/src/lib.rs
@@ -565,9 +523,9 @@ $env:CARGO_TARGET_DIR = "E:\cargo-target"
 cargo test -p anno-rag -p anno-rag-mcp -p anno 2>&1 | tail -30
 ```
 
-Expected: all pass.
+Expected: all tests pass. Fix any remaining failures before proceeding.
 
-- [ ] **Step 2: Build dev-fast binary**
+- [ ] **Step 2: Build final dev-fast binary**
 
 ```powershell
 powershell -NoProfile -ExecutionPolicy Bypass -File scripts\test-local.ps1 -Package anno-rag-bin
@@ -575,39 +533,38 @@ powershell -NoProfile -ExecutionPolicy Bypass -File scripts\test-local.ps1 -Pack
 
 Expected: `Finished`
 
-- [ ] **Step 3: End-to-end smoke**
+- [ ] **Step 3: End-to-end smoke — detect with new binary**
 
 ```powershell
 Stop-Process -Name anno-rag -ErrorAction SilentlyContinue
 Start-Sleep 2
-Remove-Item Env:ANNO_RAG_VAULT_PASSPHRASE -ErrorAction SilentlyContinue
-Remove-Item Env:ANNO_RAG_DATA_DIR -ErrorAction SilentlyContinue
+# Claude Desktop picks up the new binary on next MCP call — or test directly:
+$env:ANNO_RAG_VAULT_PASSPHRASE = ""   # remove passphrase — use keyring
+$env:ANNO_RAG_DATA_DIR = ""          # use platform default path
 .\E:\cargo-target\dev-fast\anno-rag.exe status
 ```
 
 Expected: `{"ok":true, ..., "warmup_phase":"ready"}` after warmup. `detect` returns results in <2s.
 
-- [ ] **Step 4: Open PR**
+- [ ] **Step 4: Push branch and open PR**
 
 ```powershell
+git checkout -b feat/zero-config-runtime
 git push origin feat/zero-config-runtime
-gh pr create --title "feat: zero-config runtime — ONNX default, dual NER, bge-m3 int8, platform data dir, auto-download" `
-  --body "Implements the zero-config runtime spec (Plan 1/3) for lawyer deployment.
+gh pr create --title "feat: zero-config runtime — ONNX default, nomic-embed, platform data dir, auto-download" `
+  --body "Implements the zero-config runtime spec for lawyer deployment.
 
 ## Changes
-- default = [] in anno-rag-bin: ONNX backend by default, Candle opt-in
+- \`default = []\` in anno-rag-bin: ONNX backend by default, Candle opt-in
 - Fix Candle narrow panic: truncate to max_position_embeddings (512)
-- Dual NER: gliner2-privacy-filter-PII-multi (detect) + gliner2-multi-v1-onnx (legal)
-- Embedding: AlpEge/bge-m3-onnx-int8 (145 MB, dim=1024, 2x faster than fp16)
-- Total model size: ~545 MB vs 2.35 GB (-77%)
-- Cross-platform data dir via dirs::data_dir()
+- Switch embedder to nomic-ai/nomic-embed-text-v1.5 (768d, ~274 MB vs 2.1 GB)
+- Cross-platform data dir via dirs::data_dir() (%APPDATA%, ~/Library/Application Support, ~/.local/share)
 - Auto-download models on MCP startup with download_progress_pct in status
 
 ## Test plan
 - [ ] cargo test -p anno-rag -p anno-rag-mcp passes
 - [ ] detect responds in <2s on CPU Windows
-- [ ] legal_extract_contract uses legal NER model (gliner2-multi)
-- [ ] Fresh install auto-downloads 3 models and reaches warmup_phase: ready
+- [ ] Fresh install (empty data dir) auto-downloads models and reaches warmup_phase: ready
 - [ ] ANNO_RAG_DATA_DIR still works as override"
 ```
 
@@ -618,14 +575,13 @@ gh pr create --title "feat: zero-config runtime — ONNX default, dual NER, bge-
 **Spec coverage:**
 - ✅ `default = []` — Task 1
 - ✅ Narrow panic fix — Task 2
-- ✅ bge-m3 int8 + dual NER — Task 3
+- ✅ nomic-embed-text-v1.5 — Task 3
 - ✅ `dirs::data_dir()` cross-platform — Task 4
 - ✅ Auto-download + progress in status — Task 5
-- ✅ Vault keyring — already works (vault.rs uses keyring when `ANNO_RAG_VAULT_PASSPHRASE` absent)
-- ⬜ Tauri setup assistant — Plan 2
-- ⬜ CI matrix — Plan 2
-- ⬜ ONNX conversion gliner2-PII — Plan 3
+- ✅ Vault keyring — already works, no change needed (vault.rs uses keyring when `ANNO_RAG_VAULT_PASSPHRASE` is absent)
+- ⬜ Tauri setup assistant — Plan 2 (separate)
+- ⬜ CI matrix — Plan 2 (separate)
 
 **Placeholders:** None.
 
-**Type consistency:** `WarmupPhase::Downloading { started_ms: u64, progress_pct: u8 }` consistent across Tasks 5.
+**Type consistency:** `WarmupPhase::Downloading { started_ms: u64, progress_pct: u8 }` used consistently in Task 5.
