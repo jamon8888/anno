@@ -22,7 +22,6 @@ jobs:
             target: x86_64-pc-windows-msvc
             features: gpu-directml
             variant: directml
-            ort_strategy: download
             tauri_target: windows
             artifact_ext: msi
 
@@ -32,20 +31,13 @@ jobs:
             target: aarch64-apple-darwin
             features: gpu-coreml
             variant: coreml
-            ort_strategy: download
             tauri_target: macos
             artifact_ext: dmg
 
-          # macOS x86_64 (Intel) — CPU only, ORT compiled from source
-          # ort-sys 2.0.0-rc.12 has a prebuilt binary bug (cu12 misdetection) on
-          # this target, so we compile ORT from source via ORT_STRATEGY=compile.
-          - os: macos-15-intel
-            target: x86_64-apple-darwin
-            features: ""
-            variant: cpu
-            ort_strategy: compile
-            tauri_target: macos
-            artifact_ext: dmg
+          # NOTE: x86_64-apple-darwin (Intel Mac) dropped — ort-sys 2.0.0-rc.12
+          # has no prebuilt binaries for this target and ORT_STRATEGY env vars
+          # are not supported. Intel Macs are EOL; users can build from source
+          # with ORT_LIB_PATH pointing to a compiled ONNX Runtime.
 
     runs-on: ${{ matrix.os }}
     name: ${{ matrix.target }}-${{ matrix.variant }}
@@ -61,10 +53,6 @@ jobs:
       - name: Install protoc (macOS)
         if: runner.os == 'macOS'
         run: brew install protobuf
-
-      - name: Install cmake + protoc for ORT compile (Intel macOS)
-        if: matrix.target == 'x86_64-apple-darwin'
-        run: brew install cmake
 
       - name: Install protoc (Windows)
         if: runner.os == 'Windows'
@@ -88,8 +76,6 @@ jobs:
           key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
 
       - name: Build anno-rag-bin
-        env:
-          ORT_STRATEGY: ${{ matrix.ort_strategy }}
         run: >
           cargo build --release
           -p anno-rag-bin
@@ -109,9 +95,8 @@ jobs:
           echo "semver=${RAW#v}" >> $GITHUB_OUTPUT
 
       - name: Build Tauri installer
-        env:
-          ORT_STRATEGY: ${{ matrix.ort_strategy }}
         working-directory: crates/anno-rag-setup
+        shell: bash
         run: >
           tauri build
           --target ${{ matrix.target }}
