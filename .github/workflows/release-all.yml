@@ -22,7 +22,7 @@ jobs:
             target: x86_64-pc-windows-msvc
             features: gpu-directml
             variant: directml
-            tauri_target: windows
+            tauri_target: msi
             artifact_ext: msi
 
           # macOS arm64 — CoreML (Apple ANE/GPU) + CPU fallback
@@ -31,7 +31,7 @@ jobs:
             target: aarch64-apple-darwin
             features: gpu-coreml
             variant: coreml
-            tauri_target: macos
+            tauri_target: dmg
             artifact_ext: dmg
 
           # NOTE: x86_64-apple-darwin (Intel Mac) dropped — ort-sys 2.0.0-rc.12
