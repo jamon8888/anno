@@ -3,6 +3,7 @@ name = "anno-rag-setup"
 version.workspace = true
 edition.workspace = true
 description = "Anno-RAG Tauri setup assistant — one-click installer for lawyers"
+license = "Apache-2.0"
 
 [dependencies]
 anno-rag = { path = "../anno-rag", default-features = false }

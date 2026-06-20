@@ -22,9 +22,13 @@ members = [
     "crates/anno-knowledge-store",
     "crates/anno-source-local",
     "workspace-hack",
+]
+exclude = [
+    "vendor",
+    # Desktop-only Tauri crate — requires GTK on Linux, excluded from workspace
+    # check/test. Build via: cargo build -p anno-rag-setup (on Windows/macOS).
     "crates/anno-rag-setup",
 ]
-exclude = ["vendor"]
 resolver = "2"
 
 [workspace.package]

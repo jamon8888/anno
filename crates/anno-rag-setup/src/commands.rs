@@ -52,6 +52,7 @@ fn anno_rag_binary_path() -> anyhow::Result<PathBuf> {
     } else {
         dir.join("anno-rag")
     };
+    anyhow::ensure!(bin.is_file(), "anno-rag binary not found at {}", bin.display());
     Ok(bin)
 }
 
@@ -62,7 +63,7 @@ fn do_patch_claude_config() -> anyhow::Result<PathBuf> {
     // Read existing config or start fresh.
     let mut config: serde_json::Value = if config_path.exists() {
         let raw = std::fs::read_to_string(&config_path).context("read config")?;
-        serde_json::from_str(&raw).unwrap_or(serde_json::json!({}))
+        serde_json::from_str(&raw).context("parse claude_desktop_config.json — file may be malformed; fix or back it up before retrying")?
     } else {
         serde_json::json!({})
     };
@@ -88,6 +89,10 @@ fn do_patch_claude_config() -> anyhow::Result<PathBuf> {
     std::fs::create_dir_all(parent).context("create config dir")?;
     let tmp = config_path.with_extension("tmp");
     std::fs::write(&tmp, serde_json::to_string_pretty(&config)?).context("write tmp")?;
+    // On Windows, rename fails if destination exists — remove first.
+    if config_path.exists() {
+        std::fs::remove_file(&config_path).context("remove old config before rename")?;
+    }
     std::fs::rename(&tmp, &config_path).context("rename")?;
 
     Ok(config_path)
