@@ -1,4 +1,5 @@
 gliner2-onnx==0.1.1
 huggingface_hub>=0.24
+onnxruntime>=1.18
 torch>=2.1
 transformers>=4.40

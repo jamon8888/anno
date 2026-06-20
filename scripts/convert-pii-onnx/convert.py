@@ -12,7 +12,6 @@ Requires: gliner2-onnx==0.1.1  (pip install -r requirements.txt)
 """
 
 import argparse
-import shutil
 from pathlib import Path
 
 from gliner2_onnx import export_to_onnx  # gliner2-onnx 0.1.1 public API
@@ -42,7 +41,8 @@ def main():
     )
 
     onnx_file = out / "model_fp16_v2.onnx"
-    assert onnx_file.exists(), f"Expected {onnx_file} — check gliner2-onnx output naming"
+    if not onnx_file.exists():
+        raise FileNotFoundError(f"Expected {onnx_file} — check gliner2-onnx output naming")
     size_mb = onnx_file.stat().st_size / 1_000_000
     print(f"[convert] Done — {onnx_file.name} ({size_mb:.0f} MB)")
 
