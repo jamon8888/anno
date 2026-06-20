@@ -93,6 +93,10 @@ fn do_patch_claude_config() -> anyhow::Result<PathBuf> {
     Ok(config_path)
 }
 
+/// Approximate total size of all anno-rag models in MB.
+/// Update this when the default model set changes.
+const MODEL_TOTAL_MB: f32 = 545.0;
+
 /// Download the three anno-rag models with progress events sent to the UI.
 #[tauri::command]
 pub async fn download_models_progress(on_progress: Channel<DownloadProgress>) -> StepResult {
@@ -101,7 +105,7 @@ pub async fn download_models_progress(on_progress: Channel<DownloadProgress>) ->
         pct: 0,
         current_file: "Connecting\u{2026}".to_string(),
         downloaded_mb: 0.0,
-        total_mb: 545.0,
+        total_mb: MODEL_TOTAL_MB,
     });
 
     let cfg = anno_rag::config::AnnoRagConfig::default();
@@ -110,12 +114,12 @@ pub async fn download_models_progress(on_progress: Channel<DownloadProgress>) ->
             let _ = on_progress.send(DownloadProgress {
                 pct: 100,
                 current_file: "Done".to_string(),
-                downloaded_mb: 545.0,
-                total_mb: 545.0,
+                downloaded_mb: MODEL_TOTAL_MB,
+                total_mb: MODEL_TOTAL_MB,
             });
             StepResult {
                 ok: true,
-                message: "Models ready (~545 MB)".to_string(),
+                message: format!("Models ready (~{MODEL_TOTAL_MB:.0} MB)"),
             }
         }
         Err(e) => StepResult {
@@ -131,8 +135,7 @@ pub async fn download_models_progress(on_progress: Channel<DownloadProgress>) ->
 /// On macOS this uses the Keychain.
 #[tauri::command]
 pub async fn init_vault_keyring() -> StepResult {
-    let cfg = anno_rag::config::AnnoRagConfig::default();
-    match anno_rag::vault::init_keyring(&cfg) {
+    match anno_rag::vault::init_keyring() {
         Ok(()) => StepResult {
             ok: true,
             message: "Vault key stored in OS keyring.".to_string(),

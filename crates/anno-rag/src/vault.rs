@@ -895,7 +895,7 @@ fn parse_hex_key(hex: &str) -> Result<[u8; 32]> {
 ///
 /// # Errors
 /// Returns [`Error::Vault`] if both the keyring and the DPAPI fallback fail.
-pub fn init_keyring(_cfg: &crate::config::AnnoRagConfig) -> Result<()> {
+pub fn init_keyring() -> Result<()> {
     generate_key_with_keyring_or_dpapi().map(|_| ())
 }
 
