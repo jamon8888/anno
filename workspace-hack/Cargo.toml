@@ -102,7 +102,7 @@ uuid = { version = "1", features = ["js", "serde", "v4", "v5", "v7"] }
 writeable = { version = "0.6", default-features = false, features = ["alloc"] }
 yoke = { version = "0.8", features = ["derive"] }
 zerocopy = { version = "0.8", default-features = false, features = ["derive", "simd"] }
-zerofrom = { version = "0.11", default-features = false, features = ["alloc", "derive"] }
+zerofrom = { version = "0.1", default-features = false, features = ["alloc", "derive"] }
 zeroize = { version = "1", features = ["derive"] }
 zerotrie = { version = "0.2", default-features = false, features = ["alloc", "yoke", "zerofrom"] }
 zerovec = { version = "0.11", default-features = false, features = ["alloc", "derive", "yoke"] }
@@ -201,7 +201,7 @@ uuid = { version = "1", features = ["js", "serde", "v4", "v5", "v7"] }
 writeable = { version = "0.6", default-features = false, features = ["alloc"] }
 yoke = { version = "0.8", features = ["derive"] }
 zerocopy = { version = "0.8", default-features = false, features = ["derive", "simd"] }
-zerofrom = { version = "0.11", default-features = false, features = ["alloc", "derive"] }
+zerofrom = { version = "0.1", default-features = false, features = ["alloc", "derive"] }
 zeroize = { version = "1", features = ["derive"] }
 zerotrie = { version = "0.2", default-features = false, features = ["alloc", "yoke", "zerofrom"] }
 zerovec = { version = "0.11", default-features = false, features = ["alloc", "derive", "yoke"] }
