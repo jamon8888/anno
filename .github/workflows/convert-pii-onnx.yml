@@ -8,14 +8,17 @@ on:
         required: true
         default: 'anno-rag/gliner2-privacy-filter-PII-multi-onnx-fp16'
 
+permissions:
+  contents: read
+
 jobs:
   convert:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
 
       - name: Set up Python
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@a26ac26fa3b2e409a4571df0f95e5e0f46c9e30e # v5.6.0
         with:
           python-version: '3.11'
 
@@ -23,18 +26,21 @@ jobs:
         run: pip install -r scripts/convert-pii-onnx/requirements.txt
 
       - name: Convert to ONNX FP16
+        env:
+          PUSH_TO: ${{ github.event.inputs.push_to }}
+          HF_TOKEN: ${{ secrets.HF_WRITE_TOKEN }}
         run: |
           python scripts/convert-pii-onnx/convert.py \
             --model fastino/gliner2-privacy-filter-PII-multi \
             --out /tmp/pii-onnx \
-            --push-to ${{ github.event.inputs.push_to }} \
-            --token ${{ secrets.HF_WRITE_TOKEN }}
+            --push-to "$PUSH_TO"
 
       - name: Verify output
         run: |
           python - <<'EOF'
           import onnxruntime as ort
-          sess = ort.InferenceSession("/tmp/pii-onnx/model_fp16_v2.onnx")
+          # Runtime expects fp16_v2/{base}_fp16.onnx layout — validate encoder graph.
+          sess = ort.InferenceSession("/tmp/pii-onnx/fp16_v2/encoder_fp16.onnx")
           inputs = [i.name for i in sess.get_inputs()]
           print("ONNX inputs:", inputs)
           assert "input_ids" in inputs
@@ -42,7 +48,7 @@ jobs:
           EOF
 
       - name: Upload ONNX artifact (CI cache)
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540f5f35ff5bfaef6c07c1a6 # v4.6.2
         with:
           name: gliner2-pii-onnx-fp16
           path: /tmp/pii-onnx/
