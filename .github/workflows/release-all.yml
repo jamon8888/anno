@@ -111,12 +111,12 @@ jobs:
       - name: Build Tauri installer
         env:
           ORT_STRATEGY: ${{ matrix.ort_strategy }}
+        working-directory: crates/anno-rag-setup
         run: >
           tauri build
           --target ${{ matrix.target }}
           ${{ matrix.features != '' && format('--features {0}', matrix.features) || '' }}
           --config "{\"version\": \"${{ steps.ver.outputs.semver }}\"}"
-          --project-dir crates/anno-rag-setup
 
       - name: Rename artifact
         shell: bash

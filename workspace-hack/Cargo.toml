@@ -65,8 +65,8 @@ num-complex = { version = "0.4", default-features = false, features = ["bytemuck
 num-integer = { version = "0.1", default-features = false, features = ["i128", "std"] }
 num-traits = { version = "0.2", features = ["i128", "libm"] }
 once_cell = { version = "1" }
-ort = { version = "2.0.0-rc.12", features = ["coreml", "cuda"] }
-ort-sys = { version = "2.0.0-rc.12", default-features = false, features = ["api-24", "copy-dylibs", "coreml", "cuda", "download-binaries", "std", "tls-native"] }
+ort = { version = "2.0.0-rc.12", features = ["coreml"] }
+ort-sys = { version = "2.0.0-rc.12", default-features = false, features = ["api-24", "copy-dylibs", "coreml", "download-binaries", "std", "tls-native"] }
 percent-encoding = { version = "2" }
 petgraph = { version = "0.8" }
 phf = { version = "0.13", features = ["macros"] }
@@ -102,7 +102,7 @@ uuid = { version = "1", features = ["js", "serde", "v4", "v5", "v7"] }
 writeable = { version = "0.6", default-features = false, features = ["alloc"] }
 yoke = { version = "0.8", features = ["derive"] }
 zerocopy = { version = "0.8", default-features = false, features = ["derive", "simd"] }
-zerofrom = { version = "0.1", default-features = false, features = ["alloc", "derive"] }
+zerofrom = { version = "0.11", default-features = false, features = ["alloc", "derive"] }
 zeroize = { version = "1", features = ["derive"] }
 zerotrie = { version = "0.2", default-features = false, features = ["alloc", "yoke", "zerofrom"] }
 zerovec = { version = "0.11", default-features = false, features = ["alloc", "derive", "yoke"] }
@@ -164,8 +164,8 @@ num-complex = { version = "0.4", default-features = false, features = ["bytemuck
 num-integer = { version = "0.1", default-features = false, features = ["i128", "std"] }
 num-traits = { version = "0.2", features = ["i128", "libm"] }
 once_cell = { version = "1" }
-ort = { version = "2.0.0-rc.12", features = ["coreml", "cuda"] }
-ort-sys = { version = "2.0.0-rc.12", default-features = false, features = ["api-24", "copy-dylibs", "coreml", "cuda", "download-binaries", "std", "tls-native"] }
+ort = { version = "2.0.0-rc.12", features = ["coreml"] }
+ort-sys = { version = "2.0.0-rc.12", default-features = false, features = ["api-24", "copy-dylibs", "coreml", "download-binaries", "std", "tls-native"] }
 percent-encoding = { version = "2" }
 petgraph = { version = "0.8" }
 phf = { version = "0.13", features = ["macros"] }
@@ -189,7 +189,6 @@ simd-adler32 = { version = "0.3" }
 smallvec = { version = "1", default-features = false, features = ["const_new", "union"] }
 stable_deref_trait = { version = "1" }
 subtle = { version = "2" }
-syn = { version = "2", features = ["extra-traits", "fold", "full", "visit", "visit-mut"] }
 time = { version = "0.3", features = ["formatting", "macros", "parsing"] }
 tinystr = { version = "0.8", default-features = false, features = ["alloc", "zerovec"] }
 tokio = { version = "1", features = ["full"] }
@@ -202,7 +201,7 @@ uuid = { version = "1", features = ["js", "serde", "v4", "v5", "v7"] }
 writeable = { version = "0.6", default-features = false, features = ["alloc"] }
 yoke = { version = "0.8", features = ["derive"] }
 zerocopy = { version = "0.8", default-features = false, features = ["derive", "simd"] }
-zerofrom = { version = "0.1", default-features = false, features = ["alloc", "derive"] }
+zerofrom = { version = "0.11", default-features = false, features = ["alloc", "derive"] }
 zeroize = { version = "1", features = ["derive"] }
 zerotrie = { version = "0.2", default-features = false, features = ["alloc", "yoke", "zerofrom"] }
 zerovec = { version = "0.11", default-features = false, features = ["alloc", "derive", "yoke"] }
@@ -222,6 +221,8 @@ hyper-tls = { version = "0.6", default-features = false, features = ["alpn"] }
 hyper-util = { version = "0.1", features = ["client-legacy", "client-proxy", "client-proxy-system", "http1", "http2", "server", "service"] }
 matrixmultiply = { version = "0.3" }
 native-tls = { version = "0.2", features = ["alpn"] }
+ort = { version = "2.0.0-rc.12", features = ["cuda"] }
+ort-sys = { version = "2.0.0-rc.12", features = ["cuda"] }
 rustls = { version = "0.23", default-features = false, features = ["aws-lc-rs", "aws_lc_rs", "logging", "ring", "std", "tls12"] }
 rustls-webpki = { version = "0.103", default-features = false, features = ["aws-lc-rs", "ring", "std"] }
 tokenizers = { version = "0.22" }
@@ -240,6 +241,8 @@ hyper-tls = { version = "0.6", default-features = false, features = ["alpn"] }
 hyper-util = { version = "0.1", features = ["client-legacy", "client-proxy", "client-proxy-system", "http1", "http2", "server", "service"] }
 matrixmultiply = { version = "0.3" }
 native-tls = { version = "0.2", features = ["alpn"] }
+ort = { version = "2.0.0-rc.12", features = ["cuda"] }
+ort-sys = { version = "2.0.0-rc.12", features = ["cuda"] }
 rustls = { version = "0.23", default-features = false, features = ["aws-lc-rs", "aws_lc_rs", "logging", "ring", "std", "tls12"] }
 rustls-webpki = { version = "0.103", default-features = false, features = ["aws-lc-rs", "ring", "std"] }
 tokenizers = { version = "0.22" }
