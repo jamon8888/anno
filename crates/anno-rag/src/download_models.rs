@@ -44,6 +44,7 @@ pub async fn download(cfg: &AnnoRagConfig) -> Result<PathBuf> {
     for (model_id, label) in [
         (cfg.embed_model.as_str(), "embed_model"),
         (cfg.ner_model_id.as_str(), "ner_model_id"),
+        (cfg.ner_pii_model_id.as_str(), "ner_pii_model_id"),
         (cfg.ner_candle_model_id.as_str(), "ner_candle_model_id"),
     ] {
         if !crate::model_cache::is_valid_model_subpath(model_id) {
@@ -52,11 +53,20 @@ pub async fn download(cfg: &AnnoRagConfig) -> Result<PathBuf> {
     }
     migrate_legacy_cache(&models_dir, cfg);
     download_embedder(&models_dir, &cfg.embed_model).await?;
+    // Legal NER model (generalist — used by legal_extract_*, detect_with_labels).
     download_ner(
         &models_dir,
         &cfg.ner_model_id,
         &cfg.ner_onnx_dir(),
         cfg.ner_onnx_precision.as_str(),
+    )
+    .await?;
+    // PII NER model (specialized — used by detect() and the privacy pipeline).
+    download_ner(
+        &models_dir,
+        &cfg.ner_pii_model_id,
+        &cfg.ner_pii_onnx_dir(),
+        "fp16",
     )
     .await?;
     #[cfg(any(feature = "gpu-metal", feature = "gliner2-candle-cpu"))]

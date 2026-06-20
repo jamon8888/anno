@@ -408,16 +408,46 @@ impl NerBackend {
 /// PII detector: GLiNER2 NER plus, on defense+ layers, the deterministic
 /// French heuristics backend.
 pub struct Detector {
+    /// Legal/generalist NER backend (SemplificaAI/gliner2-multi-v1-onnx).
+    /// Used by detect_with_labels and the legal extraction pipeline.
     ner: NerBackend,
+    /// PII-specialized NER backend (fastino/gliner2-privacy-filter-PII-multi ONNX).
+    /// Used by detect() / detect_inner() for GDPR privacy pipelines.
+    /// Always ONNX — no Candle variant exists for this model.
+    pii_ner: GLiNER2Fastino,
     #[cfg(feature = "heuristic-fr")]
     heuristic_fr: anno::backends::heuristic_fr::HeuristicFrNer,
     gdpr_layers: GdprLayerSet,
     /// HuggingFace model ID used by the active NER backend — surfaced in
     /// audit events so operators can reconcile behaviour against a model version.
     ner_model_id: String,
+    /// PII model ID surfaced in audit events.
+    pii_ner_model_id: String,
 }
 
 impl Detector {
+    /// Load the PII-specialized NER model (always ONNX — no Candle variant).
+    fn load_pii_ner(cfg: &crate::config::AnnoRagConfig) -> Result<GLiNER2Fastino> {
+        let model_root = std::env::var_os("ANNO_MODELS_DIR")
+            .filter(|value| !value.is_empty())
+            .map(PathBuf::from)
+            .unwrap_or_else(|| cfg.models_cache());
+        let pii_path = model_root.join(cfg.ner_pii_onnx_dir());
+        if pii_path.exists() {
+            GLiNER2Fastino::from_local_with_config(
+                &pii_path,
+                anno::backends::gliner2_fastino::GLiNER2FastinoConfig::default(),
+            )
+            .map_err(|e| Error::Detect(format!("pii ner load (local): {e}")))
+        } else {
+            GLiNER2Fastino::from_pretrained_with_config(
+                &cfg.ner_pii_model_id,
+                anno::backends::gliner2_fastino::GLiNER2FastinoConfig::default(),
+            )
+            .map_err(|e| Error::Detect(format!("pii ner load: {e}")))
+        }
+    }
+
     /// Build a new detector. Loads the GLiNER2Fastino multi-v1 ONNX model
     /// (multilingual, FR-aware) from the HF Hub cache.
     pub fn new(cfg: &crate::config::AnnoRagConfig) -> Result<Self> {
@@ -442,6 +472,7 @@ impl Detector {
         }
 
         let model_cfg = detector_model_config_for(cfg.accelerator)?;
+        let pii_ner = Self::load_pii_ner(cfg)?;
 
         // ── Local model fast-path ─────────────────────────────────────────────
         let model_root = std::env::var_os("ANNO_MODELS_DIR")
@@ -457,10 +488,12 @@ impl Detector {
             .map_err(|e| Error::Detect(format!("gliner2_fastino load (local): {e}")))?;
             return Ok(Self {
                 ner: NerBackend::Onnx(ner),
+                pii_ner,
                 #[cfg(feature = "heuristic-fr")]
                 heuristic_fr: anno::backends::heuristic_fr::HeuristicFrNer::new(),
                 gdpr_layers: cfg.gdpr_layers,
                 ner_model_id: cfg.ner_model_id.clone(),
+                pii_ner_model_id: cfg.ner_pii_model_id.clone(),
             });
         }
         // ─────────────────────────────────────────────────────────────────────
@@ -468,10 +501,12 @@ impl Detector {
             .map_err(|e| Error::Detect(format!("gliner2_fastino load: {e}")))?;
         Ok(Self {
             ner: NerBackend::Onnx(ner),
+            pii_ner,
             #[cfg(feature = "heuristic-fr")]
             heuristic_fr: anno::backends::heuristic_fr::HeuristicFrNer::new(),
             gdpr_layers: cfg.gdpr_layers,
             ner_model_id: cfg.ner_model_id.clone(),
+            pii_ner_model_id: cfg.ner_pii_model_id.clone(),
         })
     }
 
@@ -481,6 +516,7 @@ impl Detector {
         decision: &crate::accelerator::AcceleratorDecision,
     ) -> Result<Self> {
         let device = crate::accelerator::candle_device(decision)?;
+        let pii_ner = Self::load_pii_ner(_cfg)?;
         let model_root = std::env::var_os("ANNO_MODELS_DIR")
             .filter(|value| !value.is_empty())
             .map(PathBuf::from)
@@ -497,10 +533,12 @@ impl Detector {
                 })?;
             return Ok(Self {
                 ner: NerBackend::Candle(ner),
+                pii_ner,
                 #[cfg(feature = "heuristic-fr")]
                 heuristic_fr: anno::backends::heuristic_fr::HeuristicFrNer::new(),
                 gdpr_layers: _cfg.gdpr_layers,
                 ner_model_id: _cfg.ner_candle_model_id.clone(),
+                pii_ner_model_id: _cfg.ner_pii_model_id.clone(),
             });
         }
         let ner =
@@ -511,10 +549,12 @@ impl Detector {
             .map_err(|e| Error::Detect(format!("gliner2_fastino_candle load: {e}")))?;
         Ok(Self {
             ner: NerBackend::Candle(ner),
+            pii_ner,
             #[cfg(feature = "heuristic-fr")]
             heuristic_fr: anno::backends::heuristic_fr::HeuristicFrNer::new(),
             gdpr_layers: _cfg.gdpr_layers,
             ner_model_id: _cfg.ner_candle_model_id.clone(),
+            pii_ner_model_id: _cfg.ner_pii_model_id.clone(),
         })
     }
 
@@ -531,6 +571,7 @@ impl Detector {
     #[cfg(feature = "gliner2-candle-cpu")]
     fn new_candle_cpu(cfg: &crate::config::AnnoRagConfig) -> Result<Self> {
         let device = candle_core::Device::Cpu;
+        let pii_ner = Self::load_pii_ner(cfg)?;
         let model_root = std::env::var_os("ANNO_MODELS_DIR")
             .filter(|value| !value.is_empty())
             .map(PathBuf::from)
@@ -544,10 +585,12 @@ impl Detector {
             .map_err(|e| Error::Detect(format!("gliner2_fastino_candle load (local cpu): {e}")))?;
             return Ok(Self {
                 ner: NerBackend::Candle(ner),
+                pii_ner,
                 #[cfg(feature = "heuristic-fr")]
                 heuristic_fr: anno::backends::heuristic_fr::HeuristicFrNer::new(),
                 gdpr_layers: cfg.gdpr_layers,
                 ner_model_id: cfg.ner_candle_model_id.clone(),
+                pii_ner_model_id: cfg.ner_pii_model_id.clone(),
             });
         }
         let ner = anno::backends::gliner2_fastino_candle::GLiNER2FastinoCandle::from_pretrained_with_device(
@@ -557,10 +600,12 @@ impl Detector {
         .map_err(|e| Error::Detect(format!("gliner2_fastino_candle load (cpu): {e}")))?;
         Ok(Self {
             ner: NerBackend::Candle(ner),
+            pii_ner,
             #[cfg(feature = "heuristic-fr")]
             heuristic_fr: anno::backends::heuristic_fr::HeuristicFrNer::new(),
             gdpr_layers: cfg.gdpr_layers,
             ner_model_id: cfg.ner_candle_model_id.clone(),
+            pii_ner_model_id: cfg.ner_pii_model_id.clone(),
         })
     }
 
@@ -578,7 +623,7 @@ impl Detector {
         let input_chars = text.chars().count();
         let out = self.detect_inner(text)?;
         let elapsed_us = u64::try_from(started.elapsed().as_micros()).unwrap_or(u64::MAX);
-        emit_detect_audit(input_chars, elapsed_us, &out, &self.ner_model_id);
+        emit_detect_audit(input_chars, elapsed_us, &out, &self.pii_ner_model_id);
         Ok(out)
     }
 
@@ -616,14 +661,14 @@ impl Detector {
             }
         }
 
-        // 2. NER with GDPR label descriptions.
+        // 2. NER with GDPR label descriptions — use the PII-specialized model.
         //    Floor threshold 0.25 passes everything through; per-label thresholds
         //    from GDPR_NER_LABELS are applied as a post-filter so Art. 9 labels
         //    (0.30) and basic identifiers (0.35) use different bounds.
         let described = gdpr_described();
         let thresholds = gdpr_label_thresholds();
         let mut anno_entities = self
-            .ner
+            .pii_ner
             .extract_with_label_descriptions(text, &described, 0.25)
             .map_err(|e| Error::Detect(e.to_string()))?;
         anno_entities.retain(|e| {
@@ -1221,6 +1266,9 @@ mod tests {
         let cfg = crate::config::AnnoRagConfig::default();
         let ner_dir = dir.path().join(cfg.ner_onnx_dir());
         std::fs::create_dir_all(&ner_dir).expect("mkdir");
+        // Also create PII model dir so load_pii_ner takes the local path
+        // (avoids a 404 network attempt and produces a "(local)" error).
+        std::fs::create_dir_all(dir.path().join(cfg.ner_pii_onnx_dir())).expect("mkdir pii");
 
         let _models_dir = crate::env_guard::ScopedAnnoModelsDir::set(dir.path());
         let result = Detector::new(&crate::config::AnnoRagConfig::default());
@@ -1246,6 +1294,9 @@ mod tests {
         };
         let ner_dir = cfg.models_cache().join(cfg.ner_onnx_dir());
         std::fs::create_dir_all(&ner_dir).expect("mkdir");
+        // Also create PII model dir so load_pii_ner takes the local path.
+        std::fs::create_dir_all(cfg.models_cache().join(cfg.ner_pii_onnx_dir()))
+            .expect("mkdir pii");
 
         let _models_dir = crate::env_guard::ScopedAnnoModelsDir::unset();
         let result = Detector::new(&cfg);

@@ -3,7 +3,7 @@
     "name": "data_dir",
     "env_var": "ANNO_RAG_DATA_DIR",
     "cli_flag": "--data-dir",
-    "doc": "Root directory for vault, index, and model weights. Default: ~/.anno-rag",
+    "doc": "Root directory for vault, index, and model weights. Default: platform data dir (Windows: %APPDATA%\\anno-rag, macOS: ~/Library/Application Support/anno-rag)",
     "default_value": "\"~/.anno-rag\"",
     "since": "0.1",
     "type_name": "PathBuf"
@@ -13,7 +13,7 @@
     "env_var": "ANNO_RAG_EMBED_MODEL",
     "cli_flag": "--embed-model",
     "doc": "HuggingFace model ID for the embedder. Default: OrdalieTech/Solon-embeddings-large-0.1",
-    "default_value": "\"OrdalieTech/Solon-embeddings-large-0.1\"",
+    "default_value": "\"AlpEge/bge-m3-onnx-int8\"",
     "since": "0.1",
     "type_name": "String"
   },
@@ -87,6 +87,15 @@
     "doc": "HuggingFace model ID for the ONNX NER detector. Default: SemplificaAI/gliner2-multi-v1-onnx",
     "default_value": "\"SemplificaAI/gliner2-multi-v1-onnx\"",
     "since": "0.12",
+    "type_name": "String"
+  },
+  {
+    "name": "ner_pii_model_id",
+    "env_var": "ANNO_RAG_NER_PII_MODEL",
+    "cli_flag": "--ner-pii-model",
+    "doc": "HuggingFace model ID for the ONNX PII NER detector. Default: fastino/gliner2-privacy-filter-PII-multi",
+    "default_value": "\"fastino/gliner2-privacy-filter-PII-multi\"",
+    "since": "0.14",
     "type_name": "String"
   },
   {

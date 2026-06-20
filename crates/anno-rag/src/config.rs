@@ -201,7 +201,11 @@ fn default_ner_candle_model_id() -> String {
 }
 
 fn default_embed_model() -> String {
-    "OrdalieTech/Solon-embeddings-large-0.1".to_string()
+    "AlpEge/bge-m3-onnx-int8".to_string()
+}
+
+fn default_ner_pii_model_id() -> String {
+    "fastino/gliner2-privacy-filter-PII-multi".to_string()
 }
 
 fn default_embed_dim() -> usize {
@@ -234,7 +238,7 @@ pub struct AnnoRagConfig {
     #[config_meta(
         env = "ANNO_RAG_DATA_DIR",
         cli = "--data-dir",
-        doc = "Root directory for vault, index, and model weights. Default: ~/.anno-rag",
+        doc = "Root directory for vault, index, and model weights. Default: platform data dir (Windows: %APPDATA%\\anno-rag, macOS: ~/Library/Application Support/anno-rag)",
         since = "0.1"
     )]
     #[serde(default = "default_data_dir")]
@@ -328,6 +332,17 @@ pub struct AnnoRagConfig {
     )]
     #[serde(default = "default_ner_model_id")]
     pub ner_model_id: String,
+
+    /// HuggingFace model ID for the ONNX PII NER detector (privacy pipeline).
+    /// Specialized for 42 PII entity types across 7 languages.
+    #[config_meta(
+        env = "ANNO_RAG_NER_PII_MODEL",
+        cli = "--ner-pii-model",
+        doc = "HuggingFace model ID for the ONNX PII NER detector. Default: fastino/gliner2-privacy-filter-PII-multi",
+        since = "0.14"
+    )]
+    #[serde(default = "default_ner_pii_model_id")]
+    pub ner_pii_model_id: String,
 
     /// ONNX graph precision for the NER detector: "fp16" (default, ~250 MB)
     /// or "fp32" (~500 MB, exact). fp16 is near-lossless for inference.
@@ -784,17 +799,13 @@ fn default_data_dir() -> PathBuf {
 
 fn default_data_dir_from_env(
     override_dir: Option<OsString>,
-    home_dir: Option<OsString>,
+    _home_dir: Option<OsString>,
 ) -> PathBuf {
-    override_dir
-        .filter(|p| !p.is_empty())
-        .map(PathBuf::from)
-        .or_else(|| {
-            home_dir
-                .filter(|p| !p.is_empty())
-                .map(|p| PathBuf::from(p).join(".anno-rag"))
-        })
-        .or_else(|| dirs::home_dir().map(|p| p.join(".anno-rag")))
+    if let Some(p) = override_dir.filter(|p| !p.is_empty()) {
+        return PathBuf::from(p);
+    }
+    dirs::data_dir()
+        .map(|p| p.join("anno-rag"))
         .unwrap_or_else(|| PathBuf::from(".anno-rag"))
 }
 
@@ -813,6 +824,7 @@ impl Default for AnnoRagConfig {
             vector_index_threshold: default_vector_index_threshold(),
             ner_warmup_model: default_ner_warmup_model(),
             ner_model_id: default_ner_model_id(),
+            ner_pii_model_id: default_ner_pii_model_id(),
             ner_onnx_precision: default_ner_onnx_precision(),
             index_distance: default_index_distance(),
             index_num_partitions: None,
@@ -931,6 +943,9 @@ impl AnnoRagConfig {
         if let Ok(v) = std::env::var("ANNO_RAG_NER_MODEL") {
             self.ner_model_id = v;
         }
+        if let Ok(v) = std::env::var("ANNO_RAG_NER_PII_MODEL") {
+            self.ner_pii_model_id = v;
+        }
         if let Ok(v) = std::env::var("ANNO_RAG_NER_ONNX_PRECISION") {
             self.ner_onnx_precision = v;
         }
@@ -1045,6 +1060,9 @@ impl AnnoRagConfig {
         }
         if let Some(v) = ov.ner_model_id.clone() {
             self.ner_model_id = v;
+        }
+        if let Some(v) = ov.ner_pii_model_id.clone() {
+            self.ner_pii_model_id = v;
         }
         if let Some(v) = ov.ner_onnx_precision.clone() {
             self.ner_onnx_precision = v;
@@ -1224,6 +1242,12 @@ impl AnnoRagConfig {
         self.ner_model_id.clone()
     }
 
+    /// Full HF repo ID for the PII NER model cache directory.
+    #[must_use]
+    pub fn ner_pii_onnx_dir(&self) -> String {
+        self.ner_pii_model_id.clone()
+    }
+
     /// Full candle model ID with `"-candle"` appended.
     ///
     /// Example: `"fastino/gliner2-multi-v1"` → `"fastino/gliner2-multi-v1-candle"`
@@ -1251,6 +1275,23 @@ mod tests {
         assert_eq!(c.embed_dim, 1024);
         assert!(c.default_top_k > 0);
         assert!(c.chunk_max_chars > c.chunk_overlap);
+    }
+
+    #[test]
+    fn default_embed_model_is_bge_m3_int8() {
+        let c = AnnoRagConfig::default();
+        assert_eq!(c.embed_model, "AlpEge/bge-m3-onnx-int8");
+        assert_eq!(c.embed_dim, 1024);
+    }
+
+    #[test]
+    fn default_ner_pii_model_is_gliner2_pii() {
+        let c = AnnoRagConfig::default();
+        assert_eq!(
+            c.ner_pii_model_id,
+            "fastino/gliner2-privacy-filter-PII-multi"
+        );
+        assert_eq!(c.ner_model_id, "SemplificaAI/gliner2-multi-v1-onnx");
     }
 
     #[test]

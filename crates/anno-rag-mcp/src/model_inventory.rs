@@ -169,8 +169,10 @@ pub struct ModelInventory {
     pub e5: ModelFamilyStatus,
     /// Detector backend selected for GLiNER readiness.
     pub detector_backend: String,
-    /// Active GLiNER detector file readiness.
+    /// Active GLiNER detector file readiness (legal model — gliner2-multi-v1-onnx).
     pub gliner: ModelFamilyStatus,
+    /// PII-specialized GLiNER file readiness (gliner2-privacy-filter-PII-multi ONNX).
+    pub gliner_pii: ModelFamilyStatus,
 }
 
 /// Inspects the effective model directory without initializing model loaders.
@@ -180,6 +182,7 @@ pub struct ModelInventoryService {
     detector_kind: DetectorInventoryKind,
     embedder_dir: String,
     ner_onnx_dir: String,
+    ner_pii_onnx_dir: String,
     ner_candle_dir: String,
 }
 
@@ -198,6 +201,7 @@ impl ModelInventoryService {
             detector_kind: detector_inventory_kind(cfg),
             embedder_dir: cfg.embedder_dir(),
             ner_onnx_dir: cfg.ner_onnx_dir(),
+            ner_pii_onnx_dir: cfg.ner_pii_onnx_dir(),
             ner_candle_dir: cfg.ner_candle_dir(),
         }
     }
@@ -228,7 +232,8 @@ impl ModelInventoryService {
                 inspect_family(&path, &self.ner_candle_dir, &refs)
             }
         };
-        let ready = e5.ready && gliner.ready;
+        let gliner_pii = inspect_onnx_gliner_family(&path, &self.ner_pii_onnx_dir);
+        let ready = e5.ready && gliner.ready && gliner_pii.ready;
         let state = if ready {
             ModelInventoryState::Ready
         } else if downloading {
@@ -251,6 +256,7 @@ impl ModelInventoryService {
                 DetectorInventoryKind::Candle => "candle-metal".to_string(),
             },
             gliner,
+            gliner_pii,
         }
     }
 
@@ -452,14 +458,28 @@ mod tests {
     use anno_rag::config::AnnoRagConfig;
     use std::path::Path;
 
-    fn create_required_model_files(models_dir: &Path, embedder_dir: &str, ner_onnx_dir: &str) {
-        let mut rels: Vec<String> = embedder_required_files(embedder_dir);
-        rels.extend(gliner_onnx_required_files(ner_onnx_dir));
-        for rel in &rels {
+    fn write_files(models_dir: &Path, rels: &[String]) {
+        for rel in rels {
             let path = models_dir.join(rel);
             std::fs::create_dir_all(path.parent().expect("required file parent")).unwrap();
             std::fs::write(path, b"test model file").unwrap();
         }
+    }
+
+    fn write_pii_files(models_dir: &Path, cfg: &AnnoRagConfig) {
+        write_files(
+            models_dir,
+            &gliner_onnx_required_files(&cfg.ner_pii_onnx_dir()),
+        );
+    }
+
+    fn create_required_model_files(models_dir: &Path, embedder_dir: &str, ner_onnx_dir: &str) {
+        let cfg = AnnoRagConfig::default();
+        let mut rels: Vec<String> = embedder_required_files(embedder_dir);
+        rels.extend(gliner_onnx_required_files(ner_onnx_dir));
+        // Also create PII model files so inventory.ready is satisfied.
+        rels.extend(gliner_onnx_required_files(&cfg.ner_pii_onnx_dir()));
+        write_files(models_dir, &rels);
     }
 
     #[test]
@@ -539,11 +559,8 @@ mod tests {
                 .map(|b| format!("{ner_onnx_dir}/fp16_v2/{b}_fp16.onnx")),
         );
         rels.push(format!("{ner_onnx_dir}/fp16_v2/tokenizer.json"));
-        for rel in &rels {
-            let path = models_dir.join(rel);
-            std::fs::create_dir_all(path.parent().expect("required file parent")).unwrap();
-            std::fs::write(path, b"test model file").unwrap();
-        }
+        write_files(&models_dir, &rels);
+        write_pii_files(&models_dir, &cfg);
         let _models_env = test_env::ScopedAnnoModelsDir::unset();
 
         let inventory = ModelInventoryService::new(&cfg).inspect();
@@ -570,11 +587,8 @@ mod tests {
         // Populate only fp32 files (old-style cache)
         let mut rels: Vec<String> = embedder_required_files(&embedder_dir);
         rels.extend(gliner_onnx_required_files(&ner_onnx_dir));
-        for rel in &rels {
-            let path = models_dir.join(rel);
-            std::fs::create_dir_all(path.parent().expect("parent")).unwrap();
-            std::fs::write(path, b"test model file").unwrap();
-        }
+        write_files(&models_dir, &rels);
+        write_pii_files(&models_dir, &cfg);
         let _models_env = test_env::ScopedAnnoModelsDir::unset();
 
         let inventory = ModelInventoryService::new(&cfg).inspect();
@@ -603,11 +617,8 @@ mod tests {
         // Populate only fp16 files
         let mut rels: Vec<String> = embedder_required_files(&embedder_dir);
         rels.extend(ner_onnx_files(&ner_onnx_dir, "fp16"));
-        for rel in &rels {
-            let path = models_dir.join(rel);
-            std::fs::create_dir_all(path.parent().expect("parent")).unwrap();
-            std::fs::write(path, b"test model file").unwrap();
-        }
+        write_files(&models_dir, &rels);
+        write_pii_files(&models_dir, &cfg);
         let _models_env = test_env::ScopedAnnoModelsDir::unset();
 
         let inventory = ModelInventoryService::new(&cfg).inspect();
