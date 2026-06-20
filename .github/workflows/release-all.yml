@@ -95,18 +95,26 @@ jobs:
         run: |
           ./target/${{ matrix.target }}/release/anno-rag${{ runner.os == 'Windows' && '.exe' || '' }} --help
 
+      - name: Resolve version
+        id: ver
+        shell: bash
+        run: |
+          RAW=${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref_name }}
+          echo "tag=${RAW}" >> $GITHUB_OUTPUT
+          echo "semver=${RAW#v}" >> $GITHUB_OUTPUT
+
       - name: Build Tauri installer
         run: >
           tauri build
           --target ${{ matrix.target }}
           ${{ matrix.features != '' && format('--features {0}', matrix.features) || '' }}
-          --config '{"version": "${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref_name }}"}'
+          --config "{\"version\": \"${{ steps.ver.outputs.semver }}\"}"
         working-directory: crates/anno-rag-setup
 
       - name: Rename artifact
         shell: bash
         run: |
-          VERSION=${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref_name }}
+          VERSION=${{ steps.ver.outputs.tag }}
           SRC_DIR=crates/anno-rag-setup/target/${{ matrix.target }}/release/bundle/${{ matrix.tauri_target }}
           DEST=anno-rag-${VERSION}-${{ matrix.target }}-${{ matrix.variant }}.${{ matrix.artifact_ext }}
           mv ${SRC_DIR}/*.${artifact_ext} ${DEST}
@@ -124,7 +132,7 @@ jobs:
       - name: Upload binary (zip/tar.gz)
         shell: bash
         run: |
-          VERSION=${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref_name }}
+          VERSION=${{ steps.ver.outputs.tag }}
           BIN=./target/${{ matrix.target }}/release/anno-rag${{ runner.os == 'Windows' && '.exe' || '' }}
           if [[ "${{ runner.os }}" == "Windows" ]]; then
             zip anno-rag-${VERSION}-${{ matrix.target }}-${{ matrix.variant }}.zip ${BIN}
