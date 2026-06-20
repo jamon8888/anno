@@ -34,15 +34,6 @@ jobs:
             tauri_target: macos
             artifact_ext: dmg
 
-          # macOS x86_64 (Intel) — CPU only
-          # CoreML is arm64-only; no CUDA on macOS. Single CPU binary.
-          - os: macos-15-intel
-            target: x86_64-apple-darwin
-            features: ""
-            variant: cpu
-            tauri_target: macos
-            artifact_ext: dmg
-
     runs-on: ${{ matrix.os }}
     name: ${{ matrix.target }}-${{ matrix.variant }}
 
