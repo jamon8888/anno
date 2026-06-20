@@ -205,7 +205,7 @@ fn default_embed_model() -> String {
 }
 
 fn default_ner_pii_model_id() -> String {
-    "SemplificaAI/gliner2-multi-v1-onnx".to_string()
+    "SemplificaAI/gliner2-privacy-filter-PII-multi".to_string()
 }
 
 fn default_embed_dim() -> usize {
