@@ -53,6 +53,7 @@ Both built backends are OpenAI-compat HTTP servers running on the customer's har
 | `crates/anno-rag/src/ingest.rs` | OCR branch: route `ScannedPdf`/`MixedPdf` pages through VLM |
 | `crates/anno-rag/src/config.rs` | `vlm_backend`, `vlm_vllm_url`, `vlm_local_url`, `vlm_confidence_threshold` |
 | `crates/anno-rag/Cargo.toml` | Add `vlm-ocr = ["anno-rag-tabular/vlm-ocr"]` passthrough |
+| `crates/anno-privacy-gateway/src/document_extract.rs` | **M1 (SECURITY)** — file-size + image-dimension cap (replaces kreuzberg 4.9.6 internal 64MP guard) |
 
 ---
 
@@ -80,20 +81,102 @@ This is the entirety of what Spec A required. No comment rewriting, no containme
 
   > ⚠️ Keep the `bzip2-1.0.6` entries below it — `sevenz-rust2` (pulled by `archives`) still uses that license regardless of kreuzberg version.
 
-- [ ] **Step 3: Verify compile + license clean**
+- [ ] **Step 3: Security mitigation M1 — upload size + image-dimension cap**
+
+  `anno-privacy-gateway/src/document_extract.rs` passes untrusted bytes to kreuzberg
+  with no size guard. Kreuzberg 4.9.6 added an internal 64MP pixel cap and
+  decompression-bomb limit; 4.7.4 has neither. **This must ship with the downgrade.**
+
+  In `extract_uploaded_document`, before the `extract_with_kreuzberg` call:
+
+  ```rust
+  const MAX_UPLOAD_BYTES: usize = 50 * 1024 * 1024; // 50 MB
+
+  if bytes.len() > MAX_UPLOAD_BYTES {
+      return Err(Error::Privacy(format!(
+          "uploaded document exceeds {} MB limit",
+          MAX_UPLOAD_BYTES / 1_048_576
+      )));
+  }
+  ```
+
+  For image uploads (`.png`, `.jpg`, `.webp`, `.tiff` — detected via `infer`), add a
+  dimension check before kreuzberg decodes the file:
+
+  ```rust
+  // Reject images that would exceed 64 MP when decoded (decompression-bomb guard).
+  if is_image_mime(mime) {
+      let reader = image::io::Reader::new(std::io::Cursor::new(&bytes))
+          .with_guessed_format()
+          .map_err(|e| Error::Privacy(format!("image probe failed: {e}")))?;
+      let (w, h) = reader.into_dimensions()
+          .map_err(|e| Error::Privacy(format!("image dimensions unreadable: {e}")))?;
+      if (w as u64) * (h as u64) > 64_000_000 {
+          return Err(Error::Privacy(format!(
+              "image dimensions {w}x{h} exceed 64 MP limit"
+          )));
+      }
+  }
+  ```
+
+  `is_image_mime` checks the MIME detected by `infer` — no full decode, just header
+  inspection via `image::io::Reader::into_dimensions()`.
+
+  Add `image` to `anno-privacy-gateway/Cargo.toml` (it is already a transitive dep
+  via kreuzberg; make it explicit):
+
+  ```toml
+  image = { workspace = true, default-features = false, features = ["png", "jpeg", "webp", "tiff"] }
+  ```
+
+- [ ] **Step 4: Security mitigation M2 — French text + OCR crash fixtures**
+
+  Run the OCR path on a fixture with accented French content after the version bump:
+
+  ```powershell
+  powershell -NoProfile -ExecutionPolicy Bypass -File scripts\test-local.ps1 -Package anno-rag
+  ```
+
+  Any panic in the Tesseract path = must fix before merge (upstream patch or input
+  sanitisation in `embedded_ocr_extract`).
+
+- [ ] **Step 5: Security mitigation M3 — per-document extraction timeout**
+
+  Wrap the `kreuzberg::extract_file` call in `extract_with_kreuzberg`
+  ([document_extract.rs:63](../../../crates/anno-privacy-gateway/src/document_extract.rs))
+  with a `tokio::time::timeout` to guard against the Ghostscript O(N²) regression:
+
+  ```rust
+  tokio::time::timeout(
+      std::time::Duration::from_secs(30),
+      kreuzberg::extract_file(&path, None, &config),
+  )
+  .await
+  .map_err(|_| Error::Privacy("document extraction timed out (30 s)".into()))?
+  .map_err(|e| Error::Privacy(format!("extract uploaded document: {e}")))?
+  ```
+
+  Apply the same pattern (120 s) to the `extract_file` call in
+  `anno-rag/src/ingest.rs` for the native extraction path.
+
+- [ ] **Step 6: Verify compile + license clean**
 
   ```powershell
   cargo deny check licenses 2>&1 | Select-String "kreuzberg|error" | Select-Object -First 10
   powershell -NoProfile -ExecutionPolicy Bypass -File scripts\dev-fast.ps1 -Package anno-rag -AllAffected -Mode check
+  powershell -NoProfile -ExecutionPolicy Bypass -File scripts\dev-fast.ps1 -Package anno-privacy-gateway -Mode check
   ```
 
-  Expected: no Elastic-2.0 anywhere; `anno-rag` and `anno-privacy-gateway` compile cleanly.
+  Expected: no Elastic-2.0 anywhere; `anno-rag`, `anno-privacy-gateway` compile cleanly.
 
-- [ ] **Step 4: Commit**
+- [ ] **Step 7: Commit**
 
   ```powershell
-  git add Cargo.toml Cargo.lock deny.toml
-  git commit -m "chore(deps): downgrade kreuzberg to 4.7.4 (MIT) — remove last ELv2 dep"
+  git add Cargo.toml Cargo.lock deny.toml `
+         crates/anno-privacy-gateway/src/document_extract.rs `
+         crates/anno-privacy-gateway/Cargo.toml `
+         crates/anno-rag/src/ingest.rs
+  git commit -m "chore(deps): kreuzberg 4.7.4 (MIT) + M1/M2/M3 security mitigations (Spec A)"
   ```
 
 ---
@@ -462,6 +545,8 @@ Both backends are thin wrappers around `liter_llm::DefaultClient`. Only `base_ur
 ## Self-Review
 
 - ✅ **Full MIT stack**: kreuzberg 4.7.4 (MIT) + liter-llm (MIT) + LightOnOCR-2-1B (Apache-2.0). Zero ELv2, zero exceptions in deny.toml.
+- ✅ **M1 (SECURITY) ships with Task 1** — 50 MB file-size cap + 64 MP image-dimension guard in `document_extract.rs`, replacing the protection kreuzberg removed when downgrading from 4.9.6.
+- ✅ **M2 + M3 in Task 1** — French OCR fixture run + `tokio::time::timeout` on all `extract_file` calls before the kreuzberg version bump is merged.
 - ✅ **No hand-rolled HTTP**: liter-llm owns the OpenAI-compat transport, retries, secrets handling. `VllmServerClient` and `LocalVlmClient` are ~30 lines each.
 - ✅ **No llama.cpp Rust binding**: desktop GGUF runs as a `llama-server` process; anno talks HTTP. Same trust boundary, zero in-process binding complexity.
 - ✅ **`vlm-ocr` feature off by default** — CI never downloads VLM weights; GPU path aligns with existing `gpu-cuda` profile.
