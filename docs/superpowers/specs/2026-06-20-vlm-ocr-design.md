@@ -1,230 +1,194 @@
 # VLM-OCR: Vision-Model Document Transcription — Design
 
 **Date:** 2026-06-20
-**Status:** Design — scoped, not yet scheduled
-**Spec ID:** Spec B (of a two-spec effort; Spec A = [Kreuzberg Licensing Containment](2026-06-20-kreuzberg-licensing-containment-design.md))
+**Revised:** 2026-06-20
+**Status:** Design — scoped, implementation in progress
+**Spec ID:** Spec B (of a two-spec effort; Spec A = [Kreuzberg License Migration](2026-06-20-kreuzberg-licensing-containment-design.md))
 
 ## Summary
 
-Kreuzberg 4.8.5 added a VLM-OCR capability (vision-model transcription of page
-images) behind its Elastic-2.0 LLM layer. Spec A keeps anno on `kreuzberg = "=4.9.7"`
-but deliberately **does not** adopt that VLM-OCR path: it is a hosted/LLM feature,
-and anno's posture is local-first and sovereignty-preserving. This spec defines how
-anno gains VLM-OCR **on its own terms** — a permissively-licensed vision model running
-inside the customer's trust boundary, across two deployment profiles (desktop and
-on-premise GPU), with no document image ever sent to a third party.
+anno gains VLM-OCR on its own terms: a permissively-licensed vision model running
+inside the customer's trust boundary, routed through **`liter-llm`** (MIT, Rust-native),
+across two deployment profiles (desktop and on-premise GPU). No document image ever
+leaves the customer's hardware. No dependency on kreuzberg's VLM-OCR path (introduced
+at 4.8.0 under ELv2 — the same release that changed the license; Spec A migrates anno
+to kreuzberg 4.7.4 MIT which has no built-in VLM-OCR).
 
 The motivating gap is quality, not parity. anno's current OCR is Tesseract/Paddle
 ([ingest.rs:380](../../../crates/anno-rag/src/ingest.rs) `embedded_ocr_extract`),
 which is strong on clean printed text but weak on the inputs French legal work
-actually produces: stamped/signed pages, handwritten annotations, multi-column
-scans, tables-as-images, and low-quality faxes. A VLM transcribes layout-aware text
-from those pages where line-based OCR degrades.
+produces: stamped/signed pages, handwritten annotations, multi-column scans,
+tables-as-images, and low-quality faxes. A VLM transcribes layout-aware text from
+those pages where line-based OCR degrades.
 
 ## Chosen model: LightOnOCR-2-1B
 
-Default backend is **`lightonai/LightOnOCR-2-1B`** (HuggingFace):
+Default backend: **`lightonai/LightOnOCR-2-1B`** (HuggingFace):
 
-- **Apache-2.0** — clears Spec A's permissive-license gate.
+- **Apache-2.0** — clears the full-MIT-stack requirement.
 - **French-native.** Built by LightOn (FR); trained on a bilingual **French-English**
-  OCR corpus (tokenizer pruning decided on FR-EN data). French is a first-class target,
-  not an "other language" — the decisive factor over PaddleOCR-VL (ZH/EN-leaning).
-- **1B**, ViT (Pixtral) encoder + Qwen3-based decoder, end-to-end (no external OCR
-  pipeline). Handles tables, forms, multi-column, math.
-- **Runs in both profiles:** vLLM-servable on GPU (on-prem profile) and available as
-  **GGUF** (`Mungert/LightOnOCR-1B-1025-GGUF`) for a desktop/CPU path via llama.cpp.
+  OCR corpus. French is a first-class target, not an "other language" — the decisive
+  factor over PaddleOCR-VL (ZH/EN-leaning).
+- **1B**, ViT (Pixtral) encoder + Qwen3-based decoder. Handles tables, forms,
+  multi-column, math.
+- **Runs in both deployment profiles:**
+  - vLLM-servable on GPU (on-prem profile)
+  - Available as GGUF (`Mungert/LightOnOCR-1B-1025-GGUF`) for desktop; served by
+    `llama-server` (pre-built binary, no Rust binding needed)
 
-Alternate (if a FR eval favours it on specific document classes):
-`PaddlePaddle/PaddleOCR-VL-1.6` (Apache-2.0) — strong on seals/tables, but PaddlePaddle
-framework + no ONNX, and ZH/EN-leaning. Kept as a documented fallback, not the default.
+Alternate if FR eval favours it on specific document classes:
+`PaddlePaddle/PaddleOCR-VL-1.6` (Apache-2.0) — strong on seals/tables, ZH/EN-leaning.
+Kept as a documented per-class fallback, not the default.
 
 > **FR eval gate (entry criterion).** Before this is wired as default, run a small
 > internal eval on 10–20 pages of real French legal documents (LightOnOCR-2-1B vs
-> OlmOCR vs PaddleOCR-VL). The 2026-02 French PDF-to-Markdown benchmark (arXiv 2602.11960)
-> ranks these closely; the choice must be confirmed on anno's actual corpus, not on a
-> public benchmark. Record the winner + per-class scores in the implementation plan.
+> OlmOCR vs PaddleOCR-VL). Record the winner + per-class scores in the implementation
+> plan. Fixtures must not contain real client PII (privacy rules).
 
-## Assumption (revisit if false)
+## Deployment tiers
 
-anno ships across a spectrum from a locally-run desktop binary to an **on-premise GPU
-appliance** (single-tenant, customer-controlled hardware). VLM-OCR must fit that
-spectrum — weights fetched by the same `download_models` plumbing, inference staying
-inside the customer's trust boundary in every profile. If anno's default ever becomes a
-third-party hosted service, the egress posture in §4.3 changes; the trait and tier model
-below do not.
+| Tier | VLM backend | liter-llm target | Image leaves box? | ELv2 |
+|---|---|---|---|---|
+| **Desktop / CPU** | `LocalVlmClient` → `llama-server` (LightOnOCR GGUF) | `base_url = http://127.0.0.1:8080` | No | Not triggered |
+| **On-prem GPU** (primary) | `VllmServerClient` → co-located vLLM | `base_url = http://127.0.0.1:8000` | **No** — stays on customer's box | **Not triggered** |
+| **Third-party SaaS** | **NOT BUILT** — dropped | — | Yes | Triggered |
 
-## Deployment tiers (the key distinction)
-
-VLM-OCR is **not** a local-vs-hosted binary. There are three tiers, and the privacy
-boundary — not the process architecture — is what separates them:
-
-| Tier | VLM backend | Image leaves trust boundary? | ELv2 (Spec A)? |
-|---|---|---|---|
-| **Desktop / CPU** | LightOnOCR GGUF in-process (llama.cpp), or none | No | Not triggered |
-| **On-prem GPU** | LightOnOCR-2-1B via a **co-located vLLM** server | **No** — stays on the customer's box | **Not triggered** (single-tenant / on-prem) |
-| **Third-party SaaS** | external vision API | **Yes** | **Triggered** |
-
-The on-prem GPU tier is a client→server architecture (anno → `localhost` vLLM) but is
+The on-prem GPU tier is client→server (anno → `localhost` vLLM) but
 **privacy-equivalent to local**: the page image never leaves the customer's hardware.
-This is the full-quality VLM-OCR path and needs no image-egress gate. Only the
-third-party SaaS tier raises the unsolved image-PII problem — and that tier is **dropped**,
-not deferred (§4.3, "Out of scope").
+Only the third-party SaaS tier raises the unsolved image-PII problem — and that tier
+is **dropped, not deferred** (§4.3).
 
 ## Motivation: where today's OCR fails
 
 | Input | Tesseract/Paddle today | VLM-OCR |
 |---|---|---|
-| Handwritten margin notes on a contract | Dropped or garbled | Transcribed with layout context |
-| Stamp/signature block overlapping text | Line detection breaks | Read as a region, text recovered |
-| Table rendered as a scanned image | Cells lost (no structure) | Structure-aware transcription |
+| Handwritten margin notes | Dropped or garbled | Transcribed with layout context |
+| Stamp/signature block over text | Line detection breaks | Read as a region, text recovered |
+| Table rendered as scanned image | Cells lost | Structure-aware transcription |
 | Multi-column / rotated scan | Reading order scrambled | Reading order inferred |
-| Accented French at low DPI | Char-level substitution errors | Context corrects to valid tokens |
-
-This overlaps with — but does not replace — the table-extraction gains Spec A keeps by
-staying on 4.9.7 (digital PDFs). VLM-OCR targets the **image/scanned** path, where
-those gains do not apply.
+| Accented French at low DPI | Char-level substitution | Context corrects to valid tokens |
 
 ## Decision
 
-**Add VLM-OCR (LightOnOCR-2-1B) as a within-trust-boundary capability across the desktop
-and on-prem GPU tiers, behind a new anno-owned trait. Do not adopt kreuzberg's ELv2 VLM
-path, and do not build a third-party hosted tier.**
+**Add VLM-OCR (LightOnOCR-2-1B) as a within-trust-boundary capability across the
+desktop and on-prem GPU tiers, behind a new anno-owned trait, routed through
+`liter-llm` (MIT).**
 
 - A new `VlmOcrClient` trait, sibling to [`LlmClient`](../../../crates/anno-rag-tabular/src/llm/mod.rs)
-  — **not** an overload of `generate_structured`. The text trait takes `(system, user,
-  json_schema)`; a vision call needs image bytes + an OCR/transcription instruction and
-  returns text, so it is a distinct contract.
-- Two concrete backends behind that trait, both within the trust boundary:
-  `LocalVlmClient` (GGUF in-process, desktop) and `VllmServerClient` (co-located vLLM,
-  on-prem GPU). The third-party slot in routing stays `None`.
-- Weights fetched via the existing `download_models` plumbing — no new download logic.
+  — **not** an overload of `generate_structured`. A vision call needs image bytes + an
+  OCR instruction and returns text; that is a distinct contract from text→JSON.
+- **`liter-llm`** (kreuzberg's own MIT Rust-native universal LLM client, 143 providers)
+  handles the OpenAI-compatible HTTP transport for both backends. Built as a response
+  to the 2026 litellm Python backdoor: compiled Rust core, no pip, no supply chain
+  risk, secrets in `secrecy::SecretString`.
+- Both backends are OpenAI-compat HTTP endpoints on the customer's hardware, reached
+  via `liter_llm::ClientConfig::base_url`. Only the URL and model differ.
 - VLM-OCR runs **only on pages classified as needing OCR** (`page_needs_ocr` /
-  `DocClass::ScannedPdf | MixedPdf` in [ingest.rs](../../../crates/anno-rag/src/ingest.rs)),
-  never on already-digital text. It is an upgrade to the OCR branch, not a new pass over
-  every document.
-
-Rationale: this reuses three patterns anno already proved in the tabular engine
-(local-first trait, routing fallback, prompt safety gate) instead of importing a
-fourth provider abstraction from kreuzberg, and it keeps the licensing posture of
-Spec A intact (no reliance on the ELv2 LLM layer).
+  `DocClass::ScannedPdf | MixedPdf`), never on digital text.
 
 ## Design
 
 ### 4.1 The `VlmOcrClient` trait
 
-A minimal, `Send + Sync` trait mirroring `LlmClient`'s shape so the same `Arc<dyn …>`
-fan-out and the same routing wrapper apply:
-
 ```rust
 #[async_trait]
 pub trait VlmOcrClient: Send + Sync {
     /// Transcribe text from a page image. `hint` carries layout/language
-    /// guidance (e.g. "French legal contract, preserve table structure").
-    async fn transcribe(&self, image: &PageImage, hint: &str) -> Result<Transcription>;
+    /// guidance, e.g. "French legal contract; preserve table structure".
+    async fn transcribe(&self, image: &PageImage, hint: &str)
+        -> crate::error::Result<Transcription>;
     fn model_id(&self) -> &str;
 }
 ```
 
-`PageImage` wraps the decoded image bytes + provenance (source doc id, page index)
-so audit logs can attribute every transcription to a page, matching the
-`Author::System { extractor_version }` pattern the text path already uses.
-`Transcription` returns text plus a confidence/coverage signal the OCR-mode logic can
-use to decide whether to keep VLM output or fall back to Tesseract.
+`PageImage` wraps raw image bytes + provenance (doc id, page index) for audit logs.
+`Transcription` returns text plus a confidence/coverage signal for the Tesseract
+fallback. Both types live in `crates/anno-rag-tabular/src/llm/vlm/mod.rs`.
 
-### 4.2 Backends (both within the trust boundary)
+### 4.2 Backends — both via `liter-llm`
 
-- **`LocalVlmClient` — desktop / CPU.** Runs LightOnOCR GGUF in-process via a llama.cpp
-  binding. Smaller/quantized; the OCR path may stay Tesseract-only on low-end hardware.
-- **`VllmServerClient` — on-prem GPU.** Talks to a **co-located** vLLM server
-  (OpenAI-compatible HTTP on `localhost` / the customer's private network) serving
-  `lightonai/LightOnOCR-2-1B` at full quality. This is the recommended profile for legal
-  workloads. The server is part of the on-prem appliance, not a third party.
-- Both register weights with `download_models` so first use fetches them and offline runs
-  reuse the cache — same gating as bge-m3 / GLiNER2.
-- Gated behind a Cargo feature (`vlm-ocr`), with the GPU/vLLM path aligning with anno's
-  existing `gpu-cuda` build profile ([anno-rag/Cargo.toml](../../../crates/anno-rag/Cargo.toml)),
-  so desktop builds compile out the runtime cost cleanly.
+Both backends call `liter_llm::DefaultClient::chat_completion` with a
+`ChatCompletionRequest` containing `ContentPart::ImageUrl` (image as a base64 data
+URL, encoded via `liter_llm::image::encode_data_url`) plus the OCR hint as the text
+part. This is the exact pattern kreuzberg uses internally in `kreuzberg/src/llm/vlm_ocr.rs@4.8.0` — we
+replicate it with the MIT liter-llm crate directly, without taking the ELv2 kreuzberg dependency.
+
+**`VllmServerClient` — on-prem GPU:**
+- `ClientConfig { base_url: "http://127.0.0.1:8000", api_key: "" }` (vLLM on-prem needs no key)
+- Model: `lightonai/LightOnOCR-2-1B`
+- The co-located vLLM server is part of the on-prem appliance — within the trust boundary.
+
+**`LocalVlmClient` — desktop / CPU:**
+- `ClientConfig { base_url: "http://127.0.0.1:8080", api_key: "" }`
+- Model: `LightOnOCR-1B-1025` (GGUF via `llama-server` — pre-built binary, no Rust binding)
+- Same liter-llm call path as `VllmServerClient`; `LocalVlmClient` delegates to it.
+
+Weights registered with `download_models` — same gating as bge-m3 / GLiNER2.
+Gated behind a `vlm-ocr` Cargo feature (`dep:liter-llm`), off by default.
 
 ### 4.3 Image egress & PII (why third-party hosted is dropped, not deferred)
 
-The existing prompt gate is **text-only** — `fallback_prompt_is_safe`
-([privacy.rs:16](../../../crates/anno-rag-tabular/src/llm/privacy.rs)) regex-matches a
-string. An image cannot be regex-checked, and a scanned legal page is dense PII
-(names, signatures, ID photos, IBANs printed on letterhead).
-
-- **Desktop and on-prem GPU tiers need no image gate** — the image never leaves the
-  customer's trust boundary. In-process (desktop) and co-located vLLM (on-prem) are both
-  on the customer's hardware. This is safe by construction.
+- **Desktop and on-prem GPU need no image gate** — the image never leaves the
+  customer's trust boundary. Safe by construction.
 - **Third-party SaaS VLM-OCR is dropped.** Sending a raw page image to an external
-  provider defeats the pseudonymisation the text path is built to guarantee, and there is
-  no cheap, reliable "is this image safe to send" check. The gateway already encodes this
-  stance with `reject_images: true`
-  ([config.rs:104](../../../crates/anno-privacy-gateway/src/config.rs)); Spec B keeps it.
-- Were a third-party path ever revisited, it would require a real image-PII gate (face /
-  signature / MRZ detection) AND an explicit opt-in — and would re-trigger Spec A's ELv2
-  analysis. Out of scope here.
+  provider defeats pseudonymisation, there is no cheap "is this image safe to send"
+  check, and it re-triggers ELv2 (Spec A). The gateway keeps `reject_images: true`
+  ([config.rs:104](../../../crates/anno-privacy-gateway/src/config.rs)).
+- Were a third-party path ever revisited, it would require a real image-PII gate
+  (face / signature / MRZ detection) AND explicit opt-in. Out of scope here.
 
 ### 4.4 Routing & ingest integration
 
-- A `RoutingVlmClient` mirrors
-  [`RoutingLlmClient`](../../../crates/anno-rag-tabular/src/llm/routing.rs): it selects the
-  within-boundary backend for the active profile (`LocalVlmClient` desktop /
-  `VllmServerClient` on-prem GPU). The third-party slot is `None`.
-- Ingest wiring: in the OCR branch of
-  [ingest.rs](../../../crates/anno-rag/src/ingest.rs) (`OcrMode::AutoEmbedded`,
-  `embedded_ocr_extract`), when the `vlm-ocr` feature is on and a page is classified
-  `ScannedPdf`/`MixedPdf`, route that page's image through `RoutingVlmClient` and emit
-  the result as the page's chunks. Tesseract remains the fallback when VLM confidence
-  is low or the feature is off — VLM-OCR is additive, never a hard dependency.
-- This requires flipping `extract_images` for the OCR path only
-  ([ingest.rs:262](../../../crates/anno-rag/src/ingest.rs) currently `false`), scoped so
-  digital-text documents still skip image extraction entirely.
+- `RoutingVlmClient` mirrors [`RoutingLlmClient`](../../../crates/anno-rag-tabular/src/llm/routing.rs):
+  selects the within-boundary backend from `config.vlm_backend`. No third-party slot.
+- In the OCR branch of [ingest.rs](../../../crates/anno-rag/src/ingest.rs)
+  (`OcrMode::AutoEmbedded`, `embedded_ocr_extract`), when `vlm-ocr` is on and a page
+  is `ScannedPdf`/`MixedPdf`: render the page to a `PageImage`, call
+  `RoutingVlmClient::transcribe`, emit via the existing `ElementBased` consumers.
+  Tesseract is the fallback when `Transcription.confidence` is below threshold (default 0.6).
+- Page image sourcing: `pdfium-render` (already a transitive dep via `kreuzberg/pdf`)
+  renders PDF pages to bitmaps. This is the preferred approach — no new dep, no
+  second extraction pass.
 
 ## Phasing
 
-1. **FR eval gate** — confirm LightOnOCR-2-1B (vs OlmOCR / PaddleOCR-VL) on real French
-   legal pages before wiring anything as default. Entry criterion, not an afterthought.
-2. **Trait + on-prem GPU backend** (`VllmServerClient`) + feature flag (`vlm-ocr`), wired
-   into the OCR branch behind `RoutingVlmClient`. This is the primary target (legal =
-   GPU appliance). Validate transcription quality vs Tesseract on the eval set.
-3. **Desktop GGUF backend** (`LocalVlmClient`) + confidence-driven fallback to Tesseract,
-   with chunk/heading integration so VLM output flows through the same `ElementBased`
-   consumers as the rest of ingest.
+1. **FR eval gate** — confirm LightOnOCR-2-1B on real French legal pages (vs OlmOCR /
+   PaddleOCR-VL). Entry criterion before anything is wired as default.
+2. **Trait + on-prem GPU backend** (`VllmServerClient` via liter-llm) + `vlm-ocr`
+   feature, wired into the OCR branch behind `RoutingVlmClient`.
+3. **Desktop backend** (`LocalVlmClient` → `llama-server`) + confidence-driven Tesseract
+   fallback.
 
 ## Out of scope (and why)
 
-- **Third-party hosted VLM-OCR** — dropped. No image-PII gate exists, it breaks the
-  privacy posture, and it would re-trigger Spec A's ELv2 prohibition. The on-prem GPU
-  tier delivers full VLM quality without any of that.
-- **Kreuzberg's built-in VLM-OCR** — ELv2-coupled and provider-shaped; adopting it
-  reintroduces the licensing/sovereignty posture Spec A contains. Not used.
-- **Image embeddings / multimodal retrieval** — VLM-OCR produces *text* that flows into
-  the existing text embedding + retrieval pipeline. Embedding images directly is a
-  separate effort (YAGNI here).
-- **Structured extraction from images** — once a page is transcribed to text, the
-  existing `LlmClient::generate_structured` / tabular path handles structure. No new
-  structured-from-pixels path.
+- **kreuzberg's built-in VLM-OCR** — ELv2-coupled (introduced at 4.8.0). Not used.
+- **Third-party hosted VLM-OCR** — dropped (§4.3).
+- **Image embeddings / multimodal retrieval** — VLM-OCR produces *text*; image
+  embedding is a separate effort (YAGNI).
+- **Structured extraction from images** — once transcribed to text, the existing
+  `LlmClient::generate_structured` / tabular path handles structure.
 
 ## Risks
 
-- **FR quality unconfirmed on anno's corpus** — public benchmarks rank LightOnOCR,
-  OlmOCR, and PaddleOCR-VL closely for French; the phase-1 eval gate exists to resolve
-  this on real documents before commitment.
-- **On-prem GPU ops dependency** — the vLLM sidecar adds a server process + GPU drivers
-  to the appliance. Acceptable for a GPU deployment; mitigated by the desktop GGUF path
-  for non-GPU installs.
-- **Latency/RAM** — vision models are heavier than Tesseract; run VLM only on
-  OCR-classified pages and keep Tesseract as the default for clean scans.
-- **License verification** — LightOnOCR-2-1B is Apache-2.0 per its model card; re-confirm
-  at execution time (Spec A discipline), including any GGUF redistribution terms.
+- **FR quality unconfirmed on anno's corpus** — phase-1 eval gate exists to resolve this.
+- **Page bitmap sourcing** — pdfium-render is preferred; confirm API at implementation
+  time (Task 6 Step 3 in the plan).
+- **Confidence heuristic** — liter-llm does not expose per-token logprobs from vLLM
+  by default; the initial implementation uses a length heuristic. Add a logprob pass
+  or re-OCR agreement check before relying on the threshold in production.
+- **llama-server ops dependency** — the desktop path requires the user to run a
+  `llama-server` process. Document in the user-facing setup guide; fallback to Tesseract
+  if the server is unreachable.
+- **License verification** — LightOnOCR-2-1B is Apache-2.0; `Mungert/LightOnOCR-1B-1025-GGUF`
+  redistribution terms must be re-confirmed at execution time (third-party GGUF repacks
+  sometimes add restrictions).
 
 ## Acceptance
 
-- This document exists and is committed alongside Spec A.
-- The design names the default model (LightOnOCR-2-1B, Apache-2.0), the three deployment
-  tiers, and the two within-boundary backends, and reuses the existing local-first /
-  routing / safety-gate patterns rather than importing kreuzberg's VLM path.
-- A reader can see exactly which ingest branch changes
-  ([ingest.rs](../../../crates/anno-rag/src/ingest.rs) OCR path), why images stay gated
-  against third parties by default ([config.rs](../../../crates/anno-privacy-gateway/src/config.rs)
-  `reject_images`), and that the third-party hosted tier is dropped — not deferred (§4.3).
+- This document and Spec A are committed.
+- The design names the default model (LightOnOCR-2-1B, Apache-2.0), liter-llm as the
+  transport layer, the three deployment tiers, and the two within-boundary backends.
+- A reader can see why third-party hosted is dropped (§4.3), why kreuzberg's built-in
+  VLM-OCR is not used (ELv2), and why liter-llm was chosen over hand-rolled reqwest
+  (MIT, Rust-native, kreuzberg's own client, exact same API pattern).
+- Implementation plan: [2026-06-20-vlm-ocr-implementation.md](../plans/2026-06-20-vlm-ocr-implementation.md)

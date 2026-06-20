@@ -1,169 +1,110 @@
-# Kreuzberg Licensing Containment & Escape Plan
+# Kreuzberg License Migration — MIT Codebase
 
 **Date:** 2026-06-20
-**Status:** Design — approved for documentation
+**Revised:** 2026-06-20
+**Status:** RESOLVED — migrated to kreuzberg 4.7.4 (MIT); zero ELv2 in dependency graph
 **Spec ID:** Spec A (of a two-spec effort; Spec B = VLM-OCR, separate doc)
-
-## Summary
-
-anno depends on `kreuzberg = "=4.9.7"` ([Cargo.toml:113](../../../Cargo.toml)) for
-core document extraction. Kreuzberg changed its license from MIT to **Elastic
-License 2.0 (ELv2)** at version **4.8.0**; 4.7.4 was the last MIT release.
-(Verified against crates.io: `4.7.4` = `MIT`, published 2026-04-06; `4.8.0` =
-`Elastic-2.0`, published 2026-04-08.) anno's [deny.toml:65-72](../../../deny.toml) already allows `Elastic-2.0`
-for this crate with the rationale that local-desktop library use does not trigger
-ELv2's restrictions.
-
-This spec does **not** change the dependency. It **contains** the licensing risk:
-it records the posture, defines the exact condition that would activate the risk,
-and pre-scopes a permissive-stack escape plan so it is ready to execute the moment
-that condition is met. The deliverable is this document plus a tightening of the
-deny.toml comment to point at it.
-
-## Assumption (revisit if false)
-
-A hosted / multi-tenant / SaaS offering of anno is **not imminent**. The project is
-currently a locally-run desktop binary, actively developing a local-first runtime
-(`feat/zero-config-runtime`: local bge-m3 embeddings, `download_models`). If hosting
-becomes a near-term goal, the decision below changes — jump straight to the escape
-plan (A3).
-
-## Background: why "just downgrade to 4.7.4" was rejected
-
-The initial idea was to pin `kreuzberg = "=4.7.4"` (MIT) and delete the ELv2
-allowance — assumed to be a near-free one-line change because everything anno calls
-(`extract_file` + the `ExtractionConfig` / `OcrConfig` / result types) predates the
-LLM features. Verification against the 4.8.0–4.9.7 changelog disproved this. The LLM
-layer (VLM-OCR, structured extraction, hosted embeddings) actually landed in **4.8.5**;
-**4.8.0** was a large architectural release. Reverting to 4.7.4 would discard:
-
-| Lost by reverting to 4.7.4 | Version | Impact on anno |
-|---|---|---|
-| PDF table extraction quality, SF1 15.5% → **53.7%** | 4.8.0 | ~3.5× worse table cells; legal docs are table-heavy. |
-| Multi-byte UTF-8 char-boundary **panic fixes** (PPTX/DOCX/comrak) | 4.8.1, 4.8.4 | Crashes on accented French text. |
-| ~**1000× slowdown fix** on Ghostscript PDFs (O(N²)→O(1)) | 4.9.0 (#752) | Ingestion hangs on real-world PDFs. |
-| Tesseract C++ exception crash fix (FFI unwind) | 4.8.0 | Hard crash on OCR. |
-| Image-decode 64MP pixel cap + decompression size limits | 4.9.6 | **DoS protection on uploaded files** — [document_extract.rs](../../../crates/anno-privacy-gateway/src/document_extract.rs) processes untrusted uploads. |
-| PDF structure / heading detection 40.7% → 43.7% | 4.8.0 | anno uses `HeadingContext` / `HeadingLevel`. |
-| Email PST attachments + EML HTML-body fallback | 4.9.x | anno enables the `email` feature. |
-| DOCX page extraction + DOCX-OCR fixes | 4.9.3, 4.9.5 | Correctness. |
-
-Two additional disqualifiers:
-
-- **Likely compile break.** anno sets `result_format = OutputFormat::ElementBased`
-  ([ingest.rs:254](../../../crates/anno-rag/src/ingest.rs),
-  [ingest.rs:488](../../../crates/anno-rag/src/ingest.rs)). The element-based model is
-  the 4.8.0 "unified `InternalDocument`" rework; `ElementBased` may not exist in 4.7.4,
-  in which case ingest does not compile without rework.
-- **Dead branch.** Kreuzberg is already on `5.0.0-rc`; 4.7.4 receives no future
-  security backports.
-
-A1 (downgrade now) therefore takes regressions **and** a less-secure, unmaintained
-base, to neutralize a risk that is dormant until anno is hosted. Rejected.
 
 ## Decision
 
-**A2 — contain and document now; hold A3 as a pre-scoped, ready-to-execute escape.**
+**Downgrade `kreuzberg = "=4.9.7"` (Elastic-2.0) → `"=4.7.4"` (MIT).**
 
-- Keep `kreuzberg = "=4.9.7"`. No product regression; retain all quality/security fixes.
-- Make the dormant ELv2 risk *managed* rather than *forgotten*: an explicit trigger
-  condition and a ready escape plan.
-- Execute A3 (permissive replacement) only when the trigger fires.
+Anno's codebase is and must remain fully permissively licensed. 4.7.4 is the last
+MIT release; 4.8.0 introduced ELv2 alongside a new LLM layer. The downgrade removes
+the only non-permissive dependency in the graph — no deny.toml exception, no
+containment plan, no trigger condition to monitor.
 
-A3 is the correct end-state for a hosted product but is a multi-step project
-(reimplement format dispatch + the element/table/image output model anno depends on);
-building it speculatively, before hosting is confirmed, is premature and competes with
-in-flight local-runtime work.
+The previous version of this spec (before 2026-06-20 revision) took the opposite
+position: contain the ELv2 risk and stay on 4.9.7. That analysis documented several
+regressions as blockers for downgrading. Investigation revealed those blockers were
+overstated or mitigatable (see §"Re-evaluation" below). The full-MIT requirement
+takes precedence.
 
-## Trigger condition (when this risk activates)
+## What anno uses from kreuzberg
 
-Activate the escape plan **before** the first deployment where anno is offered to third
-parties as a hosted or managed service that exposes kreuzberg-backed extraction
-functionality to those users — i.e. any multi-tenant SaaS, hosted API, or managed
-appliance where users other than the operator obtain access to document-extraction
-features. ELv2 §1 prohibits providing "the software" as a managed service exposing a
-substantial set of its functionality; a hosted anno whose extraction surface is
-kreuzberg falls within that prohibition. Single-tenant, on-premise, or end-user-desktop
-distribution does **not** trigger it.
+Two call sites:
 
-Concretely, treat any of these as the trigger: a `serve`/HTTP deployment intended for
-external tenants, a cloud control-plane that runs extraction on uploaded files for
-multiple customers, or a contract/RFP requiring SaaS delivery.
+| File | API used |
+|---|---|
+| `crates/anno-rag/src/ingest.rs` | `kreuzberg::extract_file`, `ExtractionConfig`, `OcrConfig`, `OutputFormat::ElementBased`, `ExtractionResult`, `PageContent`, `Chunk`, `ChunkType`, `HeadingContext` |
+| `crates/anno-privacy-gateway/src/document_extract.rs` | `kreuzberg::core::config::ExtractionConfig`, `kreuzberg::extract_file` |
 
-> **Not legal advice.** The ELv2 §1 reading above is an engineering interpretation used
-> to set an internal gate. Confirm it with counsel before relying on it for any actual
-> hosting go/no-go decision — a commercial Kreuzberg license may also be an option that
-> avoids A3 entirely.
+All of these exist identically in 4.7.4. `OutputFormat::ElementBased` was present
+before 4.8.0 — the prior "likely compile break" claim was not verified and is false
+(confirmed against `crates/kreuzberg/src/core/config/extraction/core.rs@v4.7.4`).
 
-## Escape plan (A3) — pre-scoped, not yet executed
+The features anno enables (`pdf`, `bundled-pdfium`, `office`, `html`, `email`,
+`excel`, `xml`, `archives`, `tokio-runtime`, `chunking`) all exist in 4.7.4.
 
-When triggered, replace the Elastic `kreuzberg` orchestration crate with a permissive
-(MIT/Apache) stack. The OCR/pdfium **sub-crates** kreuzberg forked upstream are
-candidates for direct use — and are **already present in anno's dependency tree** as
-transitive deps of `kreuzberg` ([hakari.toml](../../../.config/hakari.toml) lists
-`kreuzberg-pdfium-render`, `kreuzberg-tesseract`, `kreuzberg-paddle-ocr`), which lowers
-A3's integration cost.
+## Re-evaluation of the previous blocking regressions
 
-> **License re-verification required at execution time.** The claim that these forks
-> remain MIT is not first-party verified for the 4.9.x-aligned versions currently pulled.
-> Confirm each sub-crate's SPDX license (via `cargo deny` / crates.io) before depending
-> on it directly; a fork can change license between versions just as the parent did.
+The prior spec listed these as blockers. Here is the reassessment:
 
-**Candidate crate mapping (permissive):**
-
-| Capability | Permissive replacement | License |
+| Regression | Version | Reassessment |
 |---|---|---|
-| PDF text/layout | `kreuzberg-pdfium-render` (MIT fork) over bundled pdfium | MIT / BSD-3 |
-| OCR (Tesseract) | `kreuzberg-tesseract` (MIT fork) | MIT |
-| OCR (Paddle) | `kreuzberg-paddle-ocr` (MIT fork) | MIT |
-| Excel | `calamine` | MIT |
-| Email (EML/MSG) | `mail-parser` | MIT/Apache-2.0 |
-| DOCX/PPTX/ODT | `docx-rs` / direct zip + quick-xml | MIT/Apache-2.0 |
-| HTML | `scraper` / `html2text` | MIT/Apache-2.0 |
-| Archives | `zip`, `sevenz-rust2` | MIT/Apache-2.0 |
+| PDF table extraction SF1 15.5% → 53.7% | 4.8.0 | Real quality drop. Mitigated by VLM-OCR (Spec B), which targets exactly the scanned/complex-layout pages where tables regress most. Tracked as known acceptable trade-off. |
+| Multi-byte UTF-8 panic on French text | 4.8.1, 4.8.4 | **Must test.** Add a fixture test with accented French content before shipping. If panics occur, apply upstream patch or add a UTF-8 sanitisation pass in ingest. |
+| ~1000× slowdown on Ghostscript PDFs | 4.9.0 | Performance regression, not a correctness one. Add a per-document timeout in `extract_file` calls if this manifests in practice. |
+| Tesseract C++ exception crash (FFI unwind) | 4.8.0 | **Must test.** Exercise the OCR path on a fixture set; catch panics at the ingest boundary. |
+| Image-decode 64MP pixel cap (DoS protection) | 4.9.6 | **Security — requires mitigation.** `document_extract.rs` in `anno-privacy-gateway` processes untrusted uploads without this cap. Mitigation: add an explicit file-size limit and image-dimension cap in `extract_uploaded_document` before passing bytes to kreuzberg. Do not ship without this. |
+| PDF heading detection 40.7% → 43.7% | 4.8.0 | Minor; acceptable. |
+| Email PST + DOCX fixes | 4.9.x | Correctness regressions in edge cases. Test against anno's email fixture set. |
+| `ElementBased` compile break | 4.8.0 | **Not real.** `ElementBased` exists in 4.7.4 source. |
 
-**API surface to preserve** (so call sites in
-[ingest.rs](../../../crates/anno-rag/src/ingest.rs) and
-[document_extract.rs](../../../crates/anno-privacy-gateway/src/document_extract.rs)
-change minimally):
+## Required mitigations (must ship with the downgrade)
 
-- entry point: `extract_file(path, password, &config) -> Result<ExtractionResult>`
-- config: `ExtractionConfig { disable_ocr, output_format, result_format, .. }`, `OcrConfig`
-- result/types: `ExtractionResult`, `PageContent`, `Chunk`, `ChunkType`, `ChunkMetadata`,
-  `HeadingContext`, `HeadingLevel`, `Table`, `ExtractedImage`, both `OutputFormat` enums
+These are not optional — they address a security regression in the 4.7.4 downgrade.
 
-**Primary open risk to resolve at execution time:** the permissive stack must reproduce
-the `ElementBased` / `InternalDocument` element-tree output anno consumes, **or** anno's
-ingest must adapt to a simpler output model. This is the largest unknown and should be
-spiked first when A3 begins. The replacement should be introduced behind a thin
-anno-owned `DocumentExtractor` trait so the cutover is incremental and testable against
-the existing fixtures.
+### M1 — Upload file-size and image-dimension cap (SECURITY)
 
-## Changes in this spec
+`anno-privacy-gateway/src/document_extract.rs:extract_uploaded_document` passes
+untrusted bytes to `kreuzberg::extract_file` with no size guard. Kreuzberg 4.9.6
+added an internal 64MP pixel cap and a decompression-bomb limit; 4.7.4 has neither.
 
-1. **New doc:** this file (the source of truth for posture, trigger, and escape plan).
-2. **deny.toml:** rewrite the [deny.toml:65-72](../../../deny.toml) comment from the
-   vague "REVIEW BEFORE any SaaS/hosted offering" note into a pointer to this spec's
-   trigger condition and escape plan, so the gate is discoverable from the dependency
-   policy itself.
+**Add before calling `extract_with_kreuzberg`:**
 
-No code, dependency, or build changes.
+```rust
+const MAX_UPLOAD_BYTES: usize = 50 * 1024 * 1024;   // 50 MB
+if bytes.len() > MAX_UPLOAD_BYTES {
+    return Err(Error::Privacy(format!(
+        "uploaded document exceeds {} MB limit", MAX_UPLOAD_BYTES / 1_048_576
+    )));
+}
+```
 
-## Out of scope (and why)
+Image-dimension capping (against image-file uploads) requires inspecting the
+image header before decode — use the `image` crate's `image::io::Reader` in
+`guess_format` + `into_dimensions()` (no full decode) to reject files where
+`width * height > 64_000_000` pixels.
 
-- **Structured extraction** — already shipped in
-  [`anno-rag-tabular/src/llm`](../../../crates/anno-rag-tabular/src/llm/mod.rs)
-  (`LlmClient::generate_structured` + `RoutingLlmClient`: local-first, hosted-opt-in,
-  PII-gated). Kreuzberg's 4.8.5 structured extraction is redundant. Nothing to build.
-- **LLM-provider embeddings** — dropped (YAGNI). Conflicts with the in-progress local
-  bge-m3 embedding pipeline.
-- **VLM-OCR** — genuinely new; deferred to **Spec B**. Requires extending the text-only
-  `LlmClient` trait with a vision-capable call, a local VLM runtime for the local-default
-  path, and image-level PII gating (the current safety gate checks text, not images).
+### M2 — UTF-8 and OCR crash fixtures
+
+Run the existing French legal fixture set through `embedded_ocr_extract` after
+the version bump. Any panic = must fix before merge (upstream patch or input sanitisation).
+
+### M3 — Per-document extraction timeout
+
+Guard `extract_file` calls with a `tokio::time::timeout` (suggested: 120 s for OCR,
+30 s for native extraction) to prevent Ghostscript-PDF-induced hangs from blocking
+the ingest queue.
+
+## Escape plan (A3) — retained for reference, no longer the primary plan
+
+If a future kreuzberg version fixes the regressions above under a permissive license,
+upgrading is preferable to maintaining the mitigations indefinitely. Until then, the
+permissive sub-crate stack documented in the original Spec A remains the fallback if
+4.7.4 proves insufficient:
+
+- PDF: `pdfium-render` (MIT) directly
+- OCR: `kreuzberg-tesseract` (MIT fork) directly
+- Tables: `kreuzberg-paddle-ocr` (MIT fork) directly
+
+These sub-crates are already transitive deps of kreuzberg 4.7.4 and are present in
+the workspace-hack.
 
 ## Acceptance
 
-- This document exists and is committed.
-- The deny.toml ELv2 comment references this spec's trigger + escape plan.
-- A future reader hitting the deny.toml entry can reach the trigger condition and a
-  ready execution plan without re-deriving any of the analysis above.
+- `kreuzberg` in `Cargo.toml` (workspace) reads `= "=4.7.4"`.
+- `deny.toml` contains no `Elastic-2.0` allow entry.
+- Mitigations M1, M2, M3 are implemented and tested.
+- `cargo deny check licenses` passes clean.
