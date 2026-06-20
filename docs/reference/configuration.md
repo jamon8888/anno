@@ -6,8 +6,8 @@ Precedence (lowest → highest): defaults → `~/.anno-rag/config.toml` → env 
 
 | Field | Env var | CLI flag | Default | Since | Description |
 |-------|---------|----------|---------|-------|-------------|
-| `data_dir` | `ANNO_RAG_DATA_DIR` | `--data-dir` | `"~/.anno-rag"` | 0.1 | Root directory for vault, index, and model weights. Default: ~/.anno-rag |
-| `embed_model` | `ANNO_RAG_EMBED_MODEL` | `--embed-model` | `"OrdalieTech/Solon-embeddings-large-0.1"` | 0.1 | HuggingFace model ID for the embedder. Default: OrdalieTech/Solon-embeddings-large-0.1 |
+| `data_dir` | `ANNO_RAG_DATA_DIR` | `--data-dir` | `"~/.anno-rag"` | 0.1 | Root directory for vault, index, and model weights. Default: platform data dir (Windows: %APPDATA%\anno-rag, macOS: ~/Library/Application Support/anno-rag) |
+| `embed_model` | `ANNO_RAG_EMBED_MODEL` | `--embed-model` | `"AlpEge/bge-m3-onnx-int8"` | 0.1 | HuggingFace model ID for the embedder. Default: OrdalieTech/Solon-embeddings-large-0.1 |
 | `embed_dim` | `ANNO_RAG_EMBED_DIM` | `--embed-dim` | `1024` | 0.1 | Vector dimension; must match embedder output. Default: 1024 |
 | `default_top_k` | `ANNO_RAG_DEFAULT_TOP_K` | `--default-top-k` | `10` | 0.1 | Default number of results returned by search. Default: 10 |
 | `chunk_max_chars` | `ANNO_RAG_CHUNK_MAX_CHARS` | `--chunk-max-chars` | `2048` | 0.1 | Max chunk size in characters. Default: 2048 |
@@ -16,6 +16,7 @@ Precedence (lowest → highest): defaults → `~/.anno-rag/config.toml` → env 
 | `vector_index_threshold` | `ANNO_RAG_VECTOR_INDEX_THRESHOLD` | `--vector-index-threshold` | `1000` | 0.5 | Chunk count above which IVF_HNSW_SQ index is built. Default: 1000 |
 | `ner_warmup_model` | `ANNO_RAG_NER_WARMUP_MODEL` | `--ner-warmup-model` | `"fastino/gliner2-multi-v1"` | 0.6 | HF Hub model ID to pre-warm on startup. Default: fastino/gliner2-multi-v1 |
 | `ner_model_id` | `ANNO_RAG_NER_MODEL` | `--ner-model` | `"SemplificaAI/gliner2-multi-v1-onnx"` | 0.12 | HuggingFace model ID for the ONNX NER detector. Default: SemplificaAI/gliner2-multi-v1-onnx |
+| `ner_pii_model_id` | `ANNO_RAG_NER_PII_MODEL` | `--ner-pii-model` | `"fastino/gliner2-privacy-filter-PII-multi"` | 0.14 | HuggingFace model ID for the ONNX PII NER detector. Default: fastino/gliner2-privacy-filter-PII-multi |
 | `ner_onnx_precision` | `ANNO_RAG_NER_ONNX_PRECISION` | `--ner-onnx-precision` | `"fp16"` | 0.13 | ONNX graph precision for NER: fp16 (default, ~250 MB) or fp32 (~500 MB). Default: fp16 |
 | `index_distance` | `ANNO_RAG_INDEX_DISTANCE` | `--index-distance` | `"cosine"` | 0.13 | Vector index distance: cosine (default), l2, or dot. Default: cosine |
 | `index_num_partitions` | `ANNO_RAG_INDEX_NUM_PARTITIONS` | `--index-num-partitions` | *(unset)* | 0.13 | IVF partitions for the vector index. Default: auto (unset) |
