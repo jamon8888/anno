@@ -59,9 +59,6 @@ jobs:
         with:
           targets: ${{ matrix.target }}
 
-      - name: Setup sccache
-        uses: mozilla-actions/sccache-action@v0.0.5
-
       - name: Setup Node.js (Tauri CLI)
         uses: actions/setup-node@v4
         with:
@@ -80,10 +77,6 @@ jobs:
           key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
 
       - name: Build anno-rag-bin
-        env:
-          RUSTC_WRAPPER: sccache
-          CARGO_INCREMENTAL: "0"
-          SCCACHE_GHA_ENABLED: "true"
         run: >
           cargo build --release
           -p anno-rag-bin
@@ -95,10 +88,6 @@ jobs:
           ./target/${{ matrix.target }}/release/anno-rag${{ runner.os == 'Windows' && '.exe' || '' }} --help
 
       - name: Build Tauri installer
-        env:
-          RUSTC_WRAPPER: sccache
-          CARGO_INCREMENTAL: "0"
-          SCCACHE_GHA_ENABLED: "true"
         run: >
           tauri build
           --target ${{ matrix.target }}
