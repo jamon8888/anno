@@ -1,29 +1,40 @@
-# VLM-OCR Implementation + Kreuzberg Licensing Containment
+# VLM-OCR Implementation — Full MIT Codebase
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development or superpowers:executing-plans to implement task-by-task. Use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Implement the two-spec effort:
-- **Spec A** ([kreuzberg-licensing-containment](../specs/2026-06-20-kreuzberg-licensing-containment-design.md)) — its one remaining code change: tighten the `deny.toml` ELv2 comment into a pointer to the spec (Task 1).
-- **Spec B** ([vlm-ocr](../specs/2026-06-20-vlm-ocr-design.md)) — add a within-trust-boundary VLM-OCR path (default model **`lightonai/LightOnOCR-2-1B`**, Apache-2.0) behind a new `VlmOcrClient` trait, with a co-located **vLLM** backend for the on-prem GPU profile and a **GGUF** backend for desktop. Third-party hosted is **dropped** (Spec B §4.3). Tasks 2–7.
+**Goal:** Eliminate every non-MIT dependency and add VLM-OCR as a within-trust-boundary capability:
+
+- **Task 1 (was Spec A):** Downgrade kreuzberg `=4.9.7` (ELv2) → `=4.7.4` (MIT). This **removes** the only ELv2 dep from the codebase — no containment dance, no deny.toml exception, full permissive stack.
+- **Tasks 2–7 (Spec B):** Add VLM-OCR (`lightonai/LightOnOCR-2-1B`, Apache-2.0) behind a new `VlmOcrClient` trait. Backends use **`liter-llm`** (MIT, Rust-native, kreuzberg's own universal LLM client) instead of hand-rolled reqwest — both vLLM (on-prem GPU) and llama.cpp server (desktop) are OpenAI-compat endpoints configured via `liter_llm::ClientConfig::base_url`. Third-party hosted is **dropped** (Spec B §4.3).
+
+**Why liter-llm instead of raw reqwest:**
+- MIT licensed, Rust core, no Python, no supply chain risk (explicitly built as a response to the 2026 litellm backdoor)
+- `ChatCompletionRequest + ContentPart::ImageUrl` handles the vision call — exactly the pattern kreuzberg 4.8.0 used internally before the license change
+- `ClientConfig.base_url` routes to any OpenAI-compat endpoint: co-located vLLM, `llama-server` for GGUF, or any future backend — no new backends to own
+- Secrets in `secrecy::SecretString` (zeroed on drop, never serialized)
+- Retries, OpenTelemetry, rate limiting all built in
+
+**Why kreuzberg 4.7.4:**
+- Last MIT release. VLM-OCR was introduced at 4.8.0 — the same commit that flipped the license to ELv2. There is no "MIT kreuzberg with VLM-OCR".
+- All features anno uses exist in 4.7.4: `pdf`, `bundled-pdfium`, `office`, `html`, `email`, `excel`, `xml`, `archives`, `tokio-runtime`, `chunking`, `ocr`, `paddle-ocr`.
+- Public API is identical: `kreuzberg::extract_file`, `kreuzberg::core::config::ExtractionConfig` — both call sites (`anno-rag/src/ingest.rs`, `anno-privacy-gateway/src/document_extract.rs`) are unaffected.
 
 **Prerequisites:**
-- On `main` (Spec A `6c56d7b5`, Spec B `a1a1d66e` already committed).
+- On `main` (specs committed in `6c56d7b5` / `d387d46a`)
 - Local Rust loop per CLAUDE.md: `CARGO_TARGET_DIR=E:\cargo-target`, use `scripts/test-local.ps1` / `scripts/dev-fast.ps1`. Never `cargo build --workspace`.
-- For the on-prem GPU backend test: a reachable vLLM server (local dev box or appliance) serving `lightonai/LightOnOCR-2-1B`.
-- Branch: `feat/vlm-ocr`.
+- Branch: `feat/vlm-ocr`
 
 ---
 
-## Deployment tiers (drives the backend design — Spec B "Deployment tiers")
+## Deployment tiers (drives backend design — Spec B §3)
 
-| Tier | Backend built here | Image leaves box? | ELv2 |
-|------|--------------------|-------------------|------|
-| Desktop / CPU | `LocalVlmClient` — LightOnOCR GGUF via llama.cpp | No | Not triggered |
-| **On-prem GPU** (primary) | `VllmServerClient` — co-located vLLM, LightOnOCR-2-1B | **No** | **Not triggered** |
-| Third-party SaaS | **NOT BUILT** — dropped | Yes | Triggered |
+| Tier | VLM backend | liter-llm target | Image leaves box? | ELv2 |
+|------|-------------|-----------------|-------------------|------|
+| Desktop / CPU | `LocalVlmClient` → `llama-server` (LightOnOCR GGUF) | `base_url = http://127.0.0.1:8080` | No | Not triggered |
+| **On-prem GPU** (primary) | `VllmServerClient` → co-located vLLM | `base_url = http://127.0.0.1:8000` | **No** — stays on customer's box | **Not triggered** |
+| Third-party SaaS | **NOT BUILT** — dropped | — | Yes | Triggered |
 
-Both built backends are within the customer's trust boundary, so **no image-PII gate is
-needed**. The third-party tier is dropped, not deferred — see Spec B §4.3.
+Both built backends are OpenAI-compat HTTP servers running on the customer's hardware. liter-llm treats them identically — only `base_url` and `model_id` differ.
 
 ---
 
@@ -31,75 +42,76 @@ needed**. The third-party tier is dropped, not deferred — see Spec B §4.3.
 
 | File | Change |
 |------|--------|
-| `deny.toml` | Task 1 — rewrite ELv2 comment into a pointer to Spec A's trigger + escape plan |
+| `Cargo.toml` (workspace) | `kreuzberg = "=4.7.4"` (was `=4.9.7`); add `liter-llm` workspace dep |
+| `deny.toml` | Remove the `kreuzberg` Elastic-2.0 allow entry entirely |
 | `crates/anno-rag-tabular/src/llm/vlm/mod.rs` | NEW — `VlmOcrClient` trait, `PageImage`, `Transcription` |
-| `crates/anno-rag-tabular/src/llm/vlm/vllm_server.rs` | NEW — `VllmServerClient` (on-prem GPU; OpenAI-compatible HTTP to co-located vLLM) |
-| `crates/anno-rag-tabular/src/llm/vlm/local_gguf.rs` | NEW — `LocalVlmClient` (desktop; LightOnOCR GGUF via llama.cpp) |
-| `crates/anno-rag-tabular/src/llm/vlm/routing.rs` | NEW — `RoutingVlmClient` (selects within-boundary backend; third-party slot `None`) |
+| `crates/anno-rag-tabular/src/llm/vlm/vllm_server.rs` | NEW — `VllmServerClient` wrapping `liter_llm::DefaultClient` |
+| `crates/anno-rag-tabular/src/llm/vlm/local_gguf.rs` | NEW — `LocalVlmClient` wrapping `liter_llm::DefaultClient` (points to `llama-server`) |
+| `crates/anno-rag-tabular/src/llm/vlm/routing.rs` | NEW — `RoutingVlmClient` |
 | `crates/anno-rag-tabular/src/llm/mod.rs` | Add `pub mod vlm;` |
-| `crates/anno-rag-tabular/Cargo.toml` | Add `vlm-ocr` feature |
-| `crates/anno-rag/src/ingest.rs` | OCR branch: route `ScannedPdf`/`MixedPdf` page images through VLM; flip `extract_images` for the OCR path only ([ingest.rs:262](../../../crates/anno-rag/src/ingest.rs)) |
-| `crates/anno-rag/src/config.rs` | `vlm_backend` (off/gguf/vllm), `vlm_vllm_url`, `vlm_confidence_threshold` |
-| `crates/anno-rag/Cargo.toml` | Add `vlm-ocr` passthrough feature |
+| `crates/anno-rag-tabular/Cargo.toml` | Add `vlm-ocr = ["dep:liter-llm"]` feature |
+| `crates/anno-rag/src/ingest.rs` | OCR branch: route `ScannedPdf`/`MixedPdf` pages through VLM |
+| `crates/anno-rag/src/config.rs` | `vlm_backend`, `vlm_vllm_url`, `vlm_local_url`, `vlm_confidence_threshold` |
+| `crates/anno-rag/Cargo.toml` | Add `vlm-ocr = ["anno-rag-tabular/vlm-ocr"]` passthrough |
 
 ---
 
-### Task 1: Spec A — tighten the deny.toml ELv2 comment
+### Task 1: Downgrade kreuzberg to 4.7.4 — eliminate ELv2
 
-The current comment ([deny.toml](../../../deny.toml)) still reads "REVIEW BEFORE any SaaS/hosted offering" — vague, with no pointer to the trigger or escape plan. Spec A's Acceptance requires it point at the spec.
+This is the entirety of what Spec A required. No comment rewriting, no containment — just remove the ELv2 dep.
 
-- [ ] **Step 1: Rewrite the comment block**
+- [ ] **Step 1: Bump version in workspace `Cargo.toml`**
 
-Replace the trailing "REVIEW BEFORE any SaaS/hosted offering of…" lines above the `kreuzberg` allow entry with:
+  ```toml
+  # was: kreuzberg = { version = "=4.9.7", default-features = false, features = [...] }
+  kreuzberg = { version = "=4.7.4", default-features = false, features = [
+      "pdf", "bundled-pdfium", "office", "html", "email", "excel",
+      "xml", "archives", "tokio-runtime", "chunking"
+  ] }
+  ```
 
-```toml
-    # Elastic-2.0 via `kreuzberg` (direct anno-rag dependency — document
-    # extraction backend). Source-available, NOT OSI-approved: ELv2 §1 forbids
-    # offering the software as a managed service. anno consumes kreuzberg as a
-    # library in a locally-run desktop / on-prem appliance — not triggered.
-    #
-    # TRIGGER + ESCAPE PLAN: docs/superpowers/specs/2026-06-20-kreuzberg-licensing-containment-design.md
-    # Before ANY third-party hosted/multi-tenant offering exposing kreuzberg-backed
-    # extraction, execute the permissive-stack escape plan (A3) in that spec.
-    { crate = "kreuzberg", allow = ["Elastic-2.0"] },
-```
+- [ ] **Step 2: Remove the kreuzberg ELv2 entry from `deny.toml`**
 
-- [ ] **Step 2: Verify deny still passes**
+  Delete these lines entirely (kreuzberg is now MIT — no exception needed):
+  ```toml
+  # Elastic-2.0 via `kreuzberg` ...
+  { crate = "kreuzberg", allow = ["Elastic-2.0"] },
+  ```
 
-```powershell
-cargo deny check licenses 2>&1 | Select-String -Pattern "kreuzberg|error|advisories" | Select-Object -First 10
-```
+  > ⚠️ Keep the `bzip2-1.0.6` entries below it — `sevenz-rust2` (pulled by `archives`) still uses that license regardless of kreuzberg version.
 
-Expected: no new license errors; `kreuzberg` Elastic-2.0 still allowed.
+- [ ] **Step 3: Verify compile + license clean**
 
-- [ ] **Step 3: Commit**
+  ```powershell
+  cargo deny check licenses 2>&1 | Select-String "kreuzberg|error" | Select-Object -First 10
+  powershell -NoProfile -ExecutionPolicy Bypass -File scripts\dev-fast.ps1 -Package anno-rag -AllAffected -Mode check
+  ```
 
-```powershell
-git add deny.toml
-git commit -m "docs(license): point kreuzberg ELv2 deny.toml entry at containment spec (Spec A)"
-```
+  Expected: no Elastic-2.0 anywhere; `anno-rag` and `anno-privacy-gateway` compile cleanly.
+
+- [ ] **Step 4: Commit**
+
+  ```powershell
+  git add Cargo.toml Cargo.lock deny.toml
+  git commit -m "chore(deps): downgrade kreuzberg to 4.7.4 (MIT) — remove last ELv2 dep"
+  ```
 
 ---
 
-### Task 2: FR eval gate (entry criterion — do this BEFORE wiring a default)
+### Task 2: FR eval gate (entry criterion — do before wiring a default)
 
-Spec B makes the model choice conditional on real French legal pages. Resolve it first.
+Spec B makes the model choice conditional on real French legal pages.
 
-- [ ] **Step 1: Assemble a fixture set** of 10–20 representative French legal pages
-  (scanned contracts, stamped/signed pages, handwritten margins, table-heavy pages).
-  Keep them under test fixtures; do **not** commit real client PII — use synthetic or
-  consented samples (privacy rules).
+- [ ] **Step 1: Assemble fixture set** — 10–20 representative French legal pages (scanned contracts, stamped/signed pages, handwritten margins, table-heavy pages). **Do NOT commit real client PII** — use synthetic or consented samples (privacy rules).
 
-- [ ] **Step 2: Run each candidate** — `lightonai/LightOnOCR-2-1B`, `allenai/olmOCR-*`,
-  `PaddlePaddle/PaddleOCR-VL-1.6` — over the set (a throwaway Python/vLLM harness is fine
-  here; this is a selection eval, not shipped code).
+- [ ] **Step 2: Run each candidate** via a throwaway Python/vLLM harness:
+  - `lightonai/LightOnOCR-2-1B`
+  - `allenai/olmOCR-*`
+  - `PaddlePaddle/PaddleOCR-VL-1.6`
 
-- [ ] **Step 3: Score** per class (printed / handwritten / tables / stamps) on CER/WER and
-  table-cell F1. Record the winner + per-class scores **in this file** under "Eval result"
-  below.
+- [ ] **Step 3: Score** per class (printed / handwritten / tables / stamps) on CER/WER and table-cell F1. Record winner + per-class scores below under "Eval result".
 
-- [ ] **Step 4: Confirm the default.** If LightOnOCR-2-1B wins or ties, keep it as default
-  (expected). If PaddleOCR-VL wins a class decisively, note it as a per-class override.
+- [ ] **Step 4: Confirm default.** If LightOnOCR-2-1B wins or ties → keep as default. If PaddleOCR-VL wins a class decisively → note as per-class override.
 
 > **Eval result:** _(fill in: model, date, per-class scores, decision)_
 
@@ -107,18 +119,15 @@ Spec B makes the model choice conditional on real French legal pages. Resolve it
 
 ### Task 3: `VlmOcrClient` trait + value types
 
-Sibling to [`LlmClient`](../../../crates/anno-rag-tabular/src/llm/mod.rs) — NOT an overload of `generate_structured` (a vision call needs image bytes + an OCR instruction → text). Mirror the trait's `Send + Sync` + `model_id()` shape so the same `Arc<dyn …>` fan-out and routing wrapper apply.
+Sibling to [`LlmClient`](../../../crates/anno-rag-tabular/src/llm/mod.rs). The difference: text→JSON vs image→text, so it is a distinct contract.
 
-- [ ] **Step 1: Create the module dir + trait**
-
-`crates/anno-rag-tabular/src/llm/vlm/mod.rs`:
+- [ ] **Step 1: Create `crates/anno-rag-tabular/src/llm/vlm/mod.rs`**
 
 ```rust
-//! Vision-OCR client trait — transcribes page images to text. Sibling to
-//! [`LlmClient`](crate::llm::LlmClient): that trait is text→JSON; this one is
-//! image→text. Backends in [`vllm_server`] (on-prem GPU) and [`local_gguf`]
-//! (desktop); routing in [`routing`]. Both backends run inside the customer's
-//! trust boundary — no third-party egress (Spec B §4.3).
+//! Vision-OCR client — image→text transcription. Sibling to [`crate::llm::LlmClient`]
+//! (text→JSON). Backends in [`vllm_server`] (on-prem GPU) and [`local_gguf`]
+//! (desktop llama.cpp server); routing in [`routing`]. Both run inside the
+//! customer's trust boundary — no third-party egress (Spec B §4.3).
 
 use async_trait::async_trait;
 
@@ -126,15 +135,14 @@ pub mod local_gguf;
 pub mod routing;
 pub mod vllm_server;
 
-/// A decoded page image plus provenance, so every transcription is
-/// attributable in audit logs (mirrors `Author::System { extractor_version }`).
+/// Decoded page image + provenance for audit attribution.
 #[derive(Debug, Clone)]
 pub struct PageImage {
-    /// Decoded RGB image bytes (caller decodes from the source doc).
-    pub rgb: Vec<u8>,
-    pub width: u32,
-    pub height: u32,
-    /// Source document id this page came from.
+    /// Raw image bytes (PNG or JPEG — caller encodes from the source doc).
+    pub bytes: Vec<u8>,
+    /// MIME type: `"image/png"` or `"image/jpeg"`.
+    pub mime: &'static str,
+    /// Source document id.
     pub doc_id: String,
     /// Zero-based page index within the source document.
     pub page: usize,
@@ -149,241 +157,318 @@ pub struct Transcription {
     pub confidence: f32,
 }
 
-/// One vision-OCR call. `Send + Sync` so ingest can fan pages across tokio tasks.
+/// Vision-OCR call. `Send + Sync` so ingest can fan pages across tokio tasks.
 #[async_trait]
 pub trait VlmOcrClient: Send + Sync {
     /// Transcribe text from a page image. `hint` carries layout/language
     /// guidance, e.g. "French legal contract; preserve table structure".
-    ///
-    /// # Errors
-    /// Returns [`crate::error::Error`] on backend or inference failure.
     async fn transcribe(&self, image: &PageImage, hint: &str)
         -> crate::error::Result<Transcription>;
-
     /// Stable model identifier for audit logs.
     fn model_id(&self) -> &str;
 }
 ```
 
-- [ ] **Step 2: Register the module** in [`llm/mod.rs`](../../../crates/anno-rag-tabular/src/llm/mod.rs):
+- [ ] **Step 2: Register in `llm/mod.rs`**
 
-```rust
-/// Vision-OCR client (within-trust-boundary image→text transcription).
-#[cfg(feature = "vlm-ocr")]
-pub mod vlm;
-```
+  ```rust
+  #[cfg(feature = "vlm-ocr")]
+  pub mod vlm;
+  ```
 
-- [ ] **Step 3: Compile-check** (stub the two backend modules first):
+- [ ] **Step 3: Stub the two backend modules** (empty `mod.rs` with `todo!` impls) so it compiles, then run check:
 
-```powershell
-powershell -NoProfile -ExecutionPolicy Bypass -File scripts\dev-fast.ps1 -Package anno-rag-tabular -Mode check
-```
-
----
-
-### Task 4: `vlm-ocr` Cargo feature
-
-Mirror the `gliner2` feature ([Cargo.toml](../../../crates/anno-rag-tabular/Cargo.toml) line 13) — off by default so CI never downloads VLM weights.
-
-- [ ] **Step 1: anno-rag-tabular feature**
-
-```toml
-# Within-boundary vision-OCR (VLM). Off by default — pulls a vision model at
-# runtime. Wires VlmOcrClient + RoutingVlmClient into the OCR path.
-# `reqwest` = OpenAI-compatible HTTP to a co-located vLLM (on-prem GPU).
-# `image`   = decode PageImage. GGUF/llama.cpp binding added in Task 5 Step 2.
-vlm-ocr = ["dep:reqwest", "dep:image"]
-```
-
-> ⚠️ The desktop GGUF backend (Task 5) needs a llama.cpp binding (e.g. `llama-cpp-2`) or
-> a local llama.cpp server reached over the same HTTP client as vLLM. Decide in Task 5
-> Step 1 and adjust this `dep:` list. The on-prem GPU path needs only `reqwest`.
-
-- [ ] **Step 2: anno-rag passthrough feature** in [`anno-rag/Cargo.toml`](../../../crates/anno-rag/Cargo.toml). Align the GPU path with the existing `gpu-cuda` profile:
-
-```toml
-# Route OCR-classified pages through a within-boundary VLM (Spec B). Off by default.
-vlm-ocr = ["anno-rag-tabular/vlm-ocr"]
-```
-
-- [ ] **Step 3: Verify both feature on/off configs compile**
-
-```powershell
-powershell -NoProfile -ExecutionPolicy Bypass -File scripts\dev-fast.ps1 -Package anno-rag-tabular -Mode check
-powershell -NoProfile -ExecutionPolicy Bypass -File scripts\dev-fast.ps1 -Package anno-rag-tabular -Features vlm-ocr -Mode check
-```
-
-- [ ] **Step 4: Commit (trait + feature scaffolding)**
-
-```powershell
-git add crates/anno-rag-tabular/src/llm/vlm/mod.rs crates/anno-rag-tabular/src/llm/mod.rs crates/anno-rag-tabular/Cargo.toml crates/anno-rag/Cargo.toml
-git commit -m "feat(vlm): VlmOcrClient trait + vlm-ocr feature scaffolding (Spec B)"
-```
+  ```powershell
+  powershell -NoProfile -ExecutionPolicy Bypass -File scripts\dev-fast.ps1 -Package anno-rag-tabular -Mode check
+  ```
 
 ---
 
-### Task 5: Backends — `VllmServerClient` (on-prem GPU) then `LocalVlmClient` (desktop)
+### Task 4: `vlm-ocr` Cargo feature + `liter-llm` dep
 
-Build the on-prem GPU backend first — it is the primary target for legal workloads.
+Mirror the `gliner2` feature pattern. Off by default so CI never downloads VLM weights.
 
-- [ ] **Step 1: `VllmServerClient`** (`vlm/vllm_server.rs`) — POST the page image to a
-  **co-located** vLLM OpenAI-compatible `/v1/chat/completions` endpoint (image as a
-  base64 data URL + the OCR `hint` as the text part) serving `lightonai/LightOnOCR-2-1B`.
-  URL comes from `config.vlm_vllm_url` (default `http://127.0.0.1:8000`). This is on the
-  customer's box — within the trust boundary, no third-party egress.
+- [ ] **Step 1: Add `liter-llm` to workspace deps** in root `Cargo.toml`:
 
-```rust
-use super::{PageImage, Transcription, VlmOcrClient};
-use async_trait::async_trait;
+  ```toml
+  liter-llm = { version = "1.7", default-features = false, features = ["native-http"] }
+  ```
 
-pub struct VllmServerClient {
-    base_url: String,           // co-located vLLM, e.g. http://127.0.0.1:8000
-    model_id: String,           // "lightonai/LightOnOCR-2-1B"
-    http: reqwest::Client,
-}
+- [ ] **Step 2: `anno-rag-tabular` feature** in `crates/anno-rag-tabular/Cargo.toml`:
 
-#[async_trait]
-impl VlmOcrClient for VllmServerClient {
-    async fn transcribe(&self, image: &PageImage, hint: &str)
-        -> crate::error::Result<Transcription> {
-        // build chat/completions request: image_url(data:image/png;base64,..) + hint
-        // parse text; derive confidence (see ⚠️ in Self-Review)
-        todo!("vLLM call")
-    }
-    fn model_id(&self) -> &str { &self.model_id }
-}
-```
+  ```toml
+  # Within-boundary vision-OCR via liter-llm (MIT, Rust-native). Off by default.
+  # liter-llm routes to any OpenAI-compat endpoint: co-located vLLM (on-prem GPU)
+  # or llama-server GGUF (desktop) — configured via vlm_vllm_url / vlm_local_url.
+  vlm-ocr = ["dep:liter-llm"]
+  ```
 
-- [ ] **Step 2: `LocalVlmClient`** (`vlm/local_gguf.rs`) — load LightOnOCR GGUF
-  (`Mungert/LightOnOCR-1B-1025-GGUF`) via the binding chosen in Task 4, in-process.
-  Mirror the GLiNER2 `from_pretrained` + `download_models` pattern
-  ([llm/local/client.rs](../../../crates/anno-rag-tabular/src/llm/local/client.rs)).
+  And add the dep:
+  ```toml
+  liter-llm = { workspace = true, optional = true }
+  ```
 
-- [ ] **Step 3: Weights via `download_models`.** Register both artifacts so first use
-  fetches and offline reuses the cache.
+- [ ] **Step 3: `anno-rag` passthrough** in `crates/anno-rag/Cargo.toml`:
 
-  > ⚠️ **License gate (Spec A discipline):** LightOnOCR-2-1B is Apache-2.0 per its model
-  > card — re-confirm the safetensors AND GGUF redistribution terms before shipping.
+  ```toml
+  # Route OCR-classified pages through a within-boundary VLM (Spec B). Off by default.
+  vlm-ocr = ["anno-rag-tabular/vlm-ocr"]
+  ```
 
-- [ ] **Step 4: Tests.** `VllmServerClient` against a dev vLLM (`#[ignore]` — needs a
-  server); `LocalVlmClient` against a fixture page (`#[ignore]` — downloads weights),
-  mirroring the GLiNER2 `#[ignore = "downloads … weights at runtime"]` convention.
+- [ ] **Step 4: Verify both configs compile**
 
-```powershell
-powershell -NoProfile -ExecutionPolicy Bypass -File scripts\test-local.ps1 -Package anno-rag-tabular -Features vlm-ocr
-```
+  ```powershell
+  powershell -NoProfile -ExecutionPolicy Bypass -File scripts\dev-fast.ps1 -Package anno-rag-tabular -Mode check
+  powershell -NoProfile -ExecutionPolicy Bypass -File scripts\dev-fast.ps1 -Package anno-rag-tabular -Features vlm-ocr -Mode check
+  ```
 
-- [ ] **Step 5: Commit**
+- [ ] **Step 5: Commit scaffolding**
 
-```powershell
-git add crates/anno-rag-tabular/src/llm/vlm/vllm_server.rs crates/anno-rag-tabular/src/llm/vlm/local_gguf.rs
-git commit -m "feat(vlm): vLLM (on-prem GPU) + GGUF (desktop) LightOnOCR backends (Spec B)"
-```
+  ```powershell
+  git add crates/anno-rag-tabular/src/llm/vlm/ crates/anno-rag-tabular/src/llm/mod.rs `
+         crates/anno-rag-tabular/Cargo.toml crates/anno-rag/Cargo.toml Cargo.toml Cargo.lock
+  git commit -m "feat(vlm): VlmOcrClient trait + vlm-ocr feature with liter-llm (Spec B)"
+  ```
+
+---
+
+### Task 5: Backends — `VllmServerClient` and `LocalVlmClient` via liter-llm
+
+Both backends are thin wrappers around `liter_llm::DefaultClient`. Only `base_url` and `model_id` differ. No separate HTTP code to own.
+
+- [ ] **Step 1: `VllmServerClient`** (`vlm/vllm_server.rs`)
+
+  Co-located vLLM (on-prem GPU) serving `lightonai/LightOnOCR-2-1B` at `http://127.0.0.1:8000` by default. URL and model come from `AnnoRagConfig.vlm_vllm_url`.
+
+  ```rust
+  use liter_llm::{
+      ChatCompletionRequest, ClientBuilder, ContentPart, ImageUrl,
+      Message, UserContent, UserMessage,
+  };
+  use liter_llm::client::config::ClientConfig;
+  use liter_llm::image::encode_data_url;
+  use super::{PageImage, Transcription, VlmOcrClient};
+  use async_trait::async_trait;
+  use secrecy::SecretString;
+
+  pub struct VllmServerClient {
+      client: liter_llm::DefaultClient,
+      model: String,
+  }
+
+  impl VllmServerClient {
+      pub fn new(base_url: &str, model: impl Into<String>) -> crate::error::Result<Self> {
+          let config = ClientConfig::builder()
+              .api_key(SecretString::from(""))   // vLLM on-prem — no key needed
+              .base_url(base_url.to_string())
+              .build();
+          let client = ClientBuilder::new(config).build()?;
+          Ok(Self { client, model: model.into() })
+      }
+  }
+
+  #[async_trait]
+  impl VlmOcrClient for VllmServerClient {
+      async fn transcribe(&self, image: &PageImage, hint: &str)
+          -> crate::error::Result<Transcription> {
+          let data_url = encode_data_url(&image.bytes, Some(image.mime));
+          let req = ChatCompletionRequest::builder()
+              .model(&self.model)
+              .messages(vec![Message::User(UserMessage {
+                  content: UserContent::Parts(vec![
+                      ContentPart::ImageUrl(ImageUrl { url: data_url, detail: None }),
+                      ContentPart::Text(hint.to_string()),
+                  ]),
+                  name: None,
+              })])
+              .build();
+          let resp = self.client.chat_completion(req).await?;
+          let text = resp.choices.into_iter()
+              .next()
+              .and_then(|c| c.message.content)
+              .unwrap_or_default();
+          // liter-llm does not expose per-token logprobs from vLLM by default;
+          // use a length heuristic until a logprob pass is added (see ⚠️ Self-Review).
+          let confidence = if text.is_empty() { 0.0 } else { 0.8 };
+          Ok(Transcription { text, confidence })
+      }
+      fn model_id(&self) -> &str { &self.model }
+  }
+  ```
+
+- [ ] **Step 2: `LocalVlmClient`** (`vlm/local_gguf.rs`)
+
+  Desktop path — same pattern, but points to a `llama-server` instance running `Mungert/LightOnOCR-1B-1025-GGUF` at `http://127.0.0.1:8080`. **No in-process llama.cpp binding needed.** The user runs `llama-server` (pre-built binary) once; anno talks to it over OpenAI-compat HTTP.
+
+  ```rust
+  // Identical structure to VllmServerClient — only the default URL differs.
+  pub struct LocalVlmClient {
+      inner: super::vllm_server::VllmServerClient,
+  }
+
+  impl LocalVlmClient {
+      pub fn new(base_url: &str, model: impl Into<String>) -> crate::error::Result<Self> {
+          Ok(Self { inner: super::vllm_server::VllmServerClient::new(base_url, model)? })
+      }
+  }
+
+  #[async_trait::async_trait]
+  impl super::VlmOcrClient for LocalVlmClient {
+      async fn transcribe(&self, image: &super::PageImage, hint: &str)
+          -> crate::error::Result<super::Transcription> {
+          self.inner.transcribe(image, hint).await
+      }
+      fn model_id(&self) -> &str { self.inner.model_id() }
+  }
+  ```
+
+- [ ] **Step 3: `download_models` registration**
+
+  Register `lightonai/LightOnOCR-2-1B` (safetensors, for vLLM) and `Mungert/LightOnOCR-1B-1025-GGUF` (for llama-server) in the existing `download_models` plumbing — same pattern as bge-m3 / GLiNER2.
+
+  > ⚠️ **License gate (Spec A discipline):** LightOnOCR-2-1B is Apache-2.0 per its model card. Re-confirm the GGUF redistribution terms (`Mungert/...`) before shipping — third-party GGUF repacks sometimes add restrictions.
+
+- [ ] **Step 4: `#[ignore]` tests** mirroring the GLiNER2 convention:
+
+  ```rust
+  #[tokio::test]
+  #[ignore = "requires co-located vLLM serving lightonai/LightOnOCR-2-1B"]
+  async fn vllm_server_client_transcribes_fixture() { ... }
+
+  #[tokio::test]
+  #[ignore = "requires llama-server with LightOnOCR GGUF on :8080"]
+  async fn local_vlm_client_transcribes_fixture() { ... }
+  ```
+
+  ```powershell
+  powershell -NoProfile -ExecutionPolicy Bypass -File scripts\test-local.ps1 -Package anno-rag-tabular -Features vlm-ocr
+  ```
+
+- [ ] **Step 5: Commit backends**
+
+  ```powershell
+  git add crates/anno-rag-tabular/src/llm/vlm/
+  git commit -m "feat(vlm): vLLM + llama-server backends via liter-llm (Spec B)"
+  ```
 
 ---
 
 ### Task 6: `RoutingVlmClient` + ingest wiring + Tesseract fallback
 
-`vlm/routing.rs` mirrors [`RoutingLlmClient`](../../../crates/anno-rag-tabular/src/llm/routing.rs): it picks the within-boundary backend for the active profile. The third-party slot stays `None` (Spec B §4.3).
+- [ ] **Step 1: `RoutingVlmClient`** (`vlm/routing.rs`) — selects backend from `config.vlm_backend`:
 
-- [ ] **Step 1: `RoutingVlmClient`**
+  ```rust
+  pub struct RoutingVlmClient {
+      backend: Box<dyn super::VlmOcrClient>,
+      // NOTE: no third-party slot — hosted VLM-OCR is dropped (Spec B §4.3).
+  }
 
-```rust
-use super::{PageImage, Transcription, VlmOcrClient};
-use async_trait::async_trait;
+  impl RoutingVlmClient {
+      pub fn from_config(cfg: &crate::AnnoRagConfig) -> crate::error::Result<Self> {
+          let backend: Box<dyn super::VlmOcrClient> = match cfg.vlm_backend.as_deref() {
+              Some("vllm") | None => Box::new(super::vllm_server::VllmServerClient::new(
+                  cfg.vlm_vllm_url.as_deref().unwrap_or("http://127.0.0.1:8000"),
+                  "lightonai/LightOnOCR-2-1B",
+              )?),
+              Some("local") => Box::new(super::local_gguf::LocalVlmClient::new(
+                  cfg.vlm_local_url.as_deref().unwrap_or("http://127.0.0.1:8080"),
+                  "LightOnOCR-1B-1025",
+              )?),
+              Some(other) => return Err(/* unsupported backend error */),
+          };
+          Ok(Self { backend })
+      }
+  }
+  ```
 
-pub struct RoutingVlmClient {
-    /// Active within-boundary backend: VllmServerClient (on-prem GPU) or
-    /// LocalVlmClient (desktop), chosen from config.vlm_backend.
-    backend: Box<dyn VlmOcrClient>,
-    // NOTE: no third-party slot. A hosted backend would require an image-PII
-    // gate (Spec B §4.3) and is intentionally not representable here.
-}
+- [ ] **Step 2: Config fields** in `crates/anno-rag/src/config.rs`:
 
-#[async_trait]
-impl VlmOcrClient for RoutingVlmClient {
-    async fn transcribe(&self, image: &PageImage, hint: &str)
-        -> crate::error::Result<Transcription> {
-        self.backend.transcribe(image, hint).await
-    }
-    fn model_id(&self) -> &str { "routing-vlm" }
-}
-```
+  ```rust
+  /// VLM backend: "vllm" (on-prem GPU, default) or "local" (llama-server desktop).
+  pub vlm_backend: Option<String>,
+  /// Base URL for the co-located vLLM server (default: http://127.0.0.1:8000).
+  pub vlm_vllm_url: Option<String>,
+  /// Base URL for the local llama-server (default: http://127.0.0.1:8080).
+  pub vlm_local_url: Option<String>,
+  /// Confidence below which VLM output is discarded in favour of Tesseract (default: 0.6).
+  pub vlm_confidence_threshold: Option<f32>,
+  ```
 
-- [ ] **Step 2: Enable image extraction for the OCR path only.** [`ingest.rs:262`](../../../crates/anno-rag/src/ingest.rs) currently sets `extract_images: false`. Flip to `true` **only** in the `embedded_ocr_extract` config (the `ScannedPdf`/`MixedPdf` path); leave `native_extraction_config` ([ingest.rs:245](../../../crates/anno-rag/src/ingest.rs)) untouched so digital docs still skip images.
+- [ ] **Step 3: Page image sourcing** — investigate how to get page bitmaps from kreuzberg 4.7.4.
 
-- [ ] **Step 3: Route OCR-classified pages.** In the `OcrMode::AutoEmbedded` arm ([ingest.rs:159](../../../crates/anno-rag/src/ingest.rs)), behind `#[cfg(feature = "vlm-ocr")]`: for each `page_needs_ocr` page, build a `PageImage` from the kreuzberg `ExtractedImage`, call `transcribe`, and emit the result through the existing `ElementBased` chunk consumers.
+  kreuzberg's `ocr` feature includes `pdfium-render` + `image`. The `embedded_ocr_extract` function calls kreuzberg internally which renders pages to images for Tesseract — but we don't get those intermediate bitmaps back via the current `extract_file` API.
 
-- [ ] **Step 4: Confidence fallback to Tesseract.** When `Transcription.confidence` is below `config.vlm_confidence_threshold` (default ~0.6), discard the VLM text and keep the Tesseract result for that page. Log the decision with `tracing` (page index + chosen backend), per the Rust rules.
+  Options (in priority order):
+  1. **Use `pdfium-render` directly** — kreuzberg already pulls it as a transitive dep via `kreuzberg/pdf`; render each PDF page to a `DynamicImage`, encode as PNG bytes, pass to VLM.
+  2. **Two-pass extraction** — run kreuzberg OCR first (Tesseract), collect page images via an `ExtractionConfig { extract_images: true }` pass, then run VLM on those images.
+  3. **Add a kreuzberg API** — upstream a `render_pages_to_images()` helper if neither above is clean.
 
-- [ ] **Step 5: Integration test on a mixed scanned/digital fixture**
+  > ⚠️ Resolve this before coding Step 4. Option 1 is preferred — no new dep (`pdfium-render` is already available), and it avoids a double extraction pass.
 
-```powershell
-powershell -NoProfile -ExecutionPolicy Bypass -File scripts\test-local.ps1 -Package anno-rag -Features vlm-ocr
-```
+- [ ] **Step 4: Wire VLM into ingest OCR branch** (`ingest.rs`) — behind `#[cfg(feature = "vlm-ocr")]`:
 
-Expected: scanned page yields VLM text; digital page unchanged; low-confidence page falls back to Tesseract (no panic, no empty chunks).
+  In `OcrMode::AutoEmbedded`, for `ScannedPdf`/`MixedPdf` pages:
+  1. Render page to `PageImage` bytes (from Step 3)
+  2. Call `routing_client.transcribe(&page_image, "French legal document; preserve table structure")`
+  3. If `transcription.confidence >= cfg.vlm_confidence_threshold.unwrap_or(0.6)` → use VLM text
+  4. Otherwise → fall through to existing `embedded_ocr_extract` (Tesseract)
+  5. Emit text through the existing `ElementBased` chunk consumers
+
+  Digital-text documents (`DocClass::TextLayer`) remain untouched — no image extraction, no VLM pass.
+
+- [ ] **Step 5: Integration test**
+
+  ```powershell
+  powershell -NoProfile -ExecutionPolicy Bypass -File scripts\test-local.ps1 -Package anno-rag -Features vlm-ocr
+  ```
+
+  Expected: scanned-PDF fixture → VLM text; digital-text fixture → unchanged; low-confidence page → Tesseract (no panic, no empty chunks).
 
 - [ ] **Step 6: Commit**
 
-```powershell
-git add crates/anno-rag-tabular/src/llm/vlm/routing.rs crates/anno-rag/src/ingest.rs crates/anno-rag/src/config.rs
-git commit -m "feat(vlm): RoutingVlmClient + OCR-branch wiring with Tesseract fallback (Spec B)"
-```
+  ```powershell
+  git add crates/anno-rag-tabular/src/llm/vlm/routing.rs crates/anno-rag/src/ingest.rs crates/anno-rag/src/config.rs
+  git commit -m "feat(vlm): RoutingVlmClient + OCR-branch ingest wiring + Tesseract fallback (Spec B)"
+  ```
 
 ---
 
 ### Task 7: PR
 
-- [ ] **Step 1: fmt + clippy before pushing** (per repo convention — commit fmt separately if it changes anything)
+- [ ] **Step 1: fmt + clippy** (per repo convention — commit fmt separately if it changes files)
 
-```powershell
-cargo fmt --all
-cargo clippy -p anno-rag-tabular -p anno-rag --features vlm-ocr --jobs 2 2>&1 | Select-String -Pattern "warning|error" | Select-Object -First 20
-```
+  ```powershell
+  cargo fmt --all
+  cargo clippy -p anno-rag-tabular -p anno-rag --features vlm-ocr --jobs 2 2>&1 | Select-String "warning|error" | Select-Object -First 20
+  ```
 
 - [ ] **Step 2: Open PR**
 
-```powershell
-git push origin feat/vlm-ocr
-gh pr create --title "feat: VLM-OCR (LightOnOCR, on-prem GPU + desktop) + kreuzberg ELv2 containment" --body "Implements Spec A (deny.toml pointer) + Spec B.
+  ```powershell
+  git push origin feat/vlm-ocr
+  gh pr create --title "feat: full MIT codebase — kreuzberg 4.7.4 + VLM-OCR via liter-llm" --body "..."
+  ```
 
-## Model
-- Default: lightonai/LightOnOCR-2-1B (Apache-2.0, French-native) — confirmed by FR eval (Task 2)
-
-## Changes
-- deny.toml: ELv2 comment points at containment spec (Spec A)
-- VlmOcrClient trait + PageImage/Transcription (anno-rag-tabular/src/llm/vlm)
-- VllmServerClient (on-prem GPU, co-located vLLM) + LocalVlmClient (desktop GGUF)
-- RoutingVlmClient (within-boundary only; no third-party slot)
-- vlm-ocr Cargo feature (off by default) in anno-rag-tabular + anno-rag
-- ingest.rs: OCR-classified pages route through VLM, Tesseract fallback
-
-## Out of scope (dropped, not deferred)
-- Third-party hosted VLM-OCR — no image-PII gate; re-triggers ELv2 (Spec B §4.3)
-
-## Test plan
-- [ ] FR eval recorded in plan Task 2 (LightOnOCR vs OlmOCR vs PaddleOCR-VL)
-- [ ] cargo deny check licenses — kreuzberg Elastic-2.0 still allowed
-- [ ] check passes with vlm-ocr on AND off
-- [ ] VllmServerClient transcribes a scanned-legal fixture via co-located vLLM
-- [ ] LocalVlmClient (GGUF) transcribes the same fixture
-- [ ] digital-text doc unchanged (no image extraction)
-- [ ] low-confidence page falls back to Tesseract"
-```
+  PR body should cover:
+  - kreuzberg 4.9.7 (ELv2) → 4.7.4 (MIT): zero ELv2 in the entire dependency graph
+  - `liter-llm` (MIT, Rust-native): replaces hand-rolled reqwest; vLLM + llama-server as OpenAI-compat endpoints
+  - `VlmOcrClient` trait + two backends (`VllmServerClient`, `LocalVlmClient`)
+  - `vlm-ocr` Cargo feature (off by default)
+  - OCR-branch ingest wiring + Tesseract confidence fallback
+  - Third-party hosted VLM-OCR: dropped, not deferred (Spec B §4.3)
 
 ---
 
 ## Self-Review
 
-- ✅ Default model is **LightOnOCR-2-1B** — Apache-2.0, French-native (LightOn, FR-EN training), beats PaddleOCR-VL's ZH/EN lean for legal FR
-- ✅ Three-tier model: desktop GGUF + on-prem GPU vLLM are **within the trust boundary** → no image-PII gate needed; third-party SaaS **dropped, not deferred**
-- ✅ "No ONNX" non-issue — LightOnOCR runs via vLLM (GPU) and GGUF (CPU), both native runtimes; no conversion spike
-- ✅ FR eval is **Task 2 — an entry gate**, before any default is wired (resolves the public-benchmark uncertainty on anno's real corpus)
-- ✅ New `VlmOcrClient` trait is a sibling to `LlmClient`, not an overload (image→text vs text→JSON)
-- ✅ `vlm-ocr` feature **off by default** — mirrors `gliner2`; GPU path aligns with existing `gpu-cuda`
-- ✅ VLM scoped to the OCR branch (`ScannedPdf`/`MixedPdf`); digital docs untouched (`extract_images` flip is OCR-config-only); Tesseract stays as confidence fallback
-- ✅ Spec A's deny.toml acceptance item folded in as Task 1 (currently still the vague "REVIEW BEFORE" note)
-- ⚠️ **Runtime dep list** (Task 4) — `reqwest` covers vLLM; the GGUF backend needs a llama.cpp binding decided in Task 5 Step 1; adjust the feature `dep:` list then.
-- ⚠️ **Confidence source** — if LightOnOCR exposes no native confidence, derive a heuristic (mean token logprob, or a re-OCR agreement check) before relying on the Task 6 threshold.
+- ✅ **Full MIT stack**: kreuzberg 4.7.4 (MIT) + liter-llm (MIT) + LightOnOCR-2-1B (Apache-2.0). Zero ELv2, zero exceptions in deny.toml.
+- ✅ **No hand-rolled HTTP**: liter-llm owns the OpenAI-compat transport, retries, secrets handling. `VllmServerClient` and `LocalVlmClient` are ~30 lines each.
+- ✅ **No llama.cpp Rust binding**: desktop GGUF runs as a `llama-server` process; anno talks HTTP. Same trust boundary, zero in-process binding complexity.
+- ✅ **`vlm-ocr` feature off by default** — CI never downloads VLM weights; GPU path aligns with existing `gpu-cuda` profile.
+- ✅ **VLM scoped to OCR branch only** (`ScannedPdf`/`MixedPdf`); digital-text docs untouched; Tesseract is confidence fallback.
+- ✅ **FR eval is Task 2 — an entry gate**, before wiring any default. Synthetic fixtures only (privacy rules).
+- ✅ **Third-party tier dropped, not deferred** — `reject_images: true` in gateway stays; no image-PII gate needed for within-boundary tiers.
+- ⚠️ **Page image sourcing (Task 6 Step 3)** — must confirm pdfium-render approach before coding ingest wiring. This is the only open architecture question.
+- ⚠️ **Confidence heuristic** — liter-llm does not expose per-token logprobs from vLLM by default. The length heuristic in Task 5 is a placeholder; add a logprob pass or re-OCR agreement check before the confidence threshold is relied upon in production.
+- ⚠️ **GGUF redistribution** — verify `Mungert/LightOnOCR-1B-1025-GGUF` terms before shipping. Third-party repacks sometimes add restrictions beyond the base model license.
 - ⚠️ **Eval fixtures must not contain real client PII** — use synthetic/consented French legal pages (privacy rules).
