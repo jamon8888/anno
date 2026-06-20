@@ -97,6 +97,9 @@ onnx = [
 # attach the CoreML execution provider; falls back to CPU if CoreML can't
 # load the graph (large models, unsupported ops).
 onnx-coreml = ["onnx", "ort/coreml"]
+# Microsoft DirectML acceleration (DirectX 12, any GPU: NVIDIA/AMD/Intel/Qualcomm).
+# Windows-only. No CUDA toolkit required at build or runtime.
+onnx-directml = ["onnx", "ort/directml"]
 # NVIDIA CUDA acceleration for ONNX backends. Linux/Windows + nvcc/CUDA 12.x
 # at link time. Set `OnnxSessionConfig::prefer_cuda = true` to attach the
 # CUDA execution provider; CPU is registered as fallback. Build-time check

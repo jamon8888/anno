@@ -10,6 +10,8 @@ description  = "MCP (stdio) server exposing anno-rag's retrieval surface + (Phas
 default = []
 gpu-metal = ["anno-rag/gpu-metal"]
 gpu-cuda = ["anno-rag/gpu-cuda"]
+gpu-coreml = ["anno-rag/gpu-coreml"]
+gpu-directml = ["anno-rag/gpu-directml"]
 gliner2-candle-cpu = ["anno-rag/gliner2-candle-cpu"]
 # Pass-through to anno-rag's embedded Kreuzberg/Tesseract OCR. Runtime still
 # defaults OCR off; callers must opt in through config/CLI.
