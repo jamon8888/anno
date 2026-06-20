@@ -74,9 +74,10 @@
   </div>
 </div>
 
-<script type="module">
-import { invoke } from 'https://unpkg.com/@tauri-apps/api@2/core';
-import { Channel } from 'https://unpkg.com/@tauri-apps/api@2/core';
+<script>
+// withGlobalTauri: true injects window.__TAURI__ at runtime — no CDN needed.
+const { invoke } = window.__TAURI__.core;
+const { Channel } = window.__TAURI__.core;
 
 let currentStep = 0;
 
@@ -90,17 +91,30 @@ window.gotoStep = function(n) {
   }
 };
 
+function setStatus(el, cls, prefix, message) {
+  const span = document.createElement('span');
+  span.className = cls;
+  span.textContent = prefix + message;
+  el.textContent = '';
+  el.appendChild(span);
+}
+
 window.runPatchConfig = async function() {
   const btn = document.getElementById('btn1');
   const st = document.getElementById('st1');
   btn.disabled = true;
   st.textContent = 'Configuration en cours…';
-  const r = await invoke('patch_claude_config');
-  if (r.ok) {
-    st.innerHTML = '<span class="ok">✓ ' + r.message + '</span>';
-    setTimeout(() => gotoStep(2), 1200);
-  } else {
-    st.innerHTML = '<span class="err">✗ ' + r.message + '</span>';
+  try {
+    const r = await invoke('patch_claude_config');
+    if (r.ok) {
+      setStatus(st, 'ok', '✓ ', r.message);
+      setTimeout(() => gotoStep(2), 1200);
+    } else {
+      setStatus(st, 'err', '✗ ', r.message);
+      btn.disabled = false;
+    }
+  } catch (e) {
+    setStatus(st, 'err', '✗ ', String(e));
     btn.disabled = false;
   }
 };
@@ -117,12 +131,17 @@ window.runDownload = async function() {
     st.textContent = ev.current_file + ' — ' + ev.downloaded_mb.toFixed(0) + ' / ' + ev.total_mb.toFixed(0) + ' MB';
   };
 
-  const r = await invoke('download_models_progress', { onProgress: ch });
-  if (r.ok) {
-    st.innerHTML = '<span class="ok">✓ ' + r.message + '</span>';
-    setTimeout(() => gotoStep(3), 1200);
-  } else {
-    st.innerHTML = '<span class="err">✗ ' + r.message + '</span>';
+  try {
+    const r = await invoke('download_models_progress', { onProgress: ch });
+    if (r.ok) {
+      setStatus(st, 'ok', '✓ ', r.message);
+      setTimeout(() => gotoStep(3), 1200);
+    } else {
+      setStatus(st, 'err', '✗ ', r.message);
+      btn.disabled = false;
+    }
+  } catch (e) {
+    setStatus(st, 'err', '✗ ', String(e));
     btn.disabled = false;
   }
 };
@@ -132,12 +151,17 @@ window.runVault = async function() {
   const st = document.getElementById('st3');
   btn.disabled = true;
   st.textContent = 'Génération de la clé…';
-  const r = await invoke('init_vault_keyring');
-  if (r.ok) {
-    st.innerHTML = '<span class="ok">✓ ' + r.message + '</span>';
-    setTimeout(() => gotoStep(4), 1200);
-  } else {
-    st.innerHTML = '<span class="err">✗ ' + r.message + '</span>';
+  try {
+    const r = await invoke('init_vault_keyring');
+    if (r.ok) {
+      setStatus(st, 'ok', '✓ ', r.message);
+      setTimeout(() => gotoStep(4), 1200);
+    } else {
+      setStatus(st, 'err', '✗ ', r.message);
+      btn.disabled = false;
+    }
+  } catch (e) {
+    setStatus(st, 'err', '✗ ', String(e));
     btn.disabled = false;
   }
 };
