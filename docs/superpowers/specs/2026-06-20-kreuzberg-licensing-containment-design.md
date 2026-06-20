@@ -8,8 +8,9 @@
 
 anno depends on `kreuzberg = "=4.9.7"` ([Cargo.toml:113](../../../Cargo.toml)) for
 core document extraction. Kreuzberg changed its license from MIT to **Elastic
-License 2.0 (ELv2)** at version **4.8.0** (2026-04-08); 4.7.4 was the last MIT
-release. anno's [deny.toml:65-72](../../../deny.toml) already allows `Elastic-2.0`
+License 2.0 (ELv2)** at version **4.8.0**; 4.7.4 was the last MIT release.
+(Verified against crates.io: `4.7.4` = `MIT`, published 2026-04-06; `4.8.0` =
+`Elastic-2.0`, published 2026-04-08.) anno's [deny.toml:65-72](../../../deny.toml) already allows `Elastic-2.0`
 for this crate with the rationale that local-desktop library use does not trigger
 ELv2's restrictions.
 
@@ -89,11 +90,24 @@ Concretely, treat any of these as the trigger: a `serve`/HTTP deployment intende
 external tenants, a cloud control-plane that runs extraction on uploaded files for
 multiple customers, or a contract/RFP requiring SaaS delivery.
 
+> **Not legal advice.** The ELv2 §1 reading above is an engineering interpretation used
+> to set an internal gate. Confirm it with counsel before relying on it for any actual
+> hosting go/no-go decision — a commercial Kreuzberg license may also be an option that
+> avoids A3 entirely.
+
 ## Escape plan (A3) — pre-scoped, not yet executed
 
 When triggered, replace the Elastic `kreuzberg` orchestration crate with a permissive
-(MIT/Apache) stack. The MIT OCR/pdfium **sub-crates** kreuzberg forked upstream remain
-usable directly.
+(MIT/Apache) stack. The OCR/pdfium **sub-crates** kreuzberg forked upstream are
+candidates for direct use — and are **already present in anno's dependency tree** as
+transitive deps of `kreuzberg` ([hakari.toml](../../../.config/hakari.toml) lists
+`kreuzberg-pdfium-render`, `kreuzberg-tesseract`, `kreuzberg-paddle-ocr`), which lowers
+A3's integration cost.
+
+> **License re-verification required at execution time.** The claim that these forks
+> remain MIT is not first-party verified for the 4.9.x-aligned versions currently pulled.
+> Confirm each sub-crate's SPDX license (via `cargo deny` / crates.io) before depending
+> on it directly; a fork can change license between versions just as the parent did.
 
 **Candidate crate mapping (permissive):**
 
