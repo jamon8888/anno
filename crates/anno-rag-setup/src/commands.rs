@@ -115,7 +115,7 @@ pub async fn download_models_progress(on_progress: Channel<DownloadProgress>) ->
 
     let cfg = anno_rag::config::AnnoRagConfig::default();
     match anno_rag::download_models::download(&cfg).await {
-        Ok(()) => {
+        Ok(_) => {
             let _ = on_progress.send(DownloadProgress {
                 pct: 100,
                 current_file: "Done".to_string(),
