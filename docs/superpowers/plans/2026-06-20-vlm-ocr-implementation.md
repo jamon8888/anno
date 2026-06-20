@@ -26,15 +26,60 @@
 
 ---
 
+## Build profiles — two distinct binaries
+
+Vision OCR is a **compile-time opt-in**, not a runtime toggle. This produces two
+distinct binaries with different dependency footprints:
+
+| Profile | Cargo features | Target hardware | VLM-OCR | Binary size |
+|---------|---------------|-----------------|---------|-------------|
+| **`laptop`** (default) | `embedded-ocr`, `rerank`, `heuristic-fr` | Consumer laptop, no GPU | ❌ Tesseract only | Lean |
+| **`on-prem`** | above + **`vlm-ocr`** | GPU appliance / server | ✅ vLLM or llama-server | Full |
+
+Why compile-time rather than runtime toggle:
+- `vlm-ocr` pulls `liter-llm` and transitively its HTTP stack — dead weight in the
+  laptop binary if only guarded at runtime.
+- The laptop binary has a hard guarantee: no VLM code is compiled in, no model
+  download paths exist, no HTTP client for VLM calls.
+- Runtime config (`vlm_backend`) still controls which backend is active within an
+  `on-prem` build — set to `"off"` to disable VLM without recompiling (useful during
+  staged rollout or when the vLLM server is down).
+
+### `vlm_backend` runtime values (on-prem build only)
+
+| Value | Behaviour |
+|-------|-----------|
+| `"vllm"` (default) | `VllmServerClient` → co-located vLLM at `vlm_vllm_url` |
+| `"local"` | `LocalVlmClient` → `llama-server` at `vlm_local_url` |
+| `"off"` | VLM disabled at runtime; falls through to Tesseract for all pages |
+| absent / `None` | Same as `"vllm"` |
+
+### Release build commands (Task 7 reference)
+
+```powershell
+# Laptop binary — no VLM, lean
+cargo build --release -p anno-rag-bin
+
+# On-prem binary — VLM-OCR enabled
+cargo build --release -p anno-rag-bin --features vlm-ocr
+```
+
+CI should produce **both** artifacts. The on-prem binary is the one that requires
+the FR eval (Task 2) before shipping as default.
+
+---
+
 ## Deployment tiers (drives backend design — Spec B §3)
 
-| Tier | VLM backend | liter-llm target | Image leaves box? | ELv2 |
-|------|-------------|-----------------|-------------------|------|
-| Desktop / CPU | `LocalVlmClient` → `llama-server` (LightOnOCR GGUF) | `base_url = http://127.0.0.1:8080` | No | Not triggered |
-| **On-prem GPU** (primary) | `VllmServerClient` → co-located vLLM | `base_url = http://127.0.0.1:8000` | **No** — stays on customer's box | **Not triggered** |
-| Third-party SaaS | **NOT BUILT** — dropped | — | Yes | Triggered |
+| Tier | Build profile | VLM backend | liter-llm target | Image leaves box? |
+|------|--------------|-------------|-----------------|-------------------|
+| **Laptop / CPU** | `laptop` | None — Tesseract only | — | No |
+| **Desktop + llama-server** | `on-prem` | `LocalVlmClient` → `llama-server` GGUF | `base_url = http://127.0.0.1:8080` | No |
+| **On-prem GPU** (primary) | `on-prem` | `VllmServerClient` → co-located vLLM | `base_url = http://127.0.0.1:8000` | No |
+| **Third-party SaaS** | **NOT BUILT** | — | — | Yes |
 
-Both built backends are OpenAI-compat HTTP servers running on the customer's hardware. liter-llm treats them identically — only `base_url` and `model_id` differ.
+Both `on-prem` backends are OpenAI-compat HTTP servers on the customer's hardware.
+liter-llm treats them identically — only `base_url` and `model_id` differ.
 
 ---
 
@@ -447,7 +492,8 @@ Both backends are thin wrappers around `liter_llm::DefaultClient`. Only `base_ur
   }
 
   impl RoutingVlmClient {
-      pub fn from_config(cfg: &crate::AnnoRagConfig) -> crate::error::Result<Self> {
+      /// Returns `None` when `vlm_backend = "off"` — caller falls through to Tesseract.
+      pub fn from_config(cfg: &crate::AnnoRagConfig) -> crate::error::Result<Option<Self>> {
           let backend: Box<dyn super::VlmOcrClient> = match cfg.vlm_backend.as_deref() {
               Some("vllm") | None => Box::new(super::vllm_server::VllmServerClient::new(
                   cfg.vlm_vllm_url.as_deref().unwrap_or("http://127.0.0.1:8000"),
@@ -457,9 +503,10 @@ Both backends are thin wrappers around `liter_llm::DefaultClient`. Only `base_ur
                   cfg.vlm_local_url.as_deref().unwrap_or("http://127.0.0.1:8080"),
                   "LightOnOCR-1B-1025",
               )?),
+              Some("off") => return Ok(None),  // caller skips VLM entirely → Tesseract
               Some(other) => return Err(/* unsupported backend error */),
           };
-          Ok(Self { backend })
+          Ok(Some(Self { backend }))
       }
   }
   ```
@@ -549,7 +596,9 @@ Both backends are thin wrappers around `liter_llm::DefaultClient`. Only `base_ur
 - ✅ **M2 + M3 in Task 1** — French OCR fixture run + `tokio::time::timeout` on all `extract_file` calls before the kreuzberg version bump is merged.
 - ✅ **No hand-rolled HTTP**: liter-llm owns the OpenAI-compat transport, retries, secrets handling. `VllmServerClient` and `LocalVlmClient` are ~30 lines each.
 - ✅ **No llama.cpp Rust binding**: desktop GGUF runs as a `llama-server` process; anno talks HTTP. Same trust boundary, zero in-process binding complexity.
-- ✅ **`vlm-ocr` feature off by default** — CI never downloads VLM weights; GPU path aligns with existing `gpu-cuda` profile.
+- ✅ **Two named build profiles** — `laptop` (default, no `vlm-ocr`, lean binary) and `on-prem` (`vlm-ocr` on, full VLM stack). Compile-time gate: `liter-llm` and VLM download paths are absent from the laptop binary entirely.
+- ✅ **`vlm_backend = "off"` runtime escape** — disables VLM inside an on-prem build without recompiling (staged rollout / server-down fallback). `RoutingVlmClient::from_config` returns `None`; ingest falls through to Tesseract.
+- ✅ **`vlm-ocr` feature off by default** — CI laptop build never downloads VLM weights; on-prem CI build uses `--features vlm-ocr`.
 - ✅ **VLM scoped to OCR branch only** (`ScannedPdf`/`MixedPdf`); digital-text docs untouched; Tesseract is confidence fallback.
 - ✅ **FR eval is Task 2 — an entry gate**, before wiring any default. Synthetic fixtures only (privacy rules).
 - ✅ **Third-party tier dropped, not deferred** — `reject_images: true` in gateway stays; no image-PII gate needed for within-boundary tiers.
