@@ -1,0 +1,33 @@
+{
+  "productName": "Anno-RAG Setup",
+  "version": "0.14.0",
+  "identifier": "com.anno-rag.setup",
+  "build": {
+    "frontendDist": "ui"
+  },
+  "app": {
+    "windows": [
+      {
+        "title": "Anno-RAG — Installation",
+        "width": 600,
+        "height": 480,
+        "resizable": false,
+        "center": true
+      }
+    ],
+    "security": {
+      "csp": "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'"
+    },
+    "withGlobalTauri": true
+  },
+  "bundle": {
+    "active": true,
+    "targets": "all",
+    "icon": ["icons/icon.png"],
+    "windows": {
+      "wix": {
+        "language": "fr-FR"
+      }
+    }
+  }
+}

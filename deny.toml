@@ -16,6 +16,11 @@ ignore = [
     # lindera/lance chain has not yet migrated. Re-check on every lance bump.
     { id = "RUSTSEC-2025-0141", reason = "bincode is unmaintained; transitive via lance-tokenizer → lindera. No coordinated upgrade available; re-check on every lance bump." },
     { id = "RUSTSEC-2021-0153", reason = "encoding is unmaintained; transitive via lance-tokenizer → lindera. No coordinated upgrade available; re-check on every lance bump." },
+    # Tauri 2 on Linux pulls in GTK3 bindings which are unmaintained in gtk-rs.
+    # Tauri upstream is migrating to gtk4 but GTK3 support is still needed for
+    # the current Tauri 2 release. These are Linux-only build-time deps.
+    { id = "RUSTSEC-2024-0370", reason = "proc-macro-error is unmaintained; transitive via Tauri 2 macros. No safe upgrade available yet." },
+    { id = "RUSTSEC-2024-0371", reason = "unic-* crates are unmaintained; transitive via Tauri 2 WebKit deps. No safe upgrade available." },
 ]
 
 [licenses]
