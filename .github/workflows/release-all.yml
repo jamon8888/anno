@@ -67,13 +67,19 @@ jobs:
       - name: Install Tauri CLI
         run: npm install -g @tauri-apps/cli@^2
 
-      - name: Install protoc (macOS)
+      - name: Install dependencies (macOS)
         if: runner.os == 'macOS'
-        run: brew install protobuf
+        run: brew install protobuf onnxruntime
 
-      - name: Install protoc (Windows)
+      - name: Install dependencies (Windows)
         if: runner.os == 'Windows'
-        run: choco install protoc --no-progress -y
+        run: |
+          choco install protoc --no-progress -y
+          $ort_version = "1.22.0"
+          $url = "https://github.com/microsoft/onnxruntime/releases/download/v${ort_version}/onnxruntime-win-x64-${ort_version}.zip"
+          Invoke-WebRequest $url -OutFile ort.zip
+          Expand-Archive ort.zip -DestinationPath C:\ort
+          echo "ORT_LIB_LOCATION=C:\ort\onnxruntime-win-x64-${ort_version}\lib" >> $env:GITHUB_ENV
 
       - name: Cache Cargo registry
         uses: actions/cache@v4
@@ -84,7 +90,13 @@ jobs:
             ~/.cargo/git/db/
           key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
 
+      - name: Set ORT lib location (macOS)
+        if: runner.os == 'macOS'
+        run: echo "ORT_LIB_LOCATION=$(brew --prefix onnxruntime)/lib" >> $GITHUB_ENV
+
       - name: Build anno-rag-bin
+        env:
+          ORT_STRATEGY: system
         run: >
           cargo build --release
           -p anno-rag-bin
@@ -104,6 +116,8 @@ jobs:
           echo "semver=${RAW#v}" >> $GITHUB_OUTPUT
 
       - name: Build Tauri installer
+        env:
+          ORT_STRATEGY: system
         run: >
           tauri build
           --target ${{ matrix.target }}
