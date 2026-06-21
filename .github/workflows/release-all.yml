@@ -32,14 +32,9 @@ jobs:
             bundle_dir: dmg
             artifact_ext: dmg
 
-          # macOS x86_64 (Intel) — CPU only
-          # ORT binary downloaded explicitly to bypass ort-sys cu12 prebuilt bug.
-          - os: macos-15-intel
-            target: x86_64-apple-darwin
-            features: ""
-            variant: cpu
-            bundle_dir: dmg
-            artifact_ext: dmg
+          # NOTE: x86_64-apple-darwin (Intel Mac) not supported — ort 2.x dropped
+          # prebuilt binaries for this target. Intel Mac users can run the
+          # aarch64-apple-darwin binary via Rosetta 2 (transparent, no user action needed).
 
     runs-on: ${{ matrix.os }}
     name: ${{ matrix.target }}-${{ matrix.variant }}
@@ -59,20 +54,6 @@ jobs:
       - name: Install protoc (Windows)
         if: runner.os == 'Windows'
         run: choco install protoc --no-progress -y
-
-      # ort-sys 2.0.0-rc.12 has a prebuilt-binary bug on x86_64-apple-darwin
-      # (always requests "cu12" variant which doesn't exist on macOS).
-      # Fix: download the official CPU-only ORT binary from Microsoft and point
-      # ort-sys to it via ORT_STRATEGY=system + ORT_LIB_LOCATION.
-      - name: Download ONNX Runtime (Intel macOS — ORT prebuilt bug workaround)
-        if: matrix.target == 'x86_64-apple-darwin'
-        shell: bash
-        run: |
-          curl -fsSL -o /tmp/ort.tgz \
-            https://github.com/microsoft/onnxruntime/releases/download/v1.20.1/onnxruntime-osx-x86_64-1.20.1.tgz
-          mkdir -p /tmp/ort && tar -xzf /tmp/ort.tgz -C /tmp/ort --strip-components=1
-          echo "ORT_STRATEGY=system" >> $GITHUB_ENV
-          echo "ORT_LIB_LOCATION=/tmp/ort/lib" >> $GITHUB_ENV
 
       - name: Setup Node.js (Tauri CLI)
         uses: actions/setup-node@v4
