@@ -657,7 +657,7 @@ mod tests {
             images: Vec::<Arc<kreuzberg::types::ExtractedImage>>::new(),
             hierarchy: None,
             is_blank,
-            layout_regions: None,
+            // layout_regions added in post-MIT kreuzberg versions; not in 4.7.4
         }
     }
 
