@@ -34,7 +34,7 @@ transcription used for CER computation by `scripts/eval_vlm_ocr.py`.
 Run `scripts/eval_vlm_ocr.py` after starting the three vLLM servers to populate
 this table.
 
-| Model | printed CER | handwritten CER | tables F1 | stamps CER | Overall |
+| Model | printed CER | handwritten CER | tables CER | stamps CER | Overall |
 |-------|------------|----------------|-----------|-----------|---------|
 | LightOnOCR-2-1B | — | — | — | — | — |
 | olmOCR-7B | — | — | — | — | — |
