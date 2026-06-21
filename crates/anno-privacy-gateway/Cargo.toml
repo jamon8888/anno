@@ -23,6 +23,7 @@ csv = "1"
 futures-util = { workspace = true }
 hex = "0.4"
 hmac = "0.12"
+image = { workspace = true }
 kreuzberg = { workspace = true }
 reqwest = { workspace = true, features = ["multipart"] }
 regex = { workspace = true }

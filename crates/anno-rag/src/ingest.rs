@@ -123,12 +123,21 @@ pub struct ExtractedChunk {
 pub async fn extract(path: &Path, cfg: &AnnoRagConfig) -> Result<ExtractedDoc> {
     let native_config = native_extraction_config(cfg);
 
-    let result = kreuzberg::extract_file(path, None, &native_config)
-        .await
-        .map_err(|e| Error::Ingest {
-            path: path.display().to_string(),
-            source: Box::new(e),
-        })?;
+    // M3: 30 s timeout — guards against Ghostscript-PDF-induced hangs (regression in
+    // kreuzberg 4.9.0, not present in 4.7.4 but preserved here for defence in depth).
+    let result = tokio::time::timeout(
+        std::time::Duration::from_secs(30),
+        kreuzberg::extract_file(path, None, &native_config),
+    )
+    .await
+    .map_err(|_| Error::Ingest {
+        path: path.display().to_string(),
+        source: "native extraction timed out after 30 s".into(),
+    })?
+    .map_err(|e| Error::Ingest {
+        path: path.display().to_string(),
+        source: Box::new(e),
+    })?;
 
     let is_pdf = is_pdf(path);
     let class = classify_document(is_pdf, &result.content, result.pages.as_deref());
@@ -411,13 +420,21 @@ async fn embedded_ocr_extract(
         "OCR extraction starting"
     );
 
-    kreuzberg::extract_file(path, None, &extraction_config)
-        .await
-        .map(Some)
-        .map_err(|e| Error::Ingest {
-            path: path.display().to_string(),
-            source: Box::new(e),
-        })
+    // M3: 120 s timeout for OCR path — Tesseract can be slow on dense scanned pages.
+    tokio::time::timeout(
+        std::time::Duration::from_secs(120),
+        kreuzberg::extract_file(path, None, &extraction_config),
+    )
+    .await
+    .map_err(|_| Error::Ingest {
+        path: path.display().to_string(),
+        source: "OCR extraction timed out after 120 s".into(),
+    })?
+    .map(Some)
+    .map_err(|e| Error::Ingest {
+        path: path.display().to_string(),
+        source: Box::new(e),
+    })
 }
 
 #[cfg(not(feature = "embedded-ocr"))]
