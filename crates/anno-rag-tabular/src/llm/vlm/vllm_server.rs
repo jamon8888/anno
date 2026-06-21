@@ -45,7 +45,7 @@ impl VllmServerClient {
         let config = ClientConfigBuilder::new("")
             .base_url(base_url)
             .load_env(false)
-            .max_retries(0)
+            .max_retries(1) // 1 retry for transient network hiccup; no exponential backoff at local endpoints
             .build();
         let client = DefaultClient::new(config, None)
             .map_err(|e| crate::error::Error::Extract {
@@ -101,13 +101,43 @@ impl VlmOcrClient for VllmServerClient {
                 source: Box::new(e),
             })?;
 
-        let text = resp
+        let first_choice = resp
             .choices
             .into_iter()
             .next()
-            .and_then(|c| c.message.content)
-            .and_then(|c| c.as_text())
-            .unwrap_or_default();
+            .ok_or_else(|| crate::error::Error::Extract {
+                doc: image.doc_id.clone(),
+                col: format!("page:{}", image.page),
+                source: format!(
+                    "VLM server returned no choices (doc: {}, page: {})",
+                    image.doc_id, image.page
+                )
+                .into(),
+            })?;
+        let content = first_choice
+            .message
+            .content
+            .ok_or_else(|| crate::error::Error::Extract {
+                doc: image.doc_id.clone(),
+                col: format!("page:{}", image.page),
+                source: format!(
+                    "VLM response has no content (doc: {}, page: {})",
+                    image.doc_id, image.page
+                )
+                .into(),
+            })?;
+        let text = content
+            .as_text()
+            .ok_or_else(|| crate::error::Error::Extract {
+                doc: image.doc_id.clone(),
+                col: format!("page:{}", image.page),
+                source: format!(
+                    "VLM response content is not text (doc: {}, page: {})",
+                    image.doc_id, image.page
+                )
+                .into(),
+            })?
+            .to_string();
 
         let confidence = if text.is_empty() {
             0.0
@@ -128,6 +158,15 @@ impl VlmOcrClient for VllmServerClient {
     fn model_id(&self) -> &str {
         &self.model
     }
+}
+
+// Compile-time assertion: VllmServerClient must be Send + Sync because
+// VlmOcrClient requires it (async_trait + shared state across await points).
+#[cfg(feature = "vlm-ocr")]
+fn _assert_vlm_server_send_sync()
+where
+    VllmServerClient: Send + Sync,
+{
 }
 
 #[cfg(test)]
