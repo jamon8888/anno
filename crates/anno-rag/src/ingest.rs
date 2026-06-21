@@ -7,8 +7,7 @@ use crate::error::{Error, Result};
 #[cfg(feature = "embedded-ocr")]
 use kreuzberg::core::config::OcrConfig;
 use kreuzberg::core::config::{
-    ChunkerType, ChunkingConfig, ContentFilterConfig, ExtractionConfig, HierarchyConfig,
-    PageConfig, PdfConfig,
+    ChunkerType, ChunkingConfig, ExtractionConfig, HierarchyConfig, PageConfig, PdfConfig,
 };
 use kreuzberg::types::{Chunk, ExtractionResult, PageContent};
 use std::path::Path;
@@ -271,12 +270,8 @@ fn native_extraction_config(cfg: &AnnoRagConfig) -> ExtractionConfig {
             allow_single_column_tables: cfg.pdf_allow_single_column_tables,
             ..Default::default()
         });
-        extraction_config.content_filter = Some(ContentFilterConfig {
-            include_headers: cfg.pdf_keep_headers,
-            include_footers: cfg.pdf_keep_footers,
-            strip_repeating_text: true,
-            include_watermarks: false,
-        });
+        // kreuzberg 4.7.4 (MIT) handles header/footer/watermark filtering internally;
+        // ContentFilterConfig was added in post-MIT versions and is not available here.
     }
 
     extraction_config
@@ -452,7 +447,7 @@ mod tests {
         assert!(extraction_config.chunking.is_some());
         assert!(extraction_config.pages.is_none());
         assert!(extraction_config.pdf_options.is_none());
-        assert!(extraction_config.content_filter.is_none());
+        // content_filter not available in kreuzberg 4.7.4 (MIT)
         assert!(!extraction_config.include_document_structure);
         assert_eq!(
             extraction_config.output_format,
@@ -502,13 +497,8 @@ mod tests {
         assert!(hierarchy.include_bbox);
         assert_eq!(hierarchy.ocr_coverage_threshold, None);
 
-        let content_filter = extraction_config
-            .content_filter
-            .expect("content filter enabled");
-        assert!(content_filter.include_headers);
-        assert!(!content_filter.include_footers);
-        assert!(content_filter.strip_repeating_text);
-        assert!(!content_filter.include_watermarks);
+        // content_filter not available in kreuzberg 4.7.4 (MIT); header/footer
+        // filtering is handled internally by kreuzberg in this version.
     }
 
     #[test]
