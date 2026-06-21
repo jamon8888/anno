@@ -6,7 +6,7 @@ description = "Anno-RAG Tauri setup assistant — one-click installer for lawyer
 license = "Apache-2.0"
 
 [features]
-default = ["anno-rag/default"]
+default = []
 gpu-coreml = ["anno-rag/gpu-coreml"]
 gpu-directml = ["anno-rag/gpu-directml"]
 gpu-cuda = ["anno-rag/gpu-cuda"]
