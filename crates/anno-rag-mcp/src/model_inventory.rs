@@ -152,6 +152,31 @@ pub struct ModelFamilyStatus {
     pub ready: bool,
 }
 
+/// Required files for a safetensors VLM model directory.
+///
+/// Used by [`vlm_safetensors_required_files`] and the inventory inspector.
+const VLM_SAFETENSORS_FILES: &[&str] = &["config.json", "tokenizer.json", "model.safetensors"];
+
+/// Generate the required file paths for a safetensors VLM model relative to the models directory.
+///
+/// `model_id` is the HuggingFace repo ID (e.g. `"lightonai/LightOnOCR-2-1B"`).
+pub fn vlm_safetensors_required_files(model_id: &str) -> Vec<String> {
+    VLM_SAFETENSORS_FILES
+        .iter()
+        .map(|f| format!("{model_id}/{f}"))
+        .collect()
+}
+
+/// Generate the required file path for a GGUF VLM model relative to the models directory.
+///
+/// `model_id` is the HuggingFace repo ID. Returns the single `.gguf` file path.
+pub fn vlm_gguf_required_files(model_id: &str) -> Vec<String> {
+    vec![format!("{model_id}/{DEFAULT_GGUF_FILENAME}")]
+}
+
+/// Default GGUF quantization filename — mirrors the constant in `anno-rag` download_models.
+const DEFAULT_GGUF_FILENAME: &str = "LightOnOCR-1B-1025-Q4_K_M.gguf";
+
 /// Full model inventory used by MCP status and readiness checks.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub struct ModelInventory {
@@ -173,6 +198,12 @@ pub struct ModelInventory {
     pub gliner: ModelFamilyStatus,
     /// PII-specialized GLiNER file readiness (gliner2-privacy-filter-PII-multi ONNX).
     pub gliner_pii: ModelFamilyStatus,
+    /// Safetensors VLM model readiness (vLLM backend). `None` when vlm_backend is "off".
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub vlm_safetensors: Option<ModelFamilyStatus>,
+    /// GGUF VLM model readiness (llama-server backend). `None` when vlm_backend is "off".
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub vlm_gguf: Option<ModelFamilyStatus>,
 }
 
 /// Inspects the effective model directory without initializing model loaders.
@@ -184,6 +215,10 @@ pub struct ModelInventoryService {
     ner_onnx_dir: String,
     ner_pii_onnx_dir: String,
     ner_candle_dir: String,
+    /// HF repo ID for the safetensors VLM model; `None` means VLM is off.
+    vlm_safetensors_model_id: Option<String>,
+    /// HF repo ID for the GGUF VLM model; `None` means VLM is off.
+    vlm_gguf_model_id: Option<String>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -196,6 +231,27 @@ impl ModelInventoryService {
     /// Create a model inventory service for the effective loader path.
     #[must_use]
     pub fn new(cfg: &AnnoRagConfig) -> Self {
+        // Only check VLM inventory when vlm_backend is explicitly "vllm" or "local".
+        // None means not configured; "off" means explicitly disabled.
+        // In both cases we skip the VLM file check so existing non-VLM deployments
+        // remain "ready" without needing VLM model weights.
+        let vlm_active = matches!(cfg.vlm_backend.as_deref(), Some("vllm") | Some("local"));
+        let (vlm_safetensors_model_id, vlm_gguf_model_id) = if vlm_active {
+            (
+                Some(
+                    cfg.vlm_safetensors_model_id
+                        .clone()
+                        .unwrap_or_else(|| "lightonai/LightOnOCR-2-1B".to_string()),
+                ),
+                Some(
+                    cfg.vlm_gguf_model_id
+                        .clone()
+                        .unwrap_or_else(|| "Mungert/LightOnOCR-1B-1025-GGUF".to_string()),
+                ),
+            )
+        } else {
+            (None, None)
+        };
         Self {
             effective: effective_models_dir(cfg),
             detector_kind: detector_inventory_kind(cfg),
@@ -203,6 +259,8 @@ impl ModelInventoryService {
             ner_onnx_dir: cfg.ner_onnx_dir(),
             ner_pii_onnx_dir: cfg.ner_pii_onnx_dir(),
             ner_candle_dir: cfg.ner_candle_dir(),
+            vlm_safetensors_model_id,
+            vlm_gguf_model_id,
         }
     }
 
@@ -233,7 +291,19 @@ impl ModelInventoryService {
             }
         };
         let gliner_pii = inspect_onnx_gliner_family(&path, &self.ner_pii_onnx_dir);
-        let ready = e5.ready && gliner.ready && gliner_pii.ready;
+        let vlm_safetensors = self.vlm_safetensors_model_id.as_deref().map(|model_id| {
+            let required = vlm_safetensors_required_files(model_id);
+            let refs: Vec<&str> = required.iter().map(String::as_str).collect();
+            inspect_family(&path, model_id, &refs)
+        });
+        let vlm_gguf = self.vlm_gguf_model_id.as_deref().map(|model_id| {
+            let required = vlm_gguf_required_files(model_id);
+            let refs: Vec<&str> = required.iter().map(String::as_str).collect();
+            inspect_family(&path, model_id, &refs)
+        });
+        let vlm_ready = vlm_safetensors.as_ref().map_or(true, |s| s.ready)
+            && vlm_gguf.as_ref().map_or(true, |g| g.ready);
+        let ready = e5.ready && gliner.ready && gliner_pii.ready && vlm_ready;
         let state = if ready {
             ModelInventoryState::Ready
         } else if downloading {
@@ -257,6 +327,8 @@ impl ModelInventoryService {
             },
             gliner,
             gliner_pii,
+            vlm_safetensors,
+            vlm_gguf,
         }
     }
 

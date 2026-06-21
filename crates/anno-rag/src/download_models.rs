@@ -71,6 +71,30 @@ pub async fn download(cfg: &AnnoRagConfig) -> Result<PathBuf> {
     .await?;
     #[cfg(any(feature = "gpu-metal", feature = "gliner2-candle-cpu"))]
     download_candle_ner(&models_dir, &cfg.ner_candle_model_id, &cfg.ner_candle_dir()).await?;
+    #[cfg(feature = "vlm-ocr")]
+    if cfg.vlm_backend.as_deref() != Some("off") {
+        let safetensors_id = cfg
+            .vlm_safetensors_model_id
+            .as_deref()
+            .unwrap_or("lightonai/LightOnOCR-2-1B");
+        if !crate::model_cache::is_valid_model_subpath(safetensors_id) {
+            return Err(Error::Embed(format!(
+                "unsafe vlm_safetensors_model_id value: {safetensors_id:?}"
+            )));
+        }
+        download_vlm_safetensors(&models_dir, safetensors_id).await?;
+
+        let gguf_id = cfg
+            .vlm_gguf_model_id
+            .as_deref()
+            .unwrap_or("Mungert/LightOnOCR-1B-1025-GGUF");
+        if !crate::model_cache::is_valid_model_subpath(gguf_id) {
+            return Err(Error::Embed(format!(
+                "unsafe vlm_gguf_model_id value: {gguf_id:?}"
+            )));
+        }
+        download_vlm_gguf(&models_dir, gguf_id).await?;
+    }
     Ok(models_dir)
 }
 
@@ -258,6 +282,88 @@ fn mirror_dir(src_root: &Path, dest_root: &Path) -> Result<()> {
         }
     }
     println!("  NER model               ... ok (~500 MiB)");
+    Ok(())
+}
+
+/// Default GGUF quantization filename for `Mungert/LightOnOCR-1B-1025-GGUF`.
+///
+/// To use a different quantization variant, set `vlm_gguf_model_id` to the
+/// desired repo and override this constant by pointing `ANNO_RAG_VLM_GGUF_MODEL_ID`
+/// at a repo that contains the preferred `.gguf` file. The file name itself
+/// is not yet configurable; change this constant if the upstream repo renames it.
+#[cfg(feature = "vlm-ocr")]
+const DEFAULT_GGUF_FILENAME: &str = "LightOnOCR-1B-1025-Q4_K_M.gguf";
+
+/// Download safetensors VLM model files (`config.json`, `tokenizer.json`,
+/// `tokenizer_config.json`, `model.safetensors`) for serving via vLLM.
+///
+/// The model is **not** loaded in-process; this is a download-only step.
+/// Files are placed under `models_dir/<model_id>/`.
+#[cfg(feature = "vlm-ocr")]
+async fn download_vlm_safetensors(models_dir: &Path, model_id: &str) -> crate::error::Result<()> {
+    let dest_dir = models_dir.join(model_id);
+    tokio::fs::create_dir_all(&dest_dir).await?;
+
+    let api =
+        hf_hub::api::tokio::Api::new().map_err(|e| Error::Embed(format!("hf-hub init: {e}")))?;
+    let repo = api.model(model_id.to_string());
+
+    // config.json
+    let src = repo
+        .get("config.json")
+        .await
+        .map_err(|e| Error::Embed(format!("vlm safetensors config.json fetch: {e}")))?;
+    tokio::fs::copy(&src, dest_dir.join("config.json")).await?;
+
+    // tokenizer.json
+    let src = repo
+        .get("tokenizer.json")
+        .await
+        .map_err(|e| Error::Embed(format!("vlm safetensors tokenizer.json fetch: {e}")))?;
+    tokio::fs::copy(&src, dest_dir.join("tokenizer.json")).await?;
+
+    // tokenizer_config.json (optional — not all repos have it; skip silently)
+    if let Ok(src) = repo.get("tokenizer_config.json").await {
+        tokio::fs::copy(&src, dest_dir.join("tokenizer_config.json")).await?;
+    }
+
+    // weights — model.safetensors preferred, pytorch_model.bin fallback
+    let (src, dest_name) = match repo.get("model.safetensors").await {
+        Ok(p) => (p, "model.safetensors"),
+        Err(_) => {
+            let p = repo
+                .get("pytorch_model.bin")
+                .await
+                .map_err(|e| Error::Embed(format!("vlm safetensors weights fetch: {e}")))?;
+            (p, "pytorch_model.bin")
+        }
+    };
+    let size_mb = std::fs::metadata(&src).map(|m| m.len()).unwrap_or(0) as f64 / 1_048_576.0;
+    tokio::fs::copy(&src, dest_dir.join(dest_name)).await?;
+    println!("  VLM safetensors ({model_id}) ... ok ({size_mb:.0} MiB)");
+    Ok(())
+}
+
+/// Download the GGUF VLM model file for serving via llama-server.
+///
+/// Downloads [`DEFAULT_GGUF_FILENAME`] from `model_id` (repo-relative path).
+/// Files are placed under `models_dir/<model_id>/`.
+#[cfg(feature = "vlm-ocr")]
+async fn download_vlm_gguf(models_dir: &Path, model_id: &str) -> crate::error::Result<()> {
+    let dest_dir = models_dir.join(model_id);
+    tokio::fs::create_dir_all(&dest_dir).await?;
+
+    let api =
+        hf_hub::api::tokio::Api::new().map_err(|e| Error::Embed(format!("hf-hub init: {e}")))?;
+    let repo = api.model(model_id.to_string());
+
+    let src = repo
+        .get(DEFAULT_GGUF_FILENAME)
+        .await
+        .map_err(|e| Error::Embed(format!("vlm gguf {DEFAULT_GGUF_FILENAME} fetch: {e}")))?;
+    let size_mb = std::fs::metadata(&src).map(|m| m.len()).unwrap_or(0) as f64 / 1_048_576.0;
+    tokio::fs::copy(&src, dest_dir.join(DEFAULT_GGUF_FILENAME)).await?;
+    println!("  VLM GGUF ({model_id}/{DEFAULT_GGUF_FILENAME}) ... ok ({size_mb:.0} MiB)");
     Ok(())
 }
 

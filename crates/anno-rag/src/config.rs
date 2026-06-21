@@ -785,6 +785,28 @@ pub struct AnnoRagConfig {
     )]
     #[serde(default)]
     pub vlm_confidence_threshold: Option<f32>,
+
+    /// HuggingFace repo ID for the safetensors VLM model served by vLLM
+    /// (default: `"lightonai/LightOnOCR-2-1B"`).
+    /// Always present for serde compatibility; only used when `vlm-ocr` feature is enabled.
+    #[config_meta(
+        env = "ANNO_RAG_VLM_SAFETENSORS_MODEL_ID",
+        cli = "--vlm-safetensors-model-id",
+        doc = "HuggingFace repo for vLLM safetensors VLM model. Default: lightonai/LightOnOCR-2-1B"
+    )]
+    #[serde(default)]
+    pub vlm_safetensors_model_id: Option<String>,
+
+    /// HuggingFace repo ID for the GGUF VLM model served by llama-server
+    /// (default: `"Mungert/LightOnOCR-1B-1025-GGUF"`).
+    /// Always present for serde compatibility; only used when `vlm-ocr` feature is enabled.
+    #[config_meta(
+        env = "ANNO_RAG_VLM_GGUF_MODEL_ID",
+        cli = "--vlm-gguf-model-id",
+        doc = "HuggingFace repo for llama-server GGUF VLM model. Default: Mungert/LightOnOCR-1B-1025-GGUF"
+    )]
+    #[serde(default)]
+    pub vlm_gguf_model_id: Option<String>,
 }
 
 fn default_memory_collection_name() -> String {
@@ -910,6 +932,8 @@ impl Default for AnnoRagConfig {
             vlm_vllm_url: None,
             vlm_local_url: None,
             vlm_confidence_threshold: None,
+            vlm_safetensors_model_id: None,
+            vlm_gguf_model_id: None,
         }
     }
 }
@@ -1077,6 +1101,12 @@ impl AnnoRagConfig {
         if let Ok(v) = std::env::var("ANNO_RAG_OCR_BACKEND") {
             self.ocr_backend = Some(v);
         }
+        if let Ok(v) = std::env::var("ANNO_RAG_VLM_SAFETENSORS_MODEL_ID") {
+            self.vlm_safetensors_model_id = Some(v);
+        }
+        if let Ok(v) = std::env::var("ANNO_RAG_VLM_GGUF_MODEL_ID") {
+            self.vlm_gguf_model_id = Some(v);
+        }
     }
 
     fn apply_overrides(&mut self, ov: &ConfigOverrides) {
@@ -1232,6 +1262,12 @@ impl AnnoRagConfig {
         }
         if let Some(v) = ov.vlm_confidence_threshold {
             self.vlm_confidence_threshold = Some(v);
+        }
+        if let Some(v) = ov.vlm_safetensors_model_id.clone() {
+            self.vlm_safetensors_model_id = Some(v);
+        }
+        if let Some(v) = ov.vlm_gguf_model_id.clone() {
+            self.vlm_gguf_model_id = Some(v);
         }
     }
 
