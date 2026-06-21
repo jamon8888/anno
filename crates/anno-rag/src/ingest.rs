@@ -380,6 +380,10 @@ fn page_needs_ocr(page: &PageContent) -> bool {
     alnum_ws_ratio < 0.2
 }
 
+// TODO(vlm-ocr): VLM ingest wiring deferred — RoutingVlmClient lives in anno-rag-tabular
+// which depends on anno-rag (circular). Wire via callback injection from anno-rag-bin:
+// IngestConfig { vlm_client: Option<Arc<dyn SomeVlmTrait>> }. See routing.rs for the
+// routing layer that is ready to use once the callback plumbing is added.
 #[cfg(feature = "embedded-ocr")]
 async fn embedded_ocr_extract(
     path: &Path,

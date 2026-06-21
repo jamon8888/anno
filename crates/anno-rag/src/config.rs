@@ -739,6 +739,52 @@ pub struct AnnoRagConfig {
     )]
     #[serde(default = "default_graph_per_hop_limit")]
     pub graph_per_hop_limit: usize,
+
+    /// VLM backend: `"vllm"` (on-prem GPU server, default), `"local"` (llama-server
+    /// desktop GGUF), or `"off"` (disable VLM; fall back to Tesseract).
+    /// Only active in builds compiled with the `vlm-ocr` feature.
+    /// Always present in the config struct to avoid serde complications.
+    #[config_meta(
+        env = "ANNO_RAG_VLM_BACKEND",
+        cli = "--vlm-backend",
+        doc = "VLM OCR backend: vllm (default), local, or off. Requires vlm-ocr feature.",
+        since = "0.15"
+    )]
+    #[serde(default)]
+    pub vlm_backend: Option<String>,
+
+    /// Base URL for the co-located vLLM server (default: `http://127.0.0.1:8000`).
+    /// Used when `vlm_backend = "vllm"`.
+    #[config_meta(
+        env = "ANNO_RAG_VLM_VLLM_URL",
+        cli = "--vlm-vllm-url",
+        doc = "Base URL for the co-located vLLM server. Default: http://127.0.0.1:8000",
+        since = "0.15"
+    )]
+    #[serde(default)]
+    pub vlm_vllm_url: Option<String>,
+
+    /// Base URL for the local llama-server GGUF endpoint (default: `http://127.0.0.1:8080`).
+    /// Used when `vlm_backend = "local"`.
+    #[config_meta(
+        env = "ANNO_RAG_VLM_LOCAL_URL",
+        cli = "--vlm-local-url",
+        doc = "Base URL for the local llama-server GGUF endpoint. Default: http://127.0.0.1:8080",
+        since = "0.15"
+    )]
+    #[serde(default)]
+    pub vlm_local_url: Option<String>,
+
+    /// Confidence threshold in `[0.0, 1.0]`; pages whose VLM transcription
+    /// scores below this fall back to Tesseract (default: `0.6`).
+    #[config_meta(
+        env = "ANNO_RAG_VLM_CONFIDENCE_THRESHOLD",
+        cli = "--vlm-confidence-threshold",
+        doc = "VLM confidence threshold [0.0, 1.0]; below this falls back to Tesseract. Default: 0.6",
+        since = "0.15"
+    )]
+    #[serde(default)]
+    pub vlm_confidence_threshold: Option<f32>,
 }
 
 fn default_memory_collection_name() -> String {
@@ -860,6 +906,10 @@ impl Default for AnnoRagConfig {
             rerank_onnx_file: default_rerank_onnx_file(),
             rerank_pool_size: default_rerank_pool_size(),
             rerank_batch_size: default_rerank_batch_size(),
+            vlm_backend: None,
+            vlm_vllm_url: None,
+            vlm_local_url: None,
+            vlm_confidence_threshold: None,
         }
     }
 }
@@ -1170,6 +1220,18 @@ impl AnnoRagConfig {
         }
         if let Some(v) = ov.graph_per_hop_limit {
             self.graph_per_hop_limit = v;
+        }
+        if let Some(v) = ov.vlm_backend.clone() {
+            self.vlm_backend = Some(v);
+        }
+        if let Some(v) = ov.vlm_vllm_url.clone() {
+            self.vlm_vllm_url = Some(v);
+        }
+        if let Some(v) = ov.vlm_local_url.clone() {
+            self.vlm_local_url = Some(v);
+        }
+        if let Some(v) = ov.vlm_confidence_threshold {
+            self.vlm_confidence_threshold = Some(v);
         }
     }
 
