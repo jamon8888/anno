@@ -338,7 +338,7 @@ pub struct AnnoRagConfig {
     #[config_meta(
         env = "ANNO_RAG_NER_PII_MODEL",
         cli = "--ner-pii-model",
-        doc = "HuggingFace model ID for the ONNX PII NER detector. Default: anno-rag/gliner2-privacy-filter-PII-multi-onnx-fp16",
+        doc = "HuggingFace model ID for the ONNX PII NER detector. Default: SemplificaAI/gliner2-privacy-filter-PII-multi",
         since = "0.14"
     )]
     #[serde(default = "default_ner_pii_model_id")]
@@ -1289,7 +1289,7 @@ mod tests {
         let c = AnnoRagConfig::default();
         assert_eq!(
             c.ner_pii_model_id,
-            "anno-rag/gliner2-privacy-filter-PII-multi-onnx-fp16"
+            "SemplificaAI/gliner2-privacy-filter-PII-multi"
         );
         assert_eq!(c.ner_model_id, "SemplificaAI/gliner2-multi-v1-onnx");
     }
