@@ -226,27 +226,188 @@ pub async fn extract(path: &Path, cfg: &AnnoRagConfig) -> Result<ExtractedDoc> {
     Ok(extracted_doc(path, result, class, OcrStatus::NotRequired))
 }
 
-/// VLM OCR stub — renders PDF pages to images and calls the VLM client per page.
+/// Maximum pages sent to the VLM per document. Beyond this the document is large
+/// enough that Tesseract is more cost-effective.
+#[cfg(feature = "vlm-ocr")]
+const MAX_VLM_PAGES: usize = 50;
+
+/// Render PDF pages to PNG bytes and call the VLM client per page.
 ///
-/// # Rendering note
-///
-/// Getting page bitmaps from a PDF requires a rendering step. `pdfium-render` is a
-/// transitive dependency via kreuzberg, but is not yet exposed as a direct dependency
-/// of this crate. Until that plumbing is added, this function returns `None` so
-/// ingest falls through to the Tesseract path unchanged.
-///
-/// TODO(vlm-ocr-render): render PDF pages to PNG bytes via pdfium-render, then call
-/// `vlm_client.transcribe()` per page. Expose pdfium-render as a direct dep of
-/// anno-rag when implementing this (behind the `vlm-ocr` feature flag).
+/// Uses `kreuzberg::pdf::PdfPageIterator` (already a dep; mutex-safe, lazy per-page
+/// rendering at 150 DPI) to convert pages to PNG, then calls `vlm_client.transcribe()`
+/// for each page.  Returns `None` to signal Tesseract fallback in any of these cases:
+/// - File is not a PDF
+/// - PDF cannot be opened / rendered
+/// - Any page's transcription confidence is below `vlm_confidence_threshold`
+/// - VLM network/server error
 #[cfg(feature = "vlm-ocr")]
 async fn try_vlm_ocr(
-    _path: &std::path::Path,
-    _cfg: &crate::config::AnnoRagConfig,
+    path: &std::path::Path,
+    cfg: &crate::config::AnnoRagConfig,
     vlm_client: &dyn crate::vlm::VlmOcrClient,
 ) -> Option<String> {
-    // Suppress unused-variable warning until the render stub is implemented.
-    let _ = vlm_client;
-    None
+    // Only PDFs benefit from page rendering; other formats are handled well by Tesseract.
+    let ext = path
+        .extension()
+        .and_then(|e| e.to_str())
+        .map(str::to_lowercase);
+    if ext.as_deref() != Some("pdf") {
+        return None;
+    }
+
+    let pdf_bytes = match tokio::fs::read(path).await {
+        Ok(b) => b,
+        Err(e) => {
+            tracing::warn!(path = %path.display(), "vlm-ocr: failed to read PDF: {e}");
+            return None;
+        }
+    };
+
+    // PdfPageIterator acquires the global pdfium mutex per page (serialises pdfium
+    // which is not thread-safe).  Run everything in spawn_blocking to avoid
+    // stalling the async executor while the mutex is held.
+    let path_str = path.display().to_string();
+    let page_pngs: Vec<Vec<u8>> = match tokio::task::spawn_blocking(move || {
+        let iter = kreuzberg::pdf::PdfPageIterator::new(pdf_bytes, Some(150), None)
+            .map_err(|e| format!("open PDF: {e}"))?;
+        let pngs: Vec<Vec<u8>> = iter
+            .take(MAX_VLM_PAGES)
+            .filter_map(|r| {
+                r.map_err(|e| tracing::debug!("vlm-ocr: page render skipped: {e}"))
+                    .ok()
+                    .map(|(_, png)| png)
+            })
+            .collect();
+        Ok::<_, String>(pngs)
+    })
+    .await
+    {
+        Ok(Ok(pngs)) => pngs,
+        Ok(Err(e)) => {
+            tracing::warn!(path = %path_str, "vlm-ocr: {e}");
+            return None;
+        }
+        Err(e) => {
+            tracing::warn!(path = %path_str, "vlm-ocr: render task panicked: {e}");
+            return None;
+        }
+    };
+
+    if page_pngs.is_empty() {
+        return None;
+    }
+
+    let threshold = cfg.vlm_confidence_threshold.unwrap_or(0.6);
+    let model = vlm_client.model_id().to_string();
+    let mut page_texts: Vec<String> = Vec::with_capacity(page_pngs.len());
+
+    for (page_index, png_bytes) in page_pngs.into_iter().enumerate() {
+        let image = crate::vlm::PageImage {
+            bytes: png_bytes,
+            mime: "image/png",
+            doc_id: path_str.clone(),
+            page: page_index,
+        };
+
+        match vlm_client
+            .transcribe(&image, crate::vlm::VLM_OCR_PROMPT_FR)
+            .await
+        {
+            Ok(t) if t.confidence >= threshold => {
+                tracing::debug!(
+                    path = %path_str,
+                    page = page_index,
+                    confidence = t.confidence,
+                    model = %model,
+                    "vlm-ocr: page transcribed"
+                );
+                page_texts.push(t.text);
+            }
+            Ok(t) => {
+                // One low-confidence page → abort VLM path; Tesseract handles the whole doc.
+                tracing::debug!(
+                    path = %path_str,
+                    page = page_index,
+                    confidence = t.confidence,
+                    threshold,
+                    "vlm-ocr: confidence below threshold, falling back to Tesseract"
+                );
+                return None;
+            }
+            Err(e) => {
+                tracing::warn!(
+                    path = %path_str,
+                    page = page_index,
+                    "vlm-ocr: transcription failed: {e}"
+                );
+                return None;
+            }
+        }
+    }
+
+    if page_texts.is_empty() {
+        return None;
+    }
+
+    Some(page_texts.join("\n\n"))
+}
+
+/// Simple paragraph-aware chunker for VLM output text.
+///
+/// Respects `chunk_max_chars` from config; splits at blank lines first,
+/// then hard-cuts overlong paragraphs.  No heading detection (VLM output
+/// is plain text, not markdown).
+#[cfg(feature = "vlm-ocr")]
+fn chunk_vlm_text(text: &str, cfg: &AnnoRagConfig) -> Vec<ExtractedChunk> {
+    let max = cfg.chunk_max_chars as usize;
+    let mut chunks: Vec<ExtractedChunk> = Vec::new();
+    let mut idx: u32 = 0;
+    let mut current = String::new();
+    let mut current_start: usize = 0;
+    let mut byte_offset: usize = 0;
+
+    for para in text.split("\n\n") {
+        let para_bytes = para.len();
+        let sep = if current.is_empty() { 0 } else { 2 }; // "\n\n"
+
+        if !current.is_empty() && current.len() + sep + para_bytes > max {
+            let end = current_start + current.len();
+            chunks.push(ExtractedChunk {
+                idx,
+                text: std::mem::take(&mut current),
+                char_start: current_start as u32,
+                char_end: end as u32,
+                page: None,
+                page_end: None,
+                heading_context: Vec::new(),
+            });
+            idx += 1;
+            current_start = byte_offset;
+            current.push_str(para);
+        } else {
+            if !current.is_empty() {
+                current.push_str("\n\n");
+            }
+            current.push_str(para);
+        }
+
+        byte_offset += para_bytes + 2;
+    }
+
+    if !current.is_empty() {
+        let end = current_start + current.len();
+        chunks.push(ExtractedChunk {
+            idx,
+            text: current,
+            char_start: current_start as u32,
+            char_end: end as u32,
+            page: None,
+            page_end: None,
+            heading_context: Vec::new(),
+        });
+    }
+
+    chunks
 }
 
 /// Variant of [`extract`] that runs a VLM OCR pre-pass (when the `vlm-ocr` feature
@@ -263,21 +424,21 @@ pub async fn extract_with_vlm(
 ) -> Result<ExtractedDoc> {
     if let Some(vlm) = vlm_client {
         if let Some(text) = try_vlm_ocr(path, cfg, vlm.as_ref()).await {
-            // VLM succeeded: build a synthetic ExtractedDoc from the plain text.
-            // Re-use the chunker config so chunk sizing is consistent with the
-            // Tesseract path.
             tracing::info!(
                 path = %path.display(),
                 model = vlm.model_id(),
-                "VLM OCR succeeded; skipping Tesseract"
+                pages = text.matches("\n\n").count() + 1,
+                "vlm-ocr succeeded; skipping Tesseract"
             );
-            // Chunk the VLM text through kreuzberg's standalone chunker.
-            // For now we fall through to extract() because the render stub
-            // returns None — this branch is never reached until
-            // TODO(vlm-ocr-render) is implemented.
-            let _ = text; // consumed once render stub is filled in
+            let chunks = chunk_vlm_text(&text, cfg);
+            return Ok(ExtractedDoc {
+                source_path: path.display().to_string(),
+                content: text,
+                chunks,
+                class: DocClass::ScannedPdf,
+                ocr_status: OcrStatus::CompletedEmbedded,
+            });
         }
-        // VLM returned None → fall through to the standard extract path below.
     }
     extract(path, cfg).await
 }
