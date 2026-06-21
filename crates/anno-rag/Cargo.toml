@@ -88,6 +88,9 @@ dirs                 = { workspace = true }
 chrono               = { workspace = true }
 csv                  = "1"
 unicode-normalization = "0.1"
+# Pin transitive dep: html-to-markdown-rs 3.6+ changed ImageDimensions from
+# Option<(u32,u32)> to a named struct, breaking kreuzberg 4.7.4 (MIT).
+html-to-markdown-rs  = "=3.5.4"
 sysinfo              = "0.32"
 tempfile             = "3"
 
