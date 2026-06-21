@@ -226,6 +226,62 @@ pub async fn extract(path: &Path, cfg: &AnnoRagConfig) -> Result<ExtractedDoc> {
     Ok(extracted_doc(path, result, class, OcrStatus::NotRequired))
 }
 
+/// VLM OCR stub — renders PDF pages to images and calls the VLM client per page.
+///
+/// # Rendering note
+///
+/// Getting page bitmaps from a PDF requires a rendering step. `pdfium-render` is a
+/// transitive dependency via kreuzberg, but is not yet exposed as a direct dependency
+/// of this crate. Until that plumbing is added, this function returns `None` so
+/// ingest falls through to the Tesseract path unchanged.
+///
+/// TODO(vlm-ocr-render): render PDF pages to PNG bytes via pdfium-render, then call
+/// `vlm_client.transcribe()` per page. Expose pdfium-render as a direct dep of
+/// anno-rag when implementing this (behind the `vlm-ocr` feature flag).
+#[cfg(feature = "vlm-ocr")]
+async fn try_vlm_ocr(
+    _path: &std::path::Path,
+    _cfg: &crate::config::AnnoRagConfig,
+    vlm_client: &dyn crate::vlm::VlmOcrClient,
+) -> Option<String> {
+    // Suppress unused-variable warning until the render stub is implemented.
+    let _ = vlm_client;
+    None
+}
+
+/// Variant of [`extract`] that runs a VLM OCR pre-pass (when the `vlm-ocr` feature
+/// is active and a client is wired in) before falling back to the embedded Tesseract path.
+///
+/// Called by [`crate::pipeline::Pipeline`] from `ingest_one_counted`.
+/// All other callers (privacy workspace, MCP indexer) use the plain [`extract`],
+/// which preserves existing behaviour with zero signature change.
+#[cfg(feature = "vlm-ocr")]
+pub async fn extract_with_vlm(
+    path: &Path,
+    cfg: &AnnoRagConfig,
+    vlm_client: Option<&std::sync::Arc<dyn crate::vlm::VlmOcrClient>>,
+) -> Result<ExtractedDoc> {
+    if let Some(vlm) = vlm_client {
+        if let Some(text) = try_vlm_ocr(path, cfg, vlm.as_ref()).await {
+            // VLM succeeded: build a synthetic ExtractedDoc from the plain text.
+            // Re-use the chunker config so chunk sizing is consistent with the
+            // Tesseract path.
+            tracing::info!(
+                path = %path.display(),
+                model = vlm.model_id(),
+                "VLM OCR succeeded; skipping Tesseract"
+            );
+            // Chunk the VLM text through kreuzberg's standalone chunker.
+            // For now we fall through to extract() because the render stub
+            // returns None — this branch is never reached until
+            // TODO(vlm-ocr-render) is implemented.
+            let _ = text; // consumed once render stub is filled in
+        }
+        // VLM returned None → fall through to the standard extract path below.
+    }
+    extract(path, cfg).await
+}
+
 fn extracted_doc(
     path: &Path,
     result: ExtractionResult,

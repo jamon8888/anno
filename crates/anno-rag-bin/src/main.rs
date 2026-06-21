@@ -267,7 +267,25 @@ async fn main() -> anyhow::Result<()> {
         return Ok(());
     }
     let key = derive_key()?;
-    let pipeline = Pipeline::new(cfg.clone(), key).await?;
+    let mut pipeline = Pipeline::new(cfg.clone(), key).await?;
+
+    #[cfg(feature = "vlm-ocr")]
+    {
+        match anno_rag_tabular::llm::vlm::routing::RoutingVlmClient::from_config(&cfg) {
+            Ok(Some(client)) => {
+                pipeline.set_vlm_client(std::sync::Arc::new(client));
+            }
+            Ok(None) => {
+                // vlm_backend = "off" — fall through to Tesseract
+            }
+            Err(e) => {
+                tracing::warn!(
+                    error = %e,
+                    "VLM client init failed, falling back to Tesseract"
+                );
+            }
+        }
+    }
 
     match cli.cmd {
         Cmd::Ingest {
