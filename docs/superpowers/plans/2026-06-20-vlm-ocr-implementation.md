@@ -231,7 +231,7 @@ All were removed from the codebase in commit `e5d042b7`.
 
 | API removed | Added in | Where removed | User-visible impact |
 |---|---|---|---|
-| `kreuzberg::core::config::ContentFilterConfig` | 4.8.0 (ELv2) | `crates/anno-rag/src/ingest.rs` — import + config assignment | Header/footer stripping no longer applied. `AnnoRagConfig::pdf_keep_headers` and `pdf_keep_footers` fields are accepted but silently have no effect. Documents may include repeated header/footer text in extracted content. |
+| `kreuzberg::core::config::ContentFilterConfig` | 4.8.0 (ELv2) | `crates/anno-rag/src/ingest.rs` — import + config assignment | Header/footer stripping is no longer applied. `AnnoRagConfig::pdf_keep_headers` and `pdf_keep_footers` fields are accepted but silently have no effect. Documents may include repeated header/footer text in extracted content. |
 | `ExtractionConfig::content_filter: Option<ContentFilterConfig>` | 4.8.0 (ELv2) | `ingest.rs` — `native_extraction_config()` and `structured_pdf_config()` | Same as above — field does not exist on the struct. |
 | `PageContent::layout_regions` | 4.8.0 (ELv2) | `ingest.rs` — test helper `page()` struct literal | No runtime impact. Layout region data (bounding boxes for detected text regions) is unavailable; `PageContent` only exposes `page_number`, `content`, `tables`, `images`, `hierarchy`, `is_blank`. |
 

@@ -1101,6 +1101,26 @@ impl AnnoRagConfig {
         if let Ok(v) = std::env::var("ANNO_RAG_OCR_BACKEND") {
             self.ocr_backend = Some(v);
         }
+        if let Ok(v) = std::env::var("ANNO_RAG_VLM_BACKEND") {
+            if !v.is_empty() {
+                self.vlm_backend = Some(v);
+            }
+        }
+        if let Ok(v) = std::env::var("ANNO_RAG_VLM_VLLM_URL") {
+            if !v.is_empty() {
+                self.vlm_vllm_url = Some(v);
+            }
+        }
+        if let Ok(v) = std::env::var("ANNO_RAG_VLM_LOCAL_URL") {
+            if !v.is_empty() {
+                self.vlm_local_url = Some(v);
+            }
+        }
+        if let Ok(v) = std::env::var("ANNO_RAG_VLM_CONFIDENCE_THRESHOLD") {
+            if let Ok(n) = v.parse::<f32>() {
+                self.vlm_confidence_threshold = Some(n.clamp(0.0, 1.0));
+            }
+        }
         if let Ok(v) = std::env::var("ANNO_RAG_VLM_SAFETENSORS_MODEL_ID") {
             self.vlm_safetensors_model_id = Some(v);
         }
@@ -1261,7 +1281,7 @@ impl AnnoRagConfig {
             self.vlm_local_url = Some(v);
         }
         if let Some(v) = ov.vlm_confidence_threshold {
-            self.vlm_confidence_threshold = Some(v);
+            self.vlm_confidence_threshold = Some(v.clamp(0.0, 1.0));
         }
         if let Some(v) = ov.vlm_safetensors_model_id.clone() {
             self.vlm_safetensors_model_id = Some(v);

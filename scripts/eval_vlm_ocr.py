@@ -53,22 +53,29 @@ from pathlib import Path
 from typing import Any
 
 # ---------------------------------------------------------------------------
-# Optional dependency checks with friendly errors
+# Heavy dependencies are imported lazily so --dry-run works without them.
 # ---------------------------------------------------------------------------
-try:
-    from openai import OpenAI
-except ImportError:
-    sys.exit("ERROR: 'openai' package not found.  Run: pip install openai")
+OpenAI = None   # populated by _ensure_eval_deps()
+jiwer = None    # populated by _ensure_eval_deps()
 
-try:
-    import jiwer
-except ImportError:
-    sys.exit("ERROR: 'jiwer' package not found.  Run: pip install jiwer")
 
-try:
-    from PIL import Image  # noqa: F401 — just validate install
-except ImportError:
-    sys.exit("ERROR: 'Pillow' package not found.  Run: pip install Pillow")
+def _ensure_eval_deps() -> None:
+    """Import openai / jiwer / Pillow or exit with a friendly message."""
+    global OpenAI, jiwer  # noqa: PLW0603
+    try:
+        from openai import OpenAI as _OAI
+        OpenAI = _OAI
+    except ImportError:
+        sys.exit("ERROR: 'openai' package not found.  Run: pip install openai")
+    try:
+        import jiwer as _jiwer
+        jiwer = _jiwer
+    except ImportError:
+        sys.exit("ERROR: 'jiwer' package not found.  Run: pip install jiwer")
+    try:
+        from PIL import Image  # noqa: F401 — just validate install
+    except ImportError:
+        sys.exit("ERROR: 'Pillow' package not found.  Run: pip install Pillow")
 
 # ---------------------------------------------------------------------------
 # Model registry
@@ -135,26 +142,18 @@ def _encode_image(path: Path) -> str:
 
 
 def _load_ref(png_path: Path) -> str:
-    """Load .ref.txt sidecar next to a PNG.  Returns empty string if missing."""
+    """Load .ref.txt sidecar next to a PNG.  Raises FileNotFoundError if missing."""
     ref_path = png_path.with_suffix(".ref.txt")
-    if ref_path.is_file():
-        return ref_path.read_text(encoding="utf-8").strip()
-    return ""
+    if not ref_path.is_file():
+        raise FileNotFoundError(f"Missing reference sidecar: {ref_path}")
+    return ref_path.read_text(encoding="utf-8").strip()
 
 
 def _compute_cer(hypothesis: str, reference: str) -> float | None:
-    """Character Error Rate via jiwer.  Returns None if reference is empty."""
+    """Character Error Rate via jiwer.cer().  Returns None if reference is empty."""
     if not reference.strip():
         return None
-    # jiwer.cer operates on word sequences by default when given strings;
-    # for CER we compare char-by-char by splitting into individual chars.
-    ref_chars  = list(reference.replace(" ", ""))
-    hyp_chars  = list(hypothesis.replace(" ", ""))
-    if not ref_chars:
-        return None
-    ref_str = " ".join(ref_chars)
-    hyp_str = " ".join(hyp_chars)
-    return jiwer.wer(ref_str, hyp_str)  # WER on chars == CER
+    return jiwer.cer(reference, hypothesis)
 
 
 def _call_vlm(client: OpenAI, model_id: str, image_b64: str) -> tuple[str, float]:
@@ -198,6 +197,7 @@ def _eval_model(
 
     client = None
     if not dry_run:
+        _ensure_eval_deps()
         client = OpenAI(base_url=cfg["base_url"], api_key="EMPTY")
 
     results_per_class: dict[str, list[dict[str, Any]]] = {c: [] for c in FIXTURE_CLASSES}

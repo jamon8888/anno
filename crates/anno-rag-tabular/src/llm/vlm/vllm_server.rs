@@ -64,14 +64,21 @@ impl VlmOcrClient for VllmServerClient {
     async fn transcribe(
         &self,
         image: &PageImage,
-        _hint: &str,
+        hint: &str,
     ) -> anno_rag::error::Result<Transcription> {
         let data_url = encode_data_url(&image.bytes, Some(image.mime));
 
+        let prompt = if hint.trim().is_empty() {
+            VLM_OCR_PROMPT_FR.to_owned()
+        } else {
+            format!(
+                "{VLM_OCR_PROMPT_FR}\n\nAdditional guidance: {}",
+                hint.trim()
+            )
+        };
+
         let parts = vec![
-            ContentPart::Text {
-                text: VLM_OCR_PROMPT_FR.to_owned(),
-            },
+            ContentPart::Text { text: prompt },
             ContentPart::ImageUrl {
                 image_url: ImageUrl {
                     url: data_url,
@@ -89,10 +96,13 @@ impl VlmOcrClient for VllmServerClient {
             ..Default::default()
         };
 
-        let resp = self
-            .client
-            .chat(req)
+        let resp = tokio::time::timeout(std::time::Duration::from_secs(120), self.client.chat(req))
             .await
+            .map_err(|_| anno_rag::error::Error::Vlm {
+                doc: image.doc_id.clone(),
+                page: image.page,
+                source: "VLM chat request timed out after 120 s".into(),
+            })?
             .map_err(|e| anno_rag::error::Error::Vlm {
                 doc: image.doc_id.clone(),
                 page: image.page,

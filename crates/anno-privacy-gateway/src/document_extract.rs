@@ -41,7 +41,7 @@ pub async fn extract_uploaded_document(
         )));
     }
     // M1: image pixel-count cap — header-only read, no full decode.
-    if is_image_like(filename, content_type) {
+    if is_image_like(filename, content_type, &bytes) {
         guard_image_dimensions(&bytes)?;
     }
 
@@ -73,7 +73,7 @@ fn is_text_like(filename: &str, content_type: &str) -> bool {
         || lower.ends_with(".json")
 }
 
-fn is_image_like(filename: &str, content_type: &str) -> bool {
+fn is_image_like(filename: &str, content_type: &str, bytes: &[u8]) -> bool {
     let lower = filename.to_ascii_lowercase();
     content_type.starts_with("image/")
         || lower.ends_with(".png")
@@ -83,25 +83,27 @@ fn is_image_like(filename: &str, content_type: &str) -> bool {
         || lower.ends_with(".tiff")
         || lower.ends_with(".tif")
         || lower.ends_with(".bmp")
+        || image::guess_format(bytes).is_ok()
 }
 
-/// Header-only dimension check. Returns `Err` if the image exceeds `MAX_IMAGE_PIXELS`.
-/// If the format is unrecognised, passes through (kreuzberg will reject on decode).
+/// Header-only dimension check. Returns `Err` if the image exceeds `MAX_IMAGE_PIXELS`
+/// or if the image header is unreadable (fail-closed decompression-bomb guard).
 fn guard_image_dimensions(bytes: &[u8]) -> Result<()> {
     use std::io::Cursor;
     let reader = image::ImageReader::new(Cursor::new(bytes))
         .with_guessed_format()
         .map_err(|e| Error::Privacy(format!("inspect image header: {e}")))?;
-    if let Ok((w, h)) = reader.into_dimensions() {
-        let pixels = (w as u64).saturating_mul(h as u64);
-        if pixels > MAX_IMAGE_PIXELS {
-            return Err(Error::Privacy(format!(
-                "image dimensions {}×{} exceed {} MP limit (decompression-bomb guard)",
-                w,
-                h,
-                MAX_IMAGE_PIXELS / 1_000_000
-            )));
-        }
+    let (w, h) = reader
+        .into_dimensions()
+        .map_err(|e| Error::Privacy(format!("image dimensions unreadable: {e}")))?;
+    let pixels = (w as u64).saturating_mul(h as u64);
+    if pixels > MAX_IMAGE_PIXELS {
+        return Err(Error::Privacy(format!(
+            "image dimensions {}×{} exceed {} MP limit (decompression-bomb guard)",
+            w,
+            h,
+            MAX_IMAGE_PIXELS / 1_000_000
+        )));
     }
     Ok(())
 }

@@ -19,6 +19,7 @@ Requirements:
 
 from __future__ import annotations
 
+import hashlib
 import math
 import os
 import textwrap
@@ -109,7 +110,9 @@ def _wrap_draw(draw: ImageDraw.ImageDraw, text: str, x: int, y: int,
         if paragraph.strip() == "":
             lines.append("")
             continue
-        wrapped = textwrap.wrap(paragraph, width=70)
+        avg_char_w = max(draw.textlength("n", font=font), 1)
+        width_chars = max(1, int(max_width / avg_char_w))
+        wrapped = textwrap.wrap(paragraph, width=width_chars)
         lines.extend(wrapped if wrapped else [""])
 
     line_h = font.size + int(font.size * 0.4)
@@ -247,7 +250,8 @@ def _make_handwritten(out_dir: Path) -> None:
         y = MARGIN + int(DPI * 1.5)
         for line in s["ref"].split("\n"):
             # Slight x-jitter to fake pen strokes
-            x_offset = MARGIN + int(0.1 * DPI) + (hash(line) % 20 - 10)
+            stable = hashlib.sha256(line.encode("utf-8")).digest()[0]
+            x_offset = MARGIN + int(0.1 * DPI) + (stable % 20 - 10)
             draw.text((x_offset, y), line, font=font, fill=(20, 20, 80))
             y += int(font.size * 1.6)
 
