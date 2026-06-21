@@ -113,7 +113,7 @@ proptest = "1"
 criterion = { version = "0.5", features = ["html_reports"] }
 
 # anno-rag (v0.1 walking skeleton) — new deps not already in workspace
-kreuzberg       = { version = "=4.7.4", default-features = false, features = ["pdf", "bundled-pdfium", "office", "html", "email", "excel", "xml", "archives", "tokio-runtime", "chunking"] }
+kreuzberg       = { version = "=4.4.0", default-features = false, features = ["pdf", "bundled-pdfium", "office", "html", "email", "excel", "xml", "archives", "tokio-runtime", "chunking"] }
 lancedb         = "=0.29.0"
 arrow           = "=58"
 arrow-array     = "=58"
