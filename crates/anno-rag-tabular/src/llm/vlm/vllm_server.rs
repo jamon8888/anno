@@ -9,15 +9,13 @@
 use async_trait::async_trait;
 #[cfg(feature = "vlm-ocr")]
 use liter_llm::{
-    ClientConfigBuilder, DefaultClient, LlmClient,
     image::encode_data_url,
-    types::{
-        ChatCompletionRequest, ContentPart, ImageUrl, Message, UserContent, UserMessage,
-    },
+    types::{ChatCompletionRequest, ContentPart, ImageUrl, Message, UserContent, UserMessage},
+    ClientConfigBuilder, DefaultClient, LlmClient,
 };
 
 #[cfg(feature = "vlm-ocr")]
-use super::{PageImage, Transcription, VLM_OCR_PROMPT_FR, VlmOcrClient, vlm_quality_score};
+use super::{vlm_quality_score, PageImage, Transcription, VlmOcrClient, VLM_OCR_PROMPT_FR};
 
 /// VLM OCR client backed by a co-located vLLM server (OpenAI-compatible).
 ///
@@ -47,8 +45,8 @@ impl VllmServerClient {
             .load_env(false)
             .max_retries(1) // 1 retry for transient network hiccup; no exponential backoff at local endpoints
             .build();
-        let client = DefaultClient::new(config, None)
-            .map_err(|e| crate::error::Error::Extract {
+        let client =
+            DefaultClient::new(config, None).map_err(|e| crate::error::Error::Extract {
                 doc: "vlm-init".into(),
                 col: "client".into(),
                 source: Box::new(e),
@@ -101,19 +99,19 @@ impl VlmOcrClient for VllmServerClient {
                 source: Box::new(e),
             })?;
 
-        let first_choice = resp
-            .choices
-            .into_iter()
-            .next()
-            .ok_or_else(|| crate::error::Error::Extract {
-                doc: image.doc_id.clone(),
-                col: format!("page:{}", image.page),
-                source: format!(
-                    "VLM server returned no choices (doc: {}, page: {})",
-                    image.doc_id, image.page
-                )
-                .into(),
-            })?;
+        let first_choice =
+            resp.choices
+                .into_iter()
+                .next()
+                .ok_or_else(|| crate::error::Error::Extract {
+                    doc: image.doc_id.clone(),
+                    col: format!("page:{}", image.page),
+                    source: format!(
+                        "VLM server returned no choices (doc: {}, page: {})",
+                        image.doc_id, image.page
+                    )
+                    .into(),
+                })?;
         let content = first_choice
             .message
             .content
@@ -178,11 +176,8 @@ mod tests {
     #[tokio::test]
     #[ignore = "requires co-located vLLM serving lightonai/LightOnOCR-2-1B at :8000"]
     async fn vllm_server_client_transcribes_fixture() {
-        let client = VllmServerClient::new(
-            "http://127.0.0.1:8000",
-            "lightonai/LightOnOCR-2-1B",
-        )
-        .expect("client init");
+        let client = VllmServerClient::new("http://127.0.0.1:8000", "lightonai/LightOnOCR-2-1B")
+            .expect("client init");
 
         // Load a real fixture PNG from crates/anno-rag/tests/fixtures/vlm_ocr_eval/printed/
         // and assert transcription.confidence > 0.5

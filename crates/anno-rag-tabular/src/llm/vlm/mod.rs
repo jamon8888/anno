@@ -46,8 +46,11 @@ pub struct Transcription {
 pub trait VlmOcrClient: Send + Sync {
     /// Transcribe text from a page image. `hint` carries layout/language
     /// guidance, e.g. "French legal contract; preserve table structure".
-    async fn transcribe(&self, image: &PageImage, hint: &str)
-        -> crate::error::Result<Transcription>;
+    async fn transcribe(
+        &self,
+        image: &PageImage,
+        hint: &str,
+    ) -> crate::error::Result<Transcription>;
     /// Stable model identifier for audit logs.
     fn model_id(&self) -> &str;
 }

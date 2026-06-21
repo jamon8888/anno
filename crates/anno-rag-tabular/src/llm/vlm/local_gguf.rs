@@ -12,9 +12,9 @@
 use async_trait::async_trait;
 
 #[cfg(feature = "vlm-ocr")]
-use super::{PageImage, Transcription, VlmOcrClient};
-#[cfg(feature = "vlm-ocr")]
 use super::vllm_server::VllmServerClient;
+#[cfg(feature = "vlm-ocr")]
+use super::{PageImage, Transcription, VlmOcrClient};
 
 /// VLM OCR client backed by a local llama.cpp `llama-server` process.
 ///
@@ -69,11 +69,8 @@ mod tests {
     #[tokio::test]
     #[ignore = "requires co-located llama-server serving lightonai/LightOnOCR-2-1B at :8080"]
     async fn local_vlm_client_transcribes_fixture() {
-        let client = LocalVlmClient::new(
-            "http://127.0.0.1:8080",
-            "lightonai/LightOnOCR-2-1B",
-        )
-        .expect("client init");
+        let client = LocalVlmClient::new("http://127.0.0.1:8080", "lightonai/LightOnOCR-2-1B")
+            .expect("client init");
 
         // Load a real fixture PNG from crates/anno-rag/tests/fixtures/vlm_ocr_eval/printed/
         // and assert transcription.confidence > 0.5
