@@ -91,17 +91,14 @@ jobs:
           echo "tag=${RAW}" >> $GITHUB_OUTPUT
           echo "semver=${RAW#v}" >> $GITHUB_OUTPUT
 
-      - name: Write Tauri version config
-        shell: bash
-        run: printf '{"version":"%s"}' "${{ steps.ver.outputs.semver }}" > /tmp/tauri-ver.json
-
       - name: Build Tauri installer
         working-directory: crates/anno-rag-setup
+        shell: bash
         run: >
           tauri build
           --target ${{ matrix.target }}
           ${{ matrix.features != '' && format('--features {0}', matrix.features) || '' }}
-          --config /tmp/tauri-ver.json
+          --config '{"version":"${{ steps.ver.outputs.semver }}"}'
 
       - name: Rename artifact
         shell: bash
