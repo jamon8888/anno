@@ -17,27 +17,29 @@ jobs:
       matrix:
         include:
           # Windows — DirectML (any DX12 GPU: NVIDIA/AMD/Intel) + CPU fallback
-          # No CUDA toolkit needed at build time; ORT selects at runtime.
           - os: windows-latest
             target: x86_64-pc-windows-msvc
             features: gpu-directml
             variant: directml
-            tauri_target: msi
+            bundle_dir: msi
             artifact_ext: msi
 
           # macOS arm64 — CoreML (Apple ANE/GPU) + CPU fallback
-          # ORT selects CoreML at runtime on Apple Silicon; falls back to CPU.
           - os: macos-14
             target: aarch64-apple-darwin
             features: gpu-coreml
             variant: coreml
-            tauri_target: dmg
+            bundle_dir: dmg
             artifact_ext: dmg
 
-          # NOTE: x86_64-apple-darwin (Intel Mac) dropped — ort-sys 2.0.0-rc.12
-          # has no prebuilt binaries for this target and ORT_STRATEGY env vars
-          # are not supported. Intel Macs are EOL; users can build from source
-          # with ORT_LIB_PATH pointing to a compiled ONNX Runtime.
+          # macOS x86_64 (Intel) — CPU only
+          # ORT binary downloaded explicitly to bypass ort-sys cu12 prebuilt bug.
+          - os: macos-15-intel
+            target: x86_64-apple-darwin
+            features: ""
+            variant: cpu
+            bundle_dir: dmg
+            artifact_ext: dmg
 
     runs-on: ${{ matrix.os }}
     name: ${{ matrix.target }}-${{ matrix.variant }}
@@ -57,6 +59,20 @@ jobs:
       - name: Install protoc (Windows)
         if: runner.os == 'Windows'
         run: choco install protoc --no-progress -y
+
+      # ort-sys 2.0.0-rc.12 has a prebuilt-binary bug on x86_64-apple-darwin
+      # (always requests "cu12" variant which doesn't exist on macOS).
+      # Fix: download the official CPU-only ORT binary from Microsoft and point
+      # ort-sys to it via ORT_STRATEGY=system + ORT_LIB_LOCATION.
+      - name: Download ONNX Runtime (Intel macOS — ORT prebuilt bug workaround)
+        if: matrix.target == 'x86_64-apple-darwin'
+        shell: bash
+        run: |
+          curl -fsSL -o /tmp/ort.tgz \
+            https://github.com/microsoft/onnxruntime/releases/download/v1.20.1/onnxruntime-osx-x86_64-1.20.1.tgz
+          mkdir -p /tmp/ort && tar -xzf /tmp/ort.tgz -C /tmp/ort --strip-components=1
+          echo "ORT_STRATEGY=system" >> $GITHUB_ENV
+          echo "ORT_LIB_LOCATION=/tmp/ort/lib" >> $GITHUB_ENV
 
       - name: Setup Node.js (Tauri CLI)
         uses: actions/setup-node@v4
@@ -94,25 +110,26 @@ jobs:
           echo "tag=${RAW}" >> $GITHUB_OUTPUT
           echo "semver=${RAW#v}" >> $GITHUB_OUTPUT
 
+      - name: Write Tauri version config
+        shell: bash
+        run: printf '{"version":"%s"}' "${{ steps.ver.outputs.semver }}" > /tmp/tauri-ver.json
+
       - name: Build Tauri installer
         working-directory: crates/anno-rag-setup
-        shell: bash
         run: >
           tauri build
           --target ${{ matrix.target }}
           ${{ matrix.features != '' && format('--features {0}', matrix.features) || '' }}
-          --config "{\"version\": \"${{ steps.ver.outputs.semver }}\"}"
+          --config /tmp/tauri-ver.json
 
       - name: Rename artifact
         shell: bash
         run: |
           VERSION=${{ steps.ver.outputs.tag }}
-          SRC_DIR=crates/anno-rag-setup/target/${{ matrix.target }}/release/bundle/${{ matrix.tauri_target }}
+          SRC_DIR=crates/anno-rag-setup/target/${{ matrix.target }}/release/bundle/${{ matrix.bundle_dir }}
           DEST=anno-rag-${VERSION}-${{ matrix.target }}-${{ matrix.variant }}.${{ matrix.artifact_ext }}
-          mv ${SRC_DIR}/*.${artifact_ext} ${DEST}
+          mv "${SRC_DIR}"/*."${{ matrix.artifact_ext }}" "${DEST}"
           echo "ARTIFACT=${DEST}" >> $GITHUB_ENV
-        env:
-          artifact_ext: ${{ matrix.artifact_ext }}
 
       - name: Upload installer artifact
         uses: actions/upload-artifact@v4
@@ -127,10 +144,10 @@ jobs:
           VERSION=${{ steps.ver.outputs.tag }}
           BIN=./target/${{ matrix.target }}/release/anno-rag${{ runner.os == 'Windows' && '.exe' || '' }}
           if [[ "${{ runner.os }}" == "Windows" ]]; then
-            zip anno-rag-${VERSION}-${{ matrix.target }}-${{ matrix.variant }}.zip ${BIN}
+            zip anno-rag-${VERSION}-${{ matrix.target }}-${{ matrix.variant }}.zip "${BIN}"
             echo "BIN_ARTIFACT=anno-rag-${VERSION}-${{ matrix.target }}-${{ matrix.variant }}.zip" >> $GITHUB_ENV
           else
-            tar -czf anno-rag-${VERSION}-${{ matrix.target }}-${{ matrix.variant }}.tar.gz ${BIN}
+            tar -czf anno-rag-${VERSION}-${{ matrix.target }}-${{ matrix.variant }}.tar.gz "${BIN}"
             echo "BIN_ARTIFACT=anno-rag-${VERSION}-${{ matrix.target }}-${{ matrix.variant }}.tar.gz" >> $GITHUB_ENV
           fi
 
