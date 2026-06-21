@@ -224,6 +224,24 @@ This is the entirety of what Spec A required. No comment rewriting, no containme
   git commit -m "chore(deps): kreuzberg 4.7.4 (MIT) + M1/M2/M3 security mitigations (Spec A)"
   ```
 
+#### Known API regressions discovered during Task 1 implementation (4.7.4 vs 4.9.7)
+
+The following kreuzberg APIs were present in 4.9.7 but absent in 4.7.4.
+All were removed from the codebase in commit `e5d042b7`.
+
+| API removed | Added in | Where removed | User-visible impact |
+|---|---|---|---|
+| `kreuzberg::core::config::ContentFilterConfig` | 4.8.0 (ELv2) | `crates/anno-rag/src/ingest.rs` — import + config assignment | Header/footer stripping no longer applied. `AnnoRagConfig::pdf_keep_headers` and `pdf_keep_footers` fields are accepted but silently have no effect. Documents may include repeated header/footer text in extracted content. |
+| `ExtractionConfig::content_filter: Option<ContentFilterConfig>` | 4.8.0 (ELv2) | `ingest.rs` — `native_extraction_config()` and `structured_pdf_config()` | Same as above — field does not exist on the struct. |
+| `PageContent::layout_regions` | 4.8.0 (ELv2) | `ingest.rs` — test helper `page()` struct literal | No runtime impact. Layout region data (bounding boxes for detected text regions) is unavailable; `PageContent` only exposes `page_number`, `content`, `tables`, `images`, `hierarchy`, `is_blank`. |
+
+**What this means for users:**
+
+- **`pdf_keep_headers` / `pdf_keep_footers`**: These config options are parsed and stored but never forwarded to kreuzberg. Headers and footers will appear in extracted text for structured PDF profiles. This is acceptable for French legal work (headers typically carry document ID / page number, which are useful for context); the trade-off is documented and acceptable until kreuzberg MIT adds the feature.
+- **Layout regions**: Not surfaced anywhere in the anno API — internal only. No user-facing change.
+
+**Re-enablement path:** If kreuzberg MIT releases header/footer filtering (likely in a future 4.7.x or 4.8.x MIT re-release), restore the `content_filter` block in `native_extraction_config()` and re-enable the test assertions. The config fields (`pdf_keep_headers`, `pdf_keep_footers`) are already wired in `AnnoRagConfig` — only the kreuzberg side needs restoring.
+
 ---
 
 ### Task 2: FR eval gate (entry criterion — do before wiring a default)

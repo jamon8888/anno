@@ -514,8 +514,11 @@ mod tests {
         assert!(hierarchy.include_bbox);
         assert_eq!(hierarchy.ocr_coverage_threshold, None);
 
-        // content_filter not available in kreuzberg 4.7.4 (MIT); header/footer
-        // filtering is handled internally by kreuzberg in this version.
+        // content_filter (header/footer stripping) was added in kreuzberg 4.8.0 (ELv2) and is
+        // absent from ExtractionConfig in 4.7.4 (MIT). pdf_keep_headers / pdf_keep_footers in
+        // AnnoRagConfig are wired but silently have no effect. To re-enable: restore the
+        // content_filter block in native_extraction_config() and uncomment assertions here.
+        // Re-enablement path: docs/superpowers/plans/2026-06-20-vlm-ocr-implementation.md §Task 1.
     }
 
     #[test]
