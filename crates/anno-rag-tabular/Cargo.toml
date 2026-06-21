@@ -16,7 +16,7 @@ test-utils = []
 # Within-boundary vision-OCR via liter-llm (MIT, Rust-native). Off by default.
 # Routes to any OpenAI-compat endpoint: co-located vLLM (on-prem GPU)
 # or llama-server GGUF (desktop) — configured via vlm_vllm_url / vlm_local_url.
-vlm-ocr = ["dep:liter-llm"]
+vlm-ocr = ["dep:liter-llm", "anno-rag/vlm-ocr"]
 
 [dependencies]
 # Single-crate workspace today — pulls in detector, vault, store, embed, audit.

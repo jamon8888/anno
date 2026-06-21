@@ -64,7 +64,7 @@ impl VlmOcrClient for RoutingVlmClient {
         &self,
         image: &PageImage,
         hint: &str,
-    ) -> crate::error::Result<Transcription> {
+    ) -> anno_rag::error::Result<Transcription> {
         self.backend.transcribe(image, hint).await
     }
 

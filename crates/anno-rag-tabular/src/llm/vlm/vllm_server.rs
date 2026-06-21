@@ -65,7 +65,7 @@ impl VlmOcrClient for VllmServerClient {
         &self,
         image: &PageImage,
         _hint: &str,
-    ) -> crate::error::Result<Transcription> {
+    ) -> anno_rag::error::Result<Transcription> {
         let data_url = encode_data_url(&image.bytes, Some(image.mime));
 
         let parts = vec![
@@ -93,9 +93,9 @@ impl VlmOcrClient for VllmServerClient {
             .client
             .chat(req)
             .await
-            .map_err(|e| crate::error::Error::Extract {
+            .map_err(|e| anno_rag::error::Error::Vlm {
                 doc: image.doc_id.clone(),
-                col: format!("page:{}", image.page),
+                page: image.page,
                 source: Box::new(e),
             })?;
 
@@ -103,9 +103,9 @@ impl VlmOcrClient for VllmServerClient {
             resp.choices
                 .into_iter()
                 .next()
-                .ok_or_else(|| crate::error::Error::Extract {
+                .ok_or_else(|| anno_rag::error::Error::Vlm {
                     doc: image.doc_id.clone(),
-                    col: format!("page:{}", image.page),
+                    page: image.page,
                     source: format!(
                         "VLM server returned no choices (doc: {}, page: {})",
                         image.doc_id, image.page
@@ -115,9 +115,9 @@ impl VlmOcrClient for VllmServerClient {
         let content = first_choice
             .message
             .content
-            .ok_or_else(|| crate::error::Error::Extract {
+            .ok_or_else(|| anno_rag::error::Error::Vlm {
                 doc: image.doc_id.clone(),
-                col: format!("page:{}", image.page),
+                page: image.page,
                 source: format!(
                     "VLM response has no content (doc: {}, page: {})",
                     image.doc_id, image.page
@@ -126,9 +126,9 @@ impl VlmOcrClient for VllmServerClient {
             })?;
         let text = content
             .as_text()
-            .ok_or_else(|| crate::error::Error::Extract {
+            .ok_or_else(|| anno_rag::error::Error::Vlm {
                 doc: image.doc_id.clone(),
-                col: format!("page:{}", image.page),
+                page: image.page,
                 source: format!(
                     "VLM response content is not text (doc: {}, page: {})",
                     image.doc_id, image.page

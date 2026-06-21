@@ -37,6 +37,10 @@ embedded-ocr = ["kreuzberg/ocr"]
 # Requires `embedded-ocr`. kreuzberg's `effective_pipeline()` auto-constructs
 # a [tesseract@100, paddleocr@50] pipeline when this feature is active.
 ocr-paddle = ["kreuzberg/paddle-ocr", "kreuzberg/ocr"]
+# Within-boundary vision-OCR trait and value types. Backends live in anno-rag-tabular.
+# Enabling this feature exposes `anno_rag::vlm` (trait + PageImage + Transcription)
+# without pulling in anno-rag-tabular — no circular dep.
+vlm-ocr = []
 
 [dependencies]
 anno            = { path = "../anno", features = ["gliner2-fastino"] }

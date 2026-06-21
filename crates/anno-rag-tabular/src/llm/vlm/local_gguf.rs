@@ -51,7 +51,7 @@ impl VlmOcrClient for LocalVlmClient {
         &self,
         image: &PageImage,
         hint: &str,
-    ) -> crate::error::Result<Transcription> {
+    ) -> anno_rag::error::Result<Transcription> {
         self.inner.transcribe(image, hint).await
     }
 

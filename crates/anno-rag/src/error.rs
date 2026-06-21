@@ -74,6 +74,19 @@ pub enum Error {
     #[error("graph: {0}")]
     Graph(String),
 
+    /// Vision-OCR backend failure — client init, HTTP call, or response parse.
+    /// Gated by the `vlm-ocr` feature; callers fall back to Tesseract on this.
+    #[error("vlm: {doc} page {page}: {source}")]
+    Vlm {
+        /// Source document id.
+        doc: String,
+        /// Zero-based page index.
+        page: usize,
+        /// Underlying failure.
+        #[source]
+        source: Box<dyn std::error::Error + Send + Sync>,
+    },
+
     /// I/O error from std.
     #[error(transparent)]
     Io(#[from] std::io::Error),
