@@ -73,6 +73,11 @@ fn is_text_like(filename: &str, content_type: &str) -> bool {
         || lower.ends_with(".json")
 }
 
+/// ORDERING INVARIANT: this function must never fully decode pixel data.
+/// `image::guess_format` reads only magic bytes — it does NOT decompress.
+/// `guard_image_dimensions` (the decompression-bomb check) runs AFTER this
+/// function; if a future change here calls `image::open` or similar, the bomb
+/// guard would be bypassed. Keep this read-only on the raw bytes.
 fn is_image_like(filename: &str, content_type: &str, bytes: &[u8]) -> bool {
     let lower = filename.to_ascii_lowercase();
     content_type.starts_with("image/")

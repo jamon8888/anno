@@ -62,6 +62,8 @@ jiwer = None    # populated by _ensure_eval_deps()
 def _ensure_eval_deps() -> None:
     """Import openai / jiwer / Pillow or exit with a friendly message."""
     global OpenAI, jiwer  # noqa: PLW0603
+    if OpenAI is not None:
+        return  # already loaded — idempotent
     try:
         from openai import OpenAI as _OAI
         OpenAI = _OAI
@@ -216,7 +218,17 @@ def _eval_model(
         print(f"\n  Class: {cls}  ({len(pngs)} file(s))")
 
         for png in pngs:
-            ref_text = _load_ref(png)
+            try:
+                ref_text = _load_ref(png)
+            except FileNotFoundError as exc:
+                print(f"    {png.name:45s}  ERROR: {exc}")
+                results_per_class[cls].append({
+                    "file": png.name, "class": cls, "reference": "",
+                    "hypothesis": "", "cer": None, "latency_s": None,
+                    "error": str(exc),
+                })
+                continue
+
             entry: dict[str, Any] = {
                 "file":      png.name,
                 "class":     cls,

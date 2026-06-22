@@ -309,10 +309,7 @@ async fn try_vlm_ocr(
             page: page_index,
         };
 
-        match vlm_client
-            .transcribe(&image, crate::vlm::VLM_OCR_PROMPT_FR)
-            .await
-        {
+        match vlm_client.transcribe(&image, "").await {
             Ok(t) if t.confidence >= threshold => {
                 tracing::debug!(
                     path = %path_str,
@@ -325,12 +322,15 @@ async fn try_vlm_ocr(
             }
             Ok(t) => {
                 // One low-confidence page → abort VLM path; Tesseract handles the whole doc.
-                tracing::debug!(
+                // Log at info so operators can detect misconfigured VLM servers that
+                // systematically return low confidence (e.g. blank cover page at page 0).
+                tracing::info!(
                     path = %path_str,
                     page = page_index,
                     confidence = t.confidence,
                     threshold,
-                    "vlm-ocr: confidence below threshold, falling back to Tesseract"
+                    pages_already_sent = page_index,
+                    "vlm-ocr: confidence below threshold, falling back to Tesseract for whole doc"
                 );
                 return None;
             }

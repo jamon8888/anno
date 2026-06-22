@@ -953,8 +953,13 @@ impl AnnoRagConfig {
             if path.exists() {
                 let contents = std::fs::read_to_string(path)
                     .map_err(|e| ConfigLoadError::Io(format!("read {}: {e}", path.display())))?;
-                let from_file: Self = toml::from_str(&contents)
+                let mut from_file: Self = toml::from_str(&contents)
                     .map_err(|e| ConfigLoadError::Toml(format!("{}: {e}", path.display())))?;
+                // Clamp here so TOML-sourced values obey the same [0,1] invariant
+                // that apply_env() and apply_overrides() enforce for their paths.
+                from_file.vlm_confidence_threshold = from_file
+                    .vlm_confidence_threshold
+                    .map(|v| v.clamp(0.0, 1.0));
                 cfg = from_file;
             }
         }
