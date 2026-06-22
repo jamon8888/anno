@@ -116,7 +116,7 @@ async fn download_embedder(models_dir: &Path, model_id: &str) -> Result<()> {
         .await
         .map_err(|e| Error::Embed(format!("config.json fetch: {e}")))?;
     tokio::fs::copy(&src, embed_dir.join("config.json")).await?;
-    println!("  embedder config.json    ... ok");
+    eprintln!("  embedder config.json    ... ok");
 
     // tokenizer.json
     let src = repo
@@ -124,7 +124,7 @@ async fn download_embedder(models_dir: &Path, model_id: &str) -> Result<()> {
         .await
         .map_err(|e| Error::Embed(format!("tokenizer.json fetch: {e}")))?;
     tokio::fs::copy(&src, embed_dir.join("tokenizer.json")).await?;
-    println!("  embedder tokenizer.json ... ok");
+    eprintln!("  embedder tokenizer.json ... ok");
 
     // weights — model.safetensors preferred, pytorch_model.bin fallback
     let (src, dest_name) = match repo.get("model.safetensors").await {
@@ -149,7 +149,7 @@ async fn download_embedder(models_dir: &Path, model_id: &str) -> Result<()> {
         )
         .await?;
     }
-    println!("  embedder weights        ... ok ({size_mb:.0} MiB)");
+    eprintln!("  embedder weights        ... ok ({size_mb:.0} MiB)");
     Ok(())
 }
 
@@ -198,7 +198,7 @@ async fn download_candle_ner(
         }
         tokio::fs::copy(&src, dest).await?;
     }
-    println!("  Candle NER model        ... ok");
+    eprintln!("  Candle NER model        ... ok");
     Ok(())
 }
 
@@ -285,7 +285,7 @@ fn mirror_dir(src_root: &Path, dest_root: &Path) -> Result<()> {
             std::fs::copy(entry.path(), &dest)?;
         }
     }
-    println!("  NER model               ... ok (~500 MiB)");
+    eprintln!("  NER model               ... ok (~500 MiB)");
     Ok(())
 }
 
@@ -349,7 +349,7 @@ async fn download_vlm_safetensors(models_dir: &Path, model_id: &str) -> crate::e
         .unwrap_or(0) as f64
         / 1_048_576.0;
     tokio::fs::copy(&src, dest_dir.join(dest_name)).await?;
-    println!("  VLM safetensors ({model_id}) ... ok ({size_mb:.0} MiB)");
+    eprintln!("  VLM safetensors ({model_id}) ... ok ({size_mb:.0} MiB)");
     Ok(())
 }
 
@@ -377,7 +377,7 @@ async fn download_vlm_gguf(models_dir: &Path, model_id: &str) -> crate::error::R
         .unwrap_or(0) as f64
         / 1_048_576.0;
     tokio::fs::copy(&src, dest_dir.join(DEFAULT_GGUF_FILENAME)).await?;
-    println!("  VLM GGUF ({model_id}/{DEFAULT_GGUF_FILENAME}) ... ok ({size_mb:.0} MiB)");
+    eprintln!("  VLM GGUF ({model_id}/{DEFAULT_GGUF_FILENAME}) ... ok ({size_mb:.0} MiB)");
     Ok(())
 }
 
