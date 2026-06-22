@@ -52,5 +52,11 @@ Precedence (lowest → highest): defaults → `~/.anno-rag/config.toml` → env 
 | `conflict_cosine_threshold` | `ANNO_RAG_CONFLICT_COSINE_THRESHOLD` | `--conflict-cosine-threshold` | `0.85` | 0.10 | Cosine threshold for memory conflict detection (0.0-1.0). Default: 0.85 |
 | `graph_max_hops` | `ANNO_RAG_GRAPH_MAX_HOPS` | `--graph-max-hops` | `2` | 0.10 | Maximum BFS hop count for graph_recall. Default: 2 |
 | `graph_per_hop_limit` | `ANNO_RAG_GRAPH_PER_HOP_LIMIT` | `--graph-per-hop-limit` | `50` | 0.10 | Max candidates per BFS hop in graph_recall. Default: 50 |
+| `vlm_backend` | `ANNO_RAG_VLM_BACKEND` | `--vlm-backend` | *(unset)* | 0.15 | VLM OCR backend: vllm (default), local, or off. Requires vlm-ocr feature. |
+| `vlm_vllm_url` | `ANNO_RAG_VLM_VLLM_URL` | `--vlm-vllm-url` | *(unset)* | 0.15 | Base URL for the co-located vLLM server. Default: http://127.0.0.1:8000 |
+| `vlm_local_url` | `ANNO_RAG_VLM_LOCAL_URL` | `--vlm-local-url` | *(unset)* | 0.15 | Base URL for the local llama-server GGUF endpoint. Default: http://127.0.0.1:8080 |
+| `vlm_confidence_threshold` | `ANNO_RAG_VLM_CONFIDENCE_THRESHOLD` | `--vlm-confidence-threshold` | *(unset)* | 0.15 | VLM confidence threshold [0.0, 1.0]; below this falls back to Tesseract. Default: 0.6 |
+| `vlm_safetensors_model_id` | `ANNO_RAG_VLM_SAFETENSORS_MODEL_ID` | `--vlm-safetensors-model-id` | *(unset)* |  | HuggingFace repo for vLLM safetensors VLM model. Default: lightonai/LightOnOCR-2-1B |
+| `vlm_gguf_model_id` | `ANNO_RAG_VLM_GGUF_MODEL_ID` | `--vlm-gguf-model-id` | *(unset)* |  | HuggingFace repo for llama-server GGUF VLM model. Default: Mungert/LightOnOCR-1B-1025-GGUF |
 
 > **Runtime-only env vars** (not in `config.toml`): `ANNO_MODELS_DIR` (model weights override), `ANNO_RAG_VAULT_PASSPHRASE`, `ANNO_RAG_VAULT_KMS_PROVIDER`, `ANNO_RAG_VAULT_KMS_KEY_ID`.

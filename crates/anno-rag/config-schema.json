@@ -412,5 +412,59 @@
     "default_value": "50",
     "since": "0.10",
     "type_name": "usize"
+  },
+  {
+    "name": "vlm_backend",
+    "env_var": "ANNO_RAG_VLM_BACKEND",
+    "cli_flag": "--vlm-backend",
+    "doc": "VLM OCR backend: vllm (default), local, or off. Requires vlm-ocr feature.",
+    "default_value": "null",
+    "since": "0.15",
+    "type_name": "Option<String>"
+  },
+  {
+    "name": "vlm_vllm_url",
+    "env_var": "ANNO_RAG_VLM_VLLM_URL",
+    "cli_flag": "--vlm-vllm-url",
+    "doc": "Base URL for the co-located vLLM server. Default: http://127.0.0.1:8000",
+    "default_value": "null",
+    "since": "0.15",
+    "type_name": "Option<String>"
+  },
+  {
+    "name": "vlm_local_url",
+    "env_var": "ANNO_RAG_VLM_LOCAL_URL",
+    "cli_flag": "--vlm-local-url",
+    "doc": "Base URL for the local llama-server GGUF endpoint. Default: http://127.0.0.1:8080",
+    "default_value": "null",
+    "since": "0.15",
+    "type_name": "Option<String>"
+  },
+  {
+    "name": "vlm_confidence_threshold",
+    "env_var": "ANNO_RAG_VLM_CONFIDENCE_THRESHOLD",
+    "cli_flag": "--vlm-confidence-threshold",
+    "doc": "VLM confidence threshold [0.0, 1.0]; below this falls back to Tesseract. Default: 0.6",
+    "default_value": "null",
+    "since": "0.15",
+    "type_name": "Option<f32>"
+  },
+  {
+    "name": "vlm_safetensors_model_id",
+    "env_var": "ANNO_RAG_VLM_SAFETENSORS_MODEL_ID",
+    "cli_flag": "--vlm-safetensors-model-id",
+    "doc": "HuggingFace repo for vLLM safetensors VLM model. Default: lightonai/LightOnOCR-2-1B",
+    "default_value": "null",
+    "since": "",
+    "type_name": "Option<String>"
+  },
+  {
+    "name": "vlm_gguf_model_id",
+    "env_var": "ANNO_RAG_VLM_GGUF_MODEL_ID",
+    "cli_flag": "--vlm-gguf-model-id",
+    "doc": "HuggingFace repo for llama-server GGUF VLM model. Default: Mungert/LightOnOCR-1B-1025-GGUF",
+    "default_value": "null",
+    "since": "",
+    "type_name": "Option<String>"
   }
 ]
