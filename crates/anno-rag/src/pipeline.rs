@@ -434,7 +434,10 @@ impl Pipeline {
         let extracted = ingest::extract_with_vlm(path, cfg, self.vlm_client.as_ref()).await?;
         #[cfg(not(feature = "vlm-ocr"))]
         let extracted = ingest::extract(path, cfg).await?;
-        let used_embedded_ocr = extracted.ocr_status == ingest::OcrStatus::CompletedEmbedded;
+        let used_embedded_ocr = matches!(
+            extracted.ocr_status,
+            ingest::OcrStatus::CompletedEmbedded | ingest::OcrStatus::CompletedVlm
+        );
         if !should_index_extracted_doc(&extracted) {
             tracing::warn!(
                 path = %path.display(),

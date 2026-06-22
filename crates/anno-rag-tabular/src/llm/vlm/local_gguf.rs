@@ -31,7 +31,7 @@ impl LocalVlmClient {
     ///
     /// The typical call for a default llama-server install is:
     /// ```ignore
-    /// LocalVlmClient::new("http://127.0.0.1:8080", "lightonai/LightOnOCR-2-1B")
+    /// LocalVlmClient::new("http://127.0.0.1:8080", "LightOnOCR-1B-1025")
     /// ```
     ///
     /// # Errors
@@ -67,9 +67,9 @@ mod tests {
 
     #[cfg(feature = "vlm-ocr")]
     #[tokio::test]
-    #[ignore = "requires co-located llama-server serving lightonai/LightOnOCR-2-1B at :8080"]
+    #[ignore = "requires co-located llama-server serving LightOnOCR-1B-1025 at :8080"]
     async fn local_vlm_client_transcribes_fixture() {
-        let client = LocalVlmClient::new("http://127.0.0.1:8080", "lightonai/LightOnOCR-2-1B")
+        let client = LocalVlmClient::new("http://127.0.0.1:8080", "LightOnOCR-1B-1025")
             .expect("client init");
 
         // Load a real fixture PNG from crates/anno-rag/tests/fixtures/vlm_ocr_eval/printed/

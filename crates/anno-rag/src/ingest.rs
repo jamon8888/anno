@@ -56,6 +56,8 @@ pub enum OcrStatus {
     NotRequired,
     /// OCR ran through the embedded Kreuzberg path.
     CompletedEmbedded,
+    /// OCR ran through the VLM path (vLLM or local llama-server).
+    CompletedVlm,
     /// OCR is needed but was intentionally not run.
     Deferred(OcrDeferredReason),
 }
@@ -267,15 +269,18 @@ async fn try_vlm_ocr(
     // which is not thread-safe).  Run everything in spawn_blocking to avoid
     // stalling the async executor while the mutex is held.
     let path_str = path.display().to_string();
-    let page_pngs: Vec<Vec<u8>> = match tokio::task::spawn_blocking(move || {
+    // page_pngs carries (original_pdf_page_index, png_bytes) so log messages
+    // reference the real page number even when earlier pages failed to render.
+    let page_pngs: Vec<(usize, Vec<u8>)> = match tokio::task::spawn_blocking(move || {
         let iter = kreuzberg::pdf::PdfPageIterator::new(pdf_bytes, Some(150), None)
             .map_err(|e| format!("open PDF: {e}"))?;
-        let pngs: Vec<Vec<u8>> = iter
+        let pngs: Vec<(usize, Vec<u8>)> = iter
             .take(MAX_VLM_PAGES)
-            .filter_map(|r| {
-                r.map_err(|e| tracing::debug!("vlm-ocr: page render skipped: {e}"))
+            .enumerate()
+            .filter_map(|(idx, r)| {
+                r.map_err(|e| tracing::debug!(page = idx, "vlm-ocr: page render skipped: {e}"))
                     .ok()
-                    .map(|(_, png)| png)
+                    .map(|(_, png)| (idx, png))
             })
             .collect();
         Ok::<_, String>(pngs)
@@ -301,7 +306,7 @@ async fn try_vlm_ocr(
     let model = vlm_client.model_id().to_string();
     let mut page_texts: Vec<String> = Vec::with_capacity(page_pngs.len());
 
-    for (page_index, png_bytes) in page_pngs.into_iter().enumerate() {
+    for (page_index, png_bytes) in page_pngs.into_iter() {
         let image = crate::vlm::PageImage {
             bytes: png_bytes,
             mime: "image/png",
@@ -436,7 +441,7 @@ pub async fn extract_with_vlm(
                 content: text,
                 chunks,
                 class: DocClass::ScannedPdf,
-                ocr_status: OcrStatus::CompletedEmbedded,
+                ocr_status: OcrStatus::CompletedVlm,
             });
         }
     }

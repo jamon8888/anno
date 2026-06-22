@@ -792,7 +792,8 @@ pub struct AnnoRagConfig {
     #[config_meta(
         env = "ANNO_RAG_VLM_SAFETENSORS_MODEL_ID",
         cli = "--vlm-safetensors-model-id",
-        doc = "HuggingFace repo for vLLM safetensors VLM model. Default: lightonai/LightOnOCR-2-1B"
+        doc = "HuggingFace repo for vLLM safetensors VLM model. Default: lightonai/LightOnOCR-2-1B",
+        since = "0.15"
     )]
     #[serde(default)]
     pub vlm_safetensors_model_id: Option<String>,
@@ -803,7 +804,8 @@ pub struct AnnoRagConfig {
     #[config_meta(
         env = "ANNO_RAG_VLM_GGUF_MODEL_ID",
         cli = "--vlm-gguf-model-id",
-        doc = "HuggingFace repo for llama-server GGUF VLM model. Default: Mungert/LightOnOCR-1B-1025-GGUF"
+        doc = "HuggingFace repo for llama-server GGUF VLM model. Default: Mungert/LightOnOCR-1B-1025-GGUF",
+        since = "0.15"
     )]
     #[serde(default)]
     pub vlm_gguf_model_id: Option<String>,

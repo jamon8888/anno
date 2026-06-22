@@ -231,26 +231,28 @@ impl ModelInventoryService {
     /// Create a model inventory service for the effective loader path.
     #[must_use]
     pub fn new(cfg: &AnnoRagConfig) -> Self {
-        // Only check VLM inventory when vlm_backend is explicitly "vllm" or "local".
+        // Only check VLM inventory for the configured backend type.
         // None means not configured; "off" means explicitly disabled.
         // In both cases we skip the VLM file check so existing non-VLM deployments
         // remain "ready" without needing VLM model weights.
-        let vlm_active = matches!(cfg.vlm_backend.as_deref(), Some("vllm") | Some("local"));
-        let (vlm_safetensors_model_id, vlm_gguf_model_id) = if vlm_active {
-            (
+        let (vlm_safetensors_model_id, vlm_gguf_model_id) = match cfg.vlm_backend.as_deref() {
+            Some("vllm") => (
                 Some(
                     cfg.vlm_safetensors_model_id
                         .clone()
                         .unwrap_or_else(|| "lightonai/LightOnOCR-2-1B".to_string()),
                 ),
+                None,
+            ),
+            Some("local") => (
+                None,
                 Some(
                     cfg.vlm_gguf_model_id
                         .clone()
                         .unwrap_or_else(|| "Mungert/LightOnOCR-1B-1025-GGUF".to_string()),
                 ),
-            )
-        } else {
-            (None, None)
+            ),
+            _ => (None, None),
         };
         Self {
             effective: effective_models_dir(cfg),
@@ -291,11 +293,10 @@ impl ModelInventoryService {
             }
         };
         let gliner_pii = inspect_onnx_gliner_family(&path, &self.ner_pii_onnx_dir);
-        let vlm_safetensors = self.vlm_safetensors_model_id.as_deref().map(|model_id| {
-            let required = vlm_safetensors_required_files(model_id);
-            let refs: Vec<&str> = required.iter().map(String::as_str).collect();
-            inspect_family(&path, model_id, &refs)
-        });
+        let vlm_safetensors = self
+            .vlm_safetensors_model_id
+            .as_deref()
+            .map(|model_id| inspect_vlm_safetensors_family(&path, model_id));
         let vlm_gguf = self.vlm_gguf_model_id.as_deref().map(|model_id| {
             let required = vlm_gguf_required_files(model_id);
             let refs: Vec<&str> = required.iter().map(String::as_str).collect();
@@ -384,6 +385,32 @@ pub(crate) fn is_lock_stale(lock: &Path) -> bool {
     match std::time::SystemTime::now().duration_since(mtime) {
         Ok(age) => age.as_secs() > LOCK_STALE_SECS,
         Err(_) => false,
+    }
+}
+
+/// Inspect a safetensors VLM model directory, accepting either `model.safetensors`
+/// or `pytorch_model.bin` (the HF fallback) as the weight file.
+fn inspect_vlm_safetensors_family(root: &Path, model_id: &str) -> ModelFamilyStatus {
+    let non_weight_missing: Vec<String> = ["config.json", "tokenizer.json"]
+        .iter()
+        .filter(|f| !root.join(model_id).join(f).is_file())
+        .map(|f| format!("{model_id}/{f}"))
+        .collect();
+    let weight_present = ["model.safetensors", "pytorch_model.bin"]
+        .iter()
+        .any(|f| root.join(model_id).join(f).is_file());
+    let missing_files = if weight_present {
+        non_weight_missing
+    } else {
+        let mut m = non_weight_missing;
+        m.push(format!("{model_id}/model.safetensors"));
+        m
+    };
+    ModelFamilyStatus {
+        name: model_id.to_string(),
+        path: root.join(model_id).display().to_string(),
+        ready: missing_files.is_empty(),
+        missing_files,
     }
 }
 

@@ -72,28 +72,32 @@ pub async fn download(cfg: &AnnoRagConfig) -> Result<PathBuf> {
     #[cfg(any(feature = "gpu-metal", feature = "gliner2-candle-cpu"))]
     download_candle_ner(&models_dir, &cfg.ner_candle_model_id, &cfg.ner_candle_dir()).await?;
     #[cfg(feature = "vlm-ocr")]
-    if cfg.vlm_backend.as_deref() != Some("off") {
-        let safetensors_id = cfg
-            .vlm_safetensors_model_id
-            .as_deref()
-            .unwrap_or("lightonai/LightOnOCR-2-1B");
-        if !crate::model_cache::is_valid_model_subpath(safetensors_id) {
-            return Err(Error::Embed(format!(
-                "unsafe vlm_safetensors_model_id value: {safetensors_id:?}"
-            )));
+    match cfg.vlm_backend.as_deref() {
+        Some("vllm") => {
+            let safetensors_id = cfg
+                .vlm_safetensors_model_id
+                .as_deref()
+                .unwrap_or("lightonai/LightOnOCR-2-1B");
+            if !crate::model_cache::is_valid_model_subpath(safetensors_id) {
+                return Err(Error::Embed(format!(
+                    "unsafe vlm_safetensors_model_id value: {safetensors_id:?}"
+                )));
+            }
+            download_vlm_safetensors(&models_dir, safetensors_id).await?;
         }
-        download_vlm_safetensors(&models_dir, safetensors_id).await?;
-
-        let gguf_id = cfg
-            .vlm_gguf_model_id
-            .as_deref()
-            .unwrap_or("Mungert/LightOnOCR-1B-1025-GGUF");
-        if !crate::model_cache::is_valid_model_subpath(gguf_id) {
-            return Err(Error::Embed(format!(
-                "unsafe vlm_gguf_model_id value: {gguf_id:?}"
-            )));
+        Some("local") => {
+            let gguf_id = cfg
+                .vlm_gguf_model_id
+                .as_deref()
+                .unwrap_or("Mungert/LightOnOCR-1B-1025-GGUF");
+            if !crate::model_cache::is_valid_model_subpath(gguf_id) {
+                return Err(Error::Embed(format!(
+                    "unsafe vlm_gguf_model_id value: {gguf_id:?}"
+                )));
+            }
+            download_vlm_gguf(&models_dir, gguf_id).await?;
         }
-        download_vlm_gguf(&models_dir, gguf_id).await?;
+        _ => {} // None, "off", or unknown — skip VLM downloads
     }
     Ok(models_dir)
 }
@@ -338,7 +342,12 @@ async fn download_vlm_safetensors(models_dir: &Path, model_id: &str) -> crate::e
             (p, "pytorch_model.bin")
         }
     };
-    let size_mb = std::fs::metadata(&src).map(|m| m.len()).unwrap_or(0) as f64 / 1_048_576.0;
+    let size_mb = tokio::fs::metadata(&src)
+        .await
+        .ok()
+        .map(|m| m.len())
+        .unwrap_or(0) as f64
+        / 1_048_576.0;
     tokio::fs::copy(&src, dest_dir.join(dest_name)).await?;
     println!("  VLM safetensors ({model_id}) ... ok ({size_mb:.0} MiB)");
     Ok(())
@@ -361,7 +370,12 @@ async fn download_vlm_gguf(models_dir: &Path, model_id: &str) -> crate::error::R
         .get(DEFAULT_GGUF_FILENAME)
         .await
         .map_err(|e| Error::Embed(format!("vlm gguf {DEFAULT_GGUF_FILENAME} fetch: {e}")))?;
-    let size_mb = std::fs::metadata(&src).map(|m| m.len()).unwrap_or(0) as f64 / 1_048_576.0;
+    let size_mb = tokio::fs::metadata(&src)
+        .await
+        .ok()
+        .map(|m| m.len())
+        .unwrap_or(0) as f64
+        / 1_048_576.0;
     tokio::fs::copy(&src, dest_dir.join(DEFAULT_GGUF_FILENAME)).await?;
     println!("  VLM GGUF ({model_id}/{DEFAULT_GGUF_FILENAME}) ... ok ({size_mb:.0} MiB)");
     Ok(())
