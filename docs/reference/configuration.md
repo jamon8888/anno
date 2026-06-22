@@ -56,7 +56,7 @@ Precedence (lowest → highest): defaults → `~/.anno-rag/config.toml` → env 
 | `vlm_vllm_url` | `ANNO_RAG_VLM_VLLM_URL` | `--vlm-vllm-url` | *(unset)* | 0.15 | Base URL for the co-located vLLM server. Default: http://127.0.0.1:8000 |
 | `vlm_local_url` | `ANNO_RAG_VLM_LOCAL_URL` | `--vlm-local-url` | *(unset)* | 0.15 | Base URL for the local llama-server GGUF endpoint. Default: http://127.0.0.1:8080 |
 | `vlm_confidence_threshold` | `ANNO_RAG_VLM_CONFIDENCE_THRESHOLD` | `--vlm-confidence-threshold` | *(unset)* | 0.15 | VLM confidence threshold [0.0, 1.0]; below this falls back to Tesseract. Default: 0.6 |
-| `vlm_safetensors_model_id` | `ANNO_RAG_VLM_SAFETENSORS_MODEL_ID` | `--vlm-safetensors-model-id` | *(unset)* |  | HuggingFace repo for vLLM safetensors VLM model. Default: lightonai/LightOnOCR-2-1B |
-| `vlm_gguf_model_id` | `ANNO_RAG_VLM_GGUF_MODEL_ID` | `--vlm-gguf-model-id` | *(unset)* |  | HuggingFace repo for llama-server GGUF VLM model. Default: Mungert/LightOnOCR-1B-1025-GGUF |
+| `vlm_safetensors_model_id` | `ANNO_RAG_VLM_SAFETENSORS_MODEL_ID` | `--vlm-safetensors-model-id` | *(unset)* | 0.15 | HuggingFace repo for vLLM safetensors VLM model. Default: lightonai/LightOnOCR-2-1B |
+| `vlm_gguf_model_id` | `ANNO_RAG_VLM_GGUF_MODEL_ID` | `--vlm-gguf-model-id` | *(unset)* | 0.15 | HuggingFace repo for llama-server GGUF VLM model. Default: Mungert/LightOnOCR-1B-1025-GGUF |
 
 > **Runtime-only env vars** (not in `config.toml`): `ANNO_MODELS_DIR` (model weights override), `ANNO_RAG_VAULT_PASSPHRASE`, `ANNO_RAG_VAULT_KMS_PROVIDER`, `ANNO_RAG_VAULT_KMS_KEY_ID`.

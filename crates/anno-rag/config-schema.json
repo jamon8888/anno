@@ -455,7 +455,7 @@
     "cli_flag": "--vlm-safetensors-model-id",
     "doc": "HuggingFace repo for vLLM safetensors VLM model. Default: lightonai/LightOnOCR-2-1B",
     "default_value": "null",
-    "since": "",
+    "since": "0.15",
     "type_name": "Option<String>"
   },
   {
@@ -464,7 +464,7 @@
     "cli_flag": "--vlm-gguf-model-id",
     "doc": "HuggingFace repo for llama-server GGUF VLM model. Default: Mungert/LightOnOCR-1B-1025-GGUF",
     "default_value": "null",
-    "since": "",
+    "since": "0.15",
     "type_name": "Option<String>"
   }
 ]
