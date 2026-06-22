@@ -739,6 +739,76 @@ pub struct AnnoRagConfig {
     )]
     #[serde(default = "default_graph_per_hop_limit")]
     pub graph_per_hop_limit: usize,
+
+    /// VLM backend: `"vllm"` (on-prem GPU server, default), `"local"` (llama-server
+    /// desktop GGUF), or `"off"` (disable VLM; fall back to Tesseract).
+    /// Only active in builds compiled with the `vlm-ocr` feature.
+    /// Always present in the config struct to avoid serde complications.
+    #[config_meta(
+        env = "ANNO_RAG_VLM_BACKEND",
+        cli = "--vlm-backend",
+        doc = "VLM OCR backend: vllm (default), local, or off. Requires vlm-ocr feature.",
+        since = "0.15"
+    )]
+    #[serde(default)]
+    pub vlm_backend: Option<String>,
+
+    /// Base URL for the co-located vLLM server (default: `http://127.0.0.1:8000`).
+    /// Used when `vlm_backend = "vllm"`.
+    #[config_meta(
+        env = "ANNO_RAG_VLM_VLLM_URL",
+        cli = "--vlm-vllm-url",
+        doc = "Base URL for the co-located vLLM server. Default: http://127.0.0.1:8000",
+        since = "0.15"
+    )]
+    #[serde(default)]
+    pub vlm_vllm_url: Option<String>,
+
+    /// Base URL for the local llama-server GGUF endpoint (default: `http://127.0.0.1:8080`).
+    /// Used when `vlm_backend = "local"`.
+    #[config_meta(
+        env = "ANNO_RAG_VLM_LOCAL_URL",
+        cli = "--vlm-local-url",
+        doc = "Base URL for the local llama-server GGUF endpoint. Default: http://127.0.0.1:8080",
+        since = "0.15"
+    )]
+    #[serde(default)]
+    pub vlm_local_url: Option<String>,
+
+    /// Confidence threshold in `[0.0, 1.0]`; pages whose VLM transcription
+    /// scores below this fall back to Tesseract (default: `0.6`).
+    #[config_meta(
+        env = "ANNO_RAG_VLM_CONFIDENCE_THRESHOLD",
+        cli = "--vlm-confidence-threshold",
+        doc = "VLM confidence threshold [0.0, 1.0]; below this falls back to Tesseract. Default: 0.6",
+        since = "0.15"
+    )]
+    #[serde(default)]
+    pub vlm_confidence_threshold: Option<f32>,
+
+    /// HuggingFace repo ID for the safetensors VLM model served by vLLM
+    /// (default: `"lightonai/LightOnOCR-2-1B"`).
+    /// Always present for serde compatibility; only used when `vlm-ocr` feature is enabled.
+    #[config_meta(
+        env = "ANNO_RAG_VLM_SAFETENSORS_MODEL_ID",
+        cli = "--vlm-safetensors-model-id",
+        doc = "HuggingFace repo for vLLM safetensors VLM model. Default: lightonai/LightOnOCR-2-1B",
+        since = "0.15"
+    )]
+    #[serde(default)]
+    pub vlm_safetensors_model_id: Option<String>,
+
+    /// HuggingFace repo ID for the GGUF VLM model served by llama-server
+    /// (default: `"Mungert/LightOnOCR-1B-1025-GGUF"`).
+    /// Always present for serde compatibility; only used when `vlm-ocr` feature is enabled.
+    #[config_meta(
+        env = "ANNO_RAG_VLM_GGUF_MODEL_ID",
+        cli = "--vlm-gguf-model-id",
+        doc = "HuggingFace repo for llama-server GGUF VLM model. Default: Mungert/LightOnOCR-1B-1025-GGUF",
+        since = "0.15"
+    )]
+    #[serde(default)]
+    pub vlm_gguf_model_id: Option<String>,
 }
 
 fn default_memory_collection_name() -> String {
@@ -860,6 +930,12 @@ impl Default for AnnoRagConfig {
             rerank_onnx_file: default_rerank_onnx_file(),
             rerank_pool_size: default_rerank_pool_size(),
             rerank_batch_size: default_rerank_batch_size(),
+            vlm_backend: None,
+            vlm_vllm_url: None,
+            vlm_local_url: None,
+            vlm_confidence_threshold: None,
+            vlm_safetensors_model_id: None,
+            vlm_gguf_model_id: None,
         }
     }
 }
@@ -879,8 +955,13 @@ impl AnnoRagConfig {
             if path.exists() {
                 let contents = std::fs::read_to_string(path)
                     .map_err(|e| ConfigLoadError::Io(format!("read {}: {e}", path.display())))?;
-                let from_file: Self = toml::from_str(&contents)
+                let mut from_file: Self = toml::from_str(&contents)
                     .map_err(|e| ConfigLoadError::Toml(format!("{}: {e}", path.display())))?;
+                // Clamp here so TOML-sourced values obey the same [0,1] invariant
+                // that apply_env() and apply_overrides() enforce for their paths.
+                from_file.vlm_confidence_threshold = from_file
+                    .vlm_confidence_threshold
+                    .map(|v| v.clamp(0.0, 1.0));
                 cfg = from_file;
             }
         }
@@ -1027,6 +1108,32 @@ impl AnnoRagConfig {
         if let Ok(v) = std::env::var("ANNO_RAG_OCR_BACKEND") {
             self.ocr_backend = Some(v);
         }
+        if let Ok(v) = std::env::var("ANNO_RAG_VLM_BACKEND") {
+            if !v.is_empty() {
+                self.vlm_backend = Some(v);
+            }
+        }
+        if let Ok(v) = std::env::var("ANNO_RAG_VLM_VLLM_URL") {
+            if !v.is_empty() {
+                self.vlm_vllm_url = Some(v);
+            }
+        }
+        if let Ok(v) = std::env::var("ANNO_RAG_VLM_LOCAL_URL") {
+            if !v.is_empty() {
+                self.vlm_local_url = Some(v);
+            }
+        }
+        if let Ok(v) = std::env::var("ANNO_RAG_VLM_CONFIDENCE_THRESHOLD") {
+            if let Ok(n) = v.parse::<f32>() {
+                self.vlm_confidence_threshold = Some(n.clamp(0.0, 1.0));
+            }
+        }
+        if let Ok(v) = std::env::var("ANNO_RAG_VLM_SAFETENSORS_MODEL_ID") {
+            self.vlm_safetensors_model_id = Some(v);
+        }
+        if let Ok(v) = std::env::var("ANNO_RAG_VLM_GGUF_MODEL_ID") {
+            self.vlm_gguf_model_id = Some(v);
+        }
     }
 
     fn apply_overrides(&mut self, ov: &ConfigOverrides) {
@@ -1170,6 +1277,24 @@ impl AnnoRagConfig {
         }
         if let Some(v) = ov.graph_per_hop_limit {
             self.graph_per_hop_limit = v;
+        }
+        if let Some(v) = ov.vlm_backend.clone() {
+            self.vlm_backend = Some(v);
+        }
+        if let Some(v) = ov.vlm_vllm_url.clone() {
+            self.vlm_vllm_url = Some(v);
+        }
+        if let Some(v) = ov.vlm_local_url.clone() {
+            self.vlm_local_url = Some(v);
+        }
+        if let Some(v) = ov.vlm_confidence_threshold {
+            self.vlm_confidence_threshold = Some(v.clamp(0.0, 1.0));
+        }
+        if let Some(v) = ov.vlm_safetensors_model_id.clone() {
+            self.vlm_safetensors_model_id = Some(v);
+        }
+        if let Some(v) = ov.vlm_gguf_model_id.clone() {
+            self.vlm_gguf_model_id = Some(v);
         }
     }
 

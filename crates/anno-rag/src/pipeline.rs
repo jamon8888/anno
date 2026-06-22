@@ -145,6 +145,11 @@ pub struct Pipeline {
     pub(crate) legal_enricher: LegalEnricher,
     /// Legal knowledge graph sidecar.
     pub(crate) legal_kg: std::sync::Arc<dyn crate::legal::kg::LegalKnowledgeGraph>,
+    /// Optional VLM OCR client wired in by anno-rag-bin after construction.
+    /// `None` means "use Tesseract only" — the VLM branch in ingest is a clean
+    /// no-op when this is `None` or when `try_vlm_ocr` returns `None`.
+    #[cfg(feature = "vlm-ocr")]
+    pub(crate) vlm_client: Option<std::sync::Arc<dyn crate::vlm::VlmOcrClient>>,
 }
 
 impl Pipeline {
@@ -198,7 +203,22 @@ impl Pipeline {
             enrichment_status,
             legal_enricher,
             legal_kg,
+            // Wired externally by anno-rag-bin via Pipeline::set_vlm_client.
+            #[cfg(feature = "vlm-ocr")]
+            vlm_client: None,
         })
+    }
+
+    /// Wire a VLM OCR client into the pipeline. Called by `anno-rag-bin` after
+    /// `Pipeline::new` when the `vlm-ocr` feature is active and the runtime
+    /// config selects a VLM backend.
+    ///
+    /// When `vlm_client` is `None` (i.e. this method is never called, or the
+    /// backend resolved to `"off"`), ingest falls through to Tesseract — the
+    /// default build behaviour is preserved exactly.
+    #[cfg(feature = "vlm-ocr")]
+    pub fn set_vlm_client(&mut self, client: std::sync::Arc<dyn crate::vlm::VlmOcrClient>) {
+        self.vlm_client = Some(client);
     }
 
     /// Lazy-init the embedder. Loads ~470 MB of model weights on first call.
@@ -410,8 +430,14 @@ impl Pipeline {
                 document: scoped_document(),
             });
         }
+        #[cfg(feature = "vlm-ocr")]
+        let extracted = ingest::extract_with_vlm(path, cfg, self.vlm_client.as_ref()).await?;
+        #[cfg(not(feature = "vlm-ocr"))]
         let extracted = ingest::extract(path, cfg).await?;
-        let used_embedded_ocr = extracted.ocr_status == ingest::OcrStatus::CompletedEmbedded;
+        let used_embedded_ocr = matches!(
+            extracted.ocr_status,
+            ingest::OcrStatus::CompletedEmbedded | ingest::OcrStatus::CompletedVlm
+        );
         if !should_index_extracted_doc(&extracted) {
             tracing::warn!(
                 path = %path.display(),

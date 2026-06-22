@@ -52,6 +52,8 @@ pub mod store;
 pub mod validators;
 pub mod vault;
 pub mod vault_admin;
+#[cfg(feature = "vlm-ocr")]
+pub mod vlm;
 
 pub use config::AnnoRagConfig;
 pub use error::{Error, Result};

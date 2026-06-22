@@ -18,6 +18,9 @@ pub mod mock;
 pub mod privacy;
 /// Routing client that runs local extraction first and falls back to an LLM.
 pub mod routing;
+/// Vision-OCR client trait and value types (image→text transcription).
+#[cfg(feature = "vlm-ocr")]
+pub mod vlm;
 
 use async_trait::async_trait;
 use serde_json::Value;
