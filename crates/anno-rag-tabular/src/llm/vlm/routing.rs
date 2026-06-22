@@ -58,8 +58,14 @@ fn vlm_url_host(url: &str) -> Option<String> {
         let end = rest.find(']')?;
         return Some(format!("[{}]", &rest[..end]));
     }
-    // IPv4 or hostname: strip optional port
-    let host = host_and_port.split(':').next().unwrap_or(host_and_port);
+    // IPv4 or hostname: strip optional port and any fragment (e.g. "host:8000#frag")
+    let host = host_and_port
+        .split('#')
+        .next()
+        .unwrap_or(host_and_port)
+        .split(':')
+        .next()
+        .unwrap_or(host_and_port);
     Some(host.to_ascii_lowercase())
 }
 
@@ -184,13 +190,10 @@ mod tests {
             Some("localhost")
         );
         // 0.0.0.0 is NOT a loopback address — must not pass guard
-        assert_ne!(
+        assert_eq!(
             vlm_url_host("http://0.0.0.0:8000").as_deref(),
-            Some("127.0.0.1")
+            Some("0.0.0.0"),
+            "0.0.0.0 must parse as itself so guard_local_url can reject it"
         );
-        assert!(!matches!(
-            vlm_url_host("http://0.0.0.0:8000").as_deref(),
-            Some("localhost") | Some("127.0.0.1") | Some("[::1]")
-        ));
     }
 }
