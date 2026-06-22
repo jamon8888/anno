@@ -94,6 +94,7 @@ safetensors = "0.4"
 
 # Document-to-text extraction
 deformat = "0.15"
+image           = { version = "0.25", default-features = false, features = ["png", "jpeg", "webp", "tiff", "bmp"] }
 
 # Performance
 rayon = "1"
@@ -138,6 +139,9 @@ anno-corpus-store = { path = "crates/anno-corpus-store" }
 # anno-rag v0.2 — MCP server deps
 rmcp            = { version = "1.6", features = ["server", "transport-io", "macros"] }
 schemars        = "0.8"
+
+# VLM-OCR — MIT, Rust-native OpenAI-compat HTTP client (off by default)
+liter-llm       = { version = "1", default-features = false, features = ["native-http"] }
 
 # Local development: see .cargo/config.toml.example for path overrides
 

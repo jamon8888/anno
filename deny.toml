@@ -67,15 +67,6 @@ exceptions = [
     # no copyleft. Scoped to the one crate that still ships the old SPDX id.
     { crate = "finl_unicode", allow = ["Unicode-DFS-2016"] },
 
-    # Elastic-2.0 via `kreuzberg` (direct anno-rag dependency — document
-    # extraction backend). Elastic License 2.0 is source-available, NOT
-    # OSI-approved: it forbids offering the software as a managed service
-    # and forbids removing license keys. anno-rag consumes kreuzberg as a
-    # library inside a locally-run desktop binary — neither restriction is
-    # triggered by that use. REVIEW BEFORE any SaaS/hosted offering of
-    # anno-rag: a hosted multi-tenant deployment may breach ELv2 §1.
-    { crate = "kreuzberg", allow = ["Elastic-2.0"] },
-
     # bzip2-1.0.6 is the bzip2 open-source license (BSD-style, permissive).
     # It predates SPDX and is not in the standard allow list; the license
     # text is functionally equivalent to BSD-2-Clause. Pulled transitively

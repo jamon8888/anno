@@ -1,0 +1,8 @@
+Échéancier des paiements
+
+Échéance | Date limite | Montant (€ HT) | Statut
+------------------------------------------------
+Acompte (30 %) | 01/02/2025 | 3 000,00 | Réglé
+Solde 1 (40 %) | 01/05/2025 | 4 000,00 | En attente
+Solde 2 (30 %) | 01/09/2025 | 3 000,00 | En attente
+Total | — | 10 000,00 | —

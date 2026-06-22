@@ -19,6 +19,8 @@ gliner2-candle-cpu = ["anno-rag/gliner2-candle-cpu", "anno-rag-mcp/gliner2-candl
 embedded-ocr = ["anno-rag/embedded-ocr", "anno-rag-mcp/embedded-ocr"]
 ocr-paddle = ["anno-rag/ocr-paddle", "anno-rag-mcp/ocr-paddle"]
 rerank = ["anno-rag/rerank", "anno-rag-mcp/rerank"]
+# Route OCR-classified pages through a within-boundary VLM (Spec B). Off by default.
+vlm-ocr = ["anno-rag-tabular/vlm-ocr"]
 
 [[bin]]
 name = "anno-rag"

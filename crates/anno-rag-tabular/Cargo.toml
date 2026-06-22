@@ -13,12 +13,17 @@ description = "Harvey/Legora-style tabular review for anno-rag — schema-driven
 gliner2 = ["dep:anno"]
 # Exposes `*_for_tests` constructors to downstream integration tests.
 test-utils = []
+# Within-boundary vision-OCR via liter-llm (MIT, Rust-native). Off by default.
+# Routes to any OpenAI-compat endpoint: co-located vLLM (on-prem GPU)
+# or llama-server GGUF (desktop) — configured via vlm_vllm_url / vlm_local_url.
+vlm-ocr = ["dep:liter-llm", "anno-rag/vlm-ocr"]
 
 [dependencies]
 # Single-crate workspace today — pulls in detector, vault, store, embed, audit.
 # Replaces the plan's anno-rag-core / -store / -embed / -audit deps.
 anno-rag           = { path = "../anno-rag" }
 anno               = { path = "../anno", features = ["gliner2-fastino"], optional = true }
+liter-llm          = { workspace = true, optional = true }
 
 tokio              = { workspace = true }
 async-trait        = "0.1"

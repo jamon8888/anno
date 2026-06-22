@@ -1,0 +1,7 @@
+Tableau des parties contractantes
+
+Qualité | Nom / Raison sociale | Représentant | Date de naissance
+-----------------------------------------------------------------
+Prestataire | SARL Fictive | M. Jean Martin | 15/06/1978
+Client | Mme Marie Dupont | — | 22/11/1985
+Garant | SAS Garantie FR | M. Paul Lefebvre | 03/04/1960

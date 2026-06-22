@@ -56,6 +56,8 @@ pub enum OcrStatus {
     NotRequired,
     /// OCR ran through the embedded Kreuzberg path.
     CompletedEmbedded,
+    /// OCR ran through the VLM path (vLLM or local llama-server).
+    CompletedVlm,
     /// OCR is needed but was intentionally not run.
     Deferred(OcrDeferredReason),
 }
@@ -123,12 +125,21 @@ pub struct ExtractedChunk {
 pub async fn extract(path: &Path, cfg: &AnnoRagConfig) -> Result<ExtractedDoc> {
     let native_config = native_extraction_config(cfg);
 
-    let result = kreuzberg::extract_file(path, None, &native_config)
-        .await
-        .map_err(|e| Error::Ingest {
-            path: path.display().to_string(),
-            source: Box::new(e),
-        })?;
+    // M3: 30 s timeout — guards against Ghostscript-PDF-induced hangs (regression in
+    // kreuzberg 4.9.0, not present in 4.7.4 but preserved here for defence in depth).
+    let result = tokio::time::timeout(
+        std::time::Duration::from_secs(30),
+        kreuzberg::extract_file(path, None, &native_config),
+    )
+    .await
+    .map_err(|_| Error::Ingest {
+        path: path.display().to_string(),
+        source: "native extraction timed out after 30 s".into(),
+    })?
+    .map_err(|e| Error::Ingest {
+        path: path.display().to_string(),
+        source: Box::new(e),
+    })?;
 
     let is_pdf = is_pdf(path);
     let class = classify_document(is_pdf, &result.content, result.pages.as_deref());
@@ -215,6 +226,226 @@ pub async fn extract(path: &Path, cfg: &AnnoRagConfig) -> Result<ExtractedDoc> {
     }
 
     Ok(extracted_doc(path, result, class, OcrStatus::NotRequired))
+}
+
+/// Maximum pages sent to the VLM per document. Beyond this the document is large
+/// enough that Tesseract is more cost-effective.
+#[cfg(feature = "vlm-ocr")]
+const MAX_VLM_PAGES: usize = 50;
+
+/// Render PDF pages to PNG bytes and call the VLM client per page.
+///
+/// Uses `kreuzberg::pdf::PdfPageIterator` (already a dep; mutex-safe, lazy per-page
+/// rendering at 150 DPI) to convert pages to PNG, then calls `vlm_client.transcribe()`
+/// for each page.  Returns `None` to signal Tesseract fallback in any of these cases:
+/// - File is not a PDF
+/// - PDF cannot be opened / rendered
+/// - Any page's transcription confidence is below `vlm_confidence_threshold`
+/// - VLM network/server error
+#[cfg(feature = "vlm-ocr")]
+async fn try_vlm_ocr(
+    path: &std::path::Path,
+    cfg: &crate::config::AnnoRagConfig,
+    vlm_client: &dyn crate::vlm::VlmOcrClient,
+) -> Option<String> {
+    // Only PDFs benefit from page rendering; other formats are handled well by Tesseract.
+    let ext = path
+        .extension()
+        .and_then(|e| e.to_str())
+        .map(str::to_lowercase);
+    if ext.as_deref() != Some("pdf") {
+        return None;
+    }
+
+    let pdf_bytes = match tokio::fs::read(path).await {
+        Ok(b) => b,
+        Err(e) => {
+            tracing::warn!(path = %path.display(), "vlm-ocr: failed to read PDF: {e}");
+            return None;
+        }
+    };
+
+    // PdfPageIterator acquires the global pdfium mutex per page (serialises pdfium
+    // which is not thread-safe).  Run everything in spawn_blocking to avoid
+    // stalling the async executor while the mutex is held.
+    let path_str = path.display().to_string();
+    // page_pngs carries (original_pdf_page_index, png_bytes) so log messages
+    // reference the real page number even when earlier pages failed to render.
+    let page_pngs: Vec<(usize, Vec<u8>)> = match tokio::task::spawn_blocking(move || {
+        let iter = kreuzberg::pdf::PdfPageIterator::new(pdf_bytes, Some(150), None)
+            .map_err(|e| format!("open PDF: {e}"))?;
+        let pngs: Vec<(usize, Vec<u8>)> = iter
+            .take(MAX_VLM_PAGES)
+            .enumerate()
+            .filter_map(|(idx, r)| {
+                r.map_err(|e| tracing::debug!(page = idx, "vlm-ocr: page render skipped: {e}"))
+                    .ok()
+                    .map(|(_, png)| (idx, png))
+            })
+            .collect();
+        Ok::<_, String>(pngs)
+    })
+    .await
+    {
+        Ok(Ok(pngs)) => pngs,
+        Ok(Err(e)) => {
+            tracing::warn!(path = %path_str, "vlm-ocr: {e}");
+            return None;
+        }
+        Err(e) => {
+            tracing::warn!(path = %path_str, "vlm-ocr: render task panicked: {e}");
+            return None;
+        }
+    };
+
+    if page_pngs.is_empty() {
+        return None;
+    }
+
+    let threshold = cfg.vlm_confidence_threshold.unwrap_or(0.6);
+    let model = vlm_client.model_id().to_string();
+    let mut page_texts: Vec<String> = Vec::with_capacity(page_pngs.len());
+
+    for (page_index, png_bytes) in page_pngs.into_iter() {
+        let image = crate::vlm::PageImage {
+            bytes: png_bytes,
+            mime: "image/png",
+            doc_id: path_str.clone(),
+            page: page_index,
+        };
+
+        match vlm_client.transcribe(&image, "").await {
+            Ok(t) if t.confidence >= threshold => {
+                tracing::debug!(
+                    path = %path_str,
+                    page = page_index,
+                    confidence = t.confidence,
+                    model = %model,
+                    "vlm-ocr: page transcribed"
+                );
+                page_texts.push(t.text);
+            }
+            Ok(t) => {
+                // One low-confidence page → abort VLM path; Tesseract handles the whole doc.
+                // Log at info so operators can detect misconfigured VLM servers that
+                // systematically return low confidence (e.g. blank cover page at page 0).
+                tracing::info!(
+                    path = %path_str,
+                    page = page_index,
+                    confidence = t.confidence,
+                    threshold,
+                    pages_already_sent = page_index,
+                    "vlm-ocr: confidence below threshold, falling back to Tesseract for whole doc"
+                );
+                return None;
+            }
+            Err(e) => {
+                tracing::warn!(
+                    path = %path_str,
+                    page = page_index,
+                    "vlm-ocr: transcription failed: {e}"
+                );
+                return None;
+            }
+        }
+    }
+
+    if page_texts.is_empty() {
+        return None;
+    }
+
+    Some(page_texts.join("\n\n"))
+}
+
+/// Simple paragraph-aware chunker for VLM output text.
+///
+/// Respects `chunk_max_chars` from config; splits at blank lines first,
+/// then hard-cuts overlong paragraphs.  No heading detection (VLM output
+/// is plain text, not markdown).
+#[cfg(feature = "vlm-ocr")]
+fn chunk_vlm_text(text: &str, cfg: &AnnoRagConfig) -> Vec<ExtractedChunk> {
+    let max = cfg.chunk_max_chars as usize;
+    let mut chunks: Vec<ExtractedChunk> = Vec::new();
+    let mut idx: u32 = 0;
+    let mut current = String::new();
+    let mut current_start: usize = 0;
+    let mut byte_offset: usize = 0;
+
+    for para in text.split("\n\n") {
+        let para_bytes = para.len();
+        let sep = if current.is_empty() { 0 } else { 2 }; // "\n\n"
+
+        if !current.is_empty() && current.len() + sep + para_bytes > max {
+            let end = current_start + current.len();
+            chunks.push(ExtractedChunk {
+                idx,
+                text: std::mem::take(&mut current),
+                char_start: current_start as u32,
+                char_end: end as u32,
+                page: None,
+                page_end: None,
+                heading_context: Vec::new(),
+            });
+            idx += 1;
+            current_start = byte_offset;
+            current.push_str(para);
+        } else {
+            if !current.is_empty() {
+                current.push_str("\n\n");
+            }
+            current.push_str(para);
+        }
+
+        byte_offset += para_bytes + 2;
+    }
+
+    if !current.is_empty() {
+        let end = current_start + current.len();
+        chunks.push(ExtractedChunk {
+            idx,
+            text: current,
+            char_start: current_start as u32,
+            char_end: end as u32,
+            page: None,
+            page_end: None,
+            heading_context: Vec::new(),
+        });
+    }
+
+    chunks
+}
+
+/// Variant of [`extract`] that runs a VLM OCR pre-pass (when the `vlm-ocr` feature
+/// is active and a client is wired in) before falling back to the embedded Tesseract path.
+///
+/// Called by [`crate::pipeline::Pipeline`] from `ingest_one_counted`.
+/// All other callers (privacy workspace, MCP indexer) use the plain [`extract`],
+/// which preserves existing behaviour with zero signature change.
+#[cfg(feature = "vlm-ocr")]
+pub async fn extract_with_vlm(
+    path: &Path,
+    cfg: &AnnoRagConfig,
+    vlm_client: Option<&std::sync::Arc<dyn crate::vlm::VlmOcrClient>>,
+) -> Result<ExtractedDoc> {
+    if let Some(vlm) = vlm_client {
+        if let Some(text) = try_vlm_ocr(path, cfg, vlm.as_ref()).await {
+            tracing::info!(
+                path = %path.display(),
+                model = vlm.model_id(),
+                pages = text.matches("\n\n").count() + 1,
+                "vlm-ocr succeeded; skipping Tesseract"
+            );
+            let chunks = chunk_vlm_text(&text, cfg);
+            return Ok(ExtractedDoc {
+                source_path: path.display().to_string(),
+                content: text,
+                chunks,
+                class: DocClass::ScannedPdf,
+                ocr_status: OcrStatus::CompletedVlm,
+            });
+        }
+    }
+    extract(path, cfg).await
 }
 
 fn extracted_doc(
@@ -371,6 +602,10 @@ fn page_needs_ocr(page: &PageContent) -> bool {
     alnum_ws_ratio < 0.2
 }
 
+// TODO(vlm-ocr): VLM ingest wiring deferred — RoutingVlmClient lives in anno-rag-tabular
+// which depends on anno-rag (circular). Wire via callback injection from anno-rag-bin:
+// IngestConfig { vlm_client: Option<Arc<dyn SomeVlmTrait>> }. See routing.rs for the
+// routing layer that is ready to use once the callback plumbing is added.
 #[cfg(feature = "embedded-ocr")]
 async fn embedded_ocr_extract(
     path: &Path,
@@ -411,13 +646,21 @@ async fn embedded_ocr_extract(
         "OCR extraction starting"
     );
 
-    kreuzberg::extract_file(path, None, &extraction_config)
-        .await
-        .map(Some)
-        .map_err(|e| Error::Ingest {
-            path: path.display().to_string(),
-            source: Box::new(e),
-        })
+    // M3: 120 s timeout for OCR path — Tesseract can be slow on dense scanned pages.
+    tokio::time::timeout(
+        std::time::Duration::from_secs(120),
+        kreuzberg::extract_file(path, None, &extraction_config),
+    )
+    .await
+    .map_err(|_| Error::Ingest {
+        path: path.display().to_string(),
+        source: "OCR extraction timed out after 120 s".into(),
+    })?
+    .map(Some)
+    .map_err(|e| Error::Ingest {
+        path: path.display().to_string(),
+        source: Box::new(e),
+    })
 }
 
 #[cfg(not(feature = "embedded-ocr"))]
@@ -497,8 +740,11 @@ mod tests {
         assert!(hierarchy.include_bbox);
         assert_eq!(hierarchy.ocr_coverage_threshold, None);
 
-        // content_filter not available in kreuzberg 4.7.4 (MIT); header/footer
-        // filtering is handled internally by kreuzberg in this version.
+        // content_filter (header/footer stripping) was added in kreuzberg 4.8.0 (ELv2) and is
+        // absent from ExtractionConfig in 4.7.4 (MIT). pdf_keep_headers / pdf_keep_footers in
+        // AnnoRagConfig are wired but silently have no effect. To re-enable: restore the
+        // content_filter block in native_extraction_config() and uncomment assertions here.
+        // Re-enablement path: docs/superpowers/plans/2026-06-20-vlm-ocr-implementation.md §Task 1.
     }
 
     #[test]
