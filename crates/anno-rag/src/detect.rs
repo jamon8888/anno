@@ -82,7 +82,7 @@ impl FrPatterns {
             // ("le", "la") after the honorific block role titles like
             // `Monsieur le Président` from being mistaken for a person.
             person_fr_honorific: Regex::new(
-                r"(?:Monsieur|Madame|Mademoiselle|Mme\.?|Mlle\.?|M\.|Maître|Me\.?)\s+(\p{Lu}[\p{L}'\-]+(?:\s+\p{Lu}[\p{L}'\-]+)+)",
+                r"(?:Monsieur|Madame|Mademoiselle|Mme\.?|Mlle\.?|M\.|Maître|Me\.?|Dr\.?|Pr\.?)\s+(\p{Lu}[\p{L}'\-]+(?:\s+\p{Lu}[\p{L}'\-]+)+)",
             )
             .expect("person honorific regex is a literal"),
         })

@@ -1,8 +1,8 @@
-//! Embed text via candle (default: `OrdalieTech/Solon-embeddings-large-0.1`).
+//! Embed text via candle (default: `AlpEge/bge-m3-onnx-int8`).
 //!
 //! Weights are fetched from HuggingFace Hub on first use and cached under
 //! `cfg.models_cache()`. The local cache subdirectory is the full HF repo ID
-//! path (e.g. `OrdalieTech/Solon-embeddings-large-0.1/`).
+//! path (e.g. `AlpEge/bge-m3-onnx-int8/`).
 //!
 //! Following the e5 convention, every input is prefixed with `"passage: "`
 //! before tokenization. The final embedding is mean-pooled (weighted by the
@@ -18,9 +18,15 @@ use tokenizers::Tokenizer;
 
 const MAX_EMBED_TOKENS: usize = 512;
 
-/// 384-dim multilingual embedder backed by candle + `BertModel`.
+/// Multilingual embedder backed by candle + `BertModel`.
+///
+/// The `BertModel` forward pass mutates internal state (KV cache, intermediate
+/// buffers) and must not be called concurrently from multiple threads. The
+/// `Mutex` here serializes concurrent `embed_batch` / `embed_query` calls that
+/// arrive from parallel MCP requests (searches + background ingest) so the
+/// server does not crash under load.
 pub struct Embedder {
-    model: BertModel,
+    model: std::sync::Mutex<BertModel>,
     tokenizer: Tokenizer,
     device: Device,
     dim: usize,
@@ -66,7 +72,7 @@ impl Embedder {
             let model = BertModel::load(vb, &config)
                 .map_err(|e| Error::Embed(format!("bert load (local): {e}")))?;
             return Ok(Self {
-                model,
+                model: std::sync::Mutex::new(model),
                 tokenizer,
                 device,
                 dim: cfg.embed_dim,
@@ -122,7 +128,7 @@ impl Embedder {
             BertModel::load(vb, &config).map_err(|e| Error::Embed(format!("bert load: {e}")))?;
 
         Ok(Self {
-            model,
+            model: std::sync::Mutex::new(model),
             tokenizer,
             device,
             dim: cfg.embed_dim,
@@ -215,6 +221,8 @@ impl Embedder {
 
         let out = self
             .model
+            .lock()
+            .expect("embedder mutex poisoned")
             .forward(&input_ids, &token_type, Some(&attn))
             .map_err(|e| Error::Embed(format!("forward: {e}")))?;
         let out = out

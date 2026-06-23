@@ -283,6 +283,18 @@ impl KnowledgeService {
         self.store.running_job_for_corpus(corpus_id)
     }
 
+    /// Set the total file count for a job (call once the folder scan is done).
+    ///
+    /// # Errors
+    /// Returns store errors on SQLite failure.
+    pub fn set_job_total(
+        &self,
+        job_id: &str,
+        files_total: i64,
+    ) -> anno_knowledge_store::Result<()> {
+        self.store.set_job_total(job_id, files_total)
+    }
+
     /// Update job progress.
     ///
     /// # Errors
