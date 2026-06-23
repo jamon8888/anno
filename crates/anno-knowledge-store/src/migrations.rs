@@ -165,7 +165,10 @@ fn migrate_v2(conn: &Connection) -> Result<()> {
         .collect::<std::result::Result<Vec<_>, _>>()?;
 
     let adds = [
-        ("corpus_id", "ALTER TABLE index_jobs ADD COLUMN corpus_id TEXT"),
+        (
+            "corpus_id",
+            "ALTER TABLE index_jobs ADD COLUMN corpus_id TEXT",
+        ),
         (
             "files_done",
             "ALTER TABLE index_jobs ADD COLUMN files_done INTEGER NOT NULL DEFAULT 0",
@@ -174,8 +177,14 @@ fn migrate_v2(conn: &Connection) -> Result<()> {
             "files_total",
             "ALTER TABLE index_jobs ADD COLUMN files_total INTEGER NOT NULL DEFAULT 0",
         ),
-        ("created_at", "ALTER TABLE index_jobs ADD COLUMN created_at TEXT"),
-        ("updated_at", "ALTER TABLE index_jobs ADD COLUMN updated_at TEXT"),
+        (
+            "created_at",
+            "ALTER TABLE index_jobs ADD COLUMN created_at TEXT",
+        ),
+        (
+            "updated_at",
+            "ALTER TABLE index_jobs ADD COLUMN updated_at TEXT",
+        ),
     ];
     for (col, sql) in adds {
         if !existing.iter().any(|c| c == col) {
@@ -241,8 +250,17 @@ mod tests {
             .collect::<std::result::Result<Vec<_>, _>>()
             .expect("collect");
 
-        for expected in ["corpus_id", "files_done", "files_total", "created_at", "updated_at"] {
-            assert!(cols.contains(&expected.to_string()), "missing column {expected}");
+        for expected in [
+            "corpus_id",
+            "files_done",
+            "files_total",
+            "created_at",
+            "updated_at",
+        ] {
+            assert!(
+                cols.contains(&expected.to_string()),
+                "missing column {expected}"
+            );
         }
 
         let version: i64 = conn
