@@ -201,7 +201,7 @@ fn default_ner_candle_model_id() -> String {
 }
 
 fn default_embed_model() -> String {
-    "AlpEge/bge-m3-onnx-int8".to_string()
+    "intfloat/multilingual-e5-small".to_string()
 }
 
 fn default_ner_pii_model_id() -> String {
@@ -209,7 +209,7 @@ fn default_ner_pii_model_id() -> String {
 }
 
 fn default_embed_dim() -> usize {
-    1024
+    384
 }
 
 fn default_default_top_k() -> usize {
@@ -247,7 +247,7 @@ pub struct AnnoRagConfig {
     #[config_meta(
         env = "ANNO_RAG_EMBED_MODEL",
         cli = "--embed-model",
-        doc = "HuggingFace model ID for the embedder. Default: AlpEge/bge-m3-onnx-int8",
+        doc = "HuggingFace model ID for the embedder. Default: intfloat/multilingual-e5-small",
         since = "0.1"
     )]
     #[serde(default = "default_embed_model")]
@@ -256,7 +256,7 @@ pub struct AnnoRagConfig {
     #[config_meta(
         env = "ANNO_RAG_EMBED_DIM",
         cli = "--embed-dim",
-        doc = "Vector dimension; must match embedder output. Default: 1024",
+        doc = "Vector dimension; must match embedder output. Default: 384 (e5-small/e5-base)",
         since = "0.1"
     )]
     #[serde(default = "default_embed_dim")]
@@ -1383,7 +1383,7 @@ impl AnnoRagConfig {
 
     /// Full embed model ID used as a two-level cache path.
     ///
-    /// Example: `"AlpEge/bge-m3-onnx-int8"` → `"AlpEge/bge-m3-onnx-int8"`
+    /// Example: `"intfloat/multilingual-e5-small"` → `"intfloat/multilingual-e5-small"`
     #[must_use]
     pub fn embedder_dir(&self) -> String {
         self.embed_model.clone()
@@ -1397,16 +1397,16 @@ mod tests {
     #[test]
     fn defaults_are_sensible() {
         let c = AnnoRagConfig::default();
-        assert_eq!(c.embed_dim, 1024);
+        assert_eq!(c.embed_dim, 384);
         assert!(c.default_top_k > 0);
         assert!(c.chunk_max_chars > c.chunk_overlap);
     }
 
     #[test]
-    fn default_embed_model_is_bge_m3_int8() {
+    fn default_embed_model_is_e5_small() {
         let c = AnnoRagConfig::default();
-        assert_eq!(c.embed_model, "AlpEge/bge-m3-onnx-int8");
-        assert_eq!(c.embed_dim, 1024);
+        assert_eq!(c.embed_model, "intfloat/multilingual-e5-small");
+        assert_eq!(c.embed_dim, 384);
     }
 
     #[test]
@@ -1468,7 +1468,7 @@ mod tests {
         assert_eq!(c.ocr_batch_budget_secs, None);
         assert!(c.embedder_dtype.is_none());
         assert_eq!(c.memory_collection_name, "memories");
-        // absent field → current default (1024 for bge-m3-onnx-int8)
+        // absent field → legacy default (kept at 1024 for existing memory stores)
         assert_eq!(c.memory_embedding_dim, 1024);
         assert!(c.ocr_cache_enabled);
         assert!(c.ocr_backend.is_none());
@@ -1802,7 +1802,7 @@ mod tests {
     #[test]
     fn load_with_no_file_returns_defaults() {
         let cfg = AnnoRagConfig::load_from_file(None, None).expect("load");
-        assert_eq!(cfg.embed_dim, 1024);
+        assert_eq!(cfg.embed_dim, 384);
         assert_eq!(cfg.default_top_k, 10);
     }
 
