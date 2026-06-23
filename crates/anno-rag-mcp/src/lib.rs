@@ -644,12 +644,16 @@ impl AnnoRagServer {
             .pipeline_arc()
             .expect("require_models succeeded → pipeline is set");
 
-        // Dedup guard: one active ingest per corpus key.
+        // Use a hashed key so raw filesystem paths are never surfaced in status output.
         let corpus_key = corpus_id
             .map(|id| id.as_string())
-            .unwrap_or_else(|| folder_string.clone());
+            .unwrap_or_else(|| legal_folder_id(&folder_string));
+
+        // Atomic same-process dedup: check + insert under write lock so two concurrent
+        // MCP calls cannot both pass the guard and enqueue duplicate jobs.
+        let job_id = uuid::Uuid::new_v4().to_string();
         {
-            let guard = self.active_ingest_jobs.read().await;
+            let mut guard = self.active_ingest_jobs.write().await;
             if let Some(existing_job_id) = guard.get(&corpus_key) {
                 return serde_json::to_value(serde_json::json!({
                     "ok": false,
@@ -660,10 +664,10 @@ impl AnnoRagServer {
                 }))
                 .map_err(|e| e.to_string());
             }
+            guard.insert(corpus_key.clone(), job_id.clone());
         }
 
-        // Register the job in the knowledge store.
-        let job_id = uuid::Uuid::new_v4().to_string();
+        // Register the job in the knowledge store (with cross-process dedup and rollback).
         let knowledge = self.knowledge().await.map_err(|e| e.to_string())?;
         // Cross-process dedup: check the DB for a running job that may have been
         // started by another server instance (the in-memory map only covers this process).
@@ -671,6 +675,7 @@ impl AnnoRagServer {
             .running_job_for_corpus(&corpus_key)
             .map_err(|e| e.to_string())?
         {
+            self.active_ingest_jobs.write().await.remove(&corpus_key);
             return serde_json::to_value(serde_json::json!({
                 "ok": false,
                 "job_id": existing_job_id,
@@ -680,19 +685,15 @@ impl AnnoRagServer {
             }))
             .map_err(|e| e.to_string());
         }
-        knowledge
-            .insert_job(
-                &job_id,
-                "legal_ingest",
-                corpus_id.map(|id| id.as_string()).as_deref(),
-                0,
-            )
-            .map_err(|e| e.to_string())?;
-
-        self.active_ingest_jobs
-            .write()
-            .await
-            .insert(corpus_key.clone(), job_id.clone());
+        if let Err(e) = knowledge.insert_job(
+            &job_id,
+            "legal_ingest",
+            corpus_id.map(|id| id.as_string()).as_deref(),
+            0,
+        ) {
+            self.active_ingest_jobs.write().await.remove(&corpus_key);
+            return Err(e.to_string());
+        }
 
         let out = corpus_id
             .map(|id| corpus_legal_output_dir(self.cfg.as_ref(), id))

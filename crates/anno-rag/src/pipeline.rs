@@ -2167,12 +2167,26 @@ impl Pipeline {
 
         let mut passages: Vec<String> = Vec::with_capacity(hits.len());
         for h in &hits {
-            passages.push(self.rehydrate(&h.text_pseudo).await?.text);
+            match self.rehydrate(&h.text_pseudo).await {
+                Ok(r) => passages.push(r.text),
+                Err(e) => {
+                    tracing::warn!(error = %e, chunk_id = %h.chunk_id, "rerank rehydrate failed; returning base ranking");
+                    hits.truncate(top_k);
+                    return Ok(hits);
+                }
+            }
         }
         let refs: Vec<&str> = passages.iter().map(String::as_str).collect();
 
         let reranker = self.reranker().await?;
-        let scores = reranker.score_pairs_batched(query, &refs, self.cfg.rerank_batch_size)?;
+        let scores = match reranker.score_pairs_batched(query, &refs, self.cfg.rerank_batch_size) {
+            Ok(s) => s,
+            Err(e) => {
+                tracing::warn!(error = %e, "reranker scoring failed; returning base ranking");
+                hits.truncate(top_k);
+                return Ok(hits);
+            }
+        };
 
         for (h, s) in hits.iter_mut().zip(&scores) {
             h.score = *s;
@@ -2209,12 +2223,26 @@ impl Pipeline {
 
         let mut passages: Vec<String> = Vec::with_capacity(hits.len());
         for h in &hits {
-            passages.push(self.rehydrate(&h.text_pseudo).await?.text);
+            match self.rehydrate(&h.text_pseudo).await {
+                Ok(r) => passages.push(r.text),
+                Err(e) => {
+                    tracing::warn!(error = %e, chunk_id = %h.chunk_id, "rerank rehydrate failed; returning base ranking");
+                    hits.truncate(top_k);
+                    return Ok(hits);
+                }
+            }
         }
         let refs: Vec<&str> = passages.iter().map(String::as_str).collect();
 
         let reranker = self.reranker().await?;
-        let scores = reranker.score_pairs_batched(query, &refs, self.cfg.rerank_batch_size)?;
+        let scores = match reranker.score_pairs_batched(query, &refs, self.cfg.rerank_batch_size) {
+            Ok(s) => s,
+            Err(e) => {
+                tracing::warn!(error = %e, "reranker scoring failed; returning base ranking");
+                hits.truncate(top_k);
+                return Ok(hits);
+            }
+        };
 
         for (h, s) in hits.iter_mut().zip(&scores) {
             h.score = *s;

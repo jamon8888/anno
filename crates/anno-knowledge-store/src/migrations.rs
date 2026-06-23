@@ -268,4 +268,65 @@ mod tests {
             .expect("user_version");
         assert_eq!(version, 2);
     }
+
+    #[test]
+    fn migrate_v1_to_v2_preserves_existing_rows() {
+        let conn = Connection::open_in_memory().expect("open memory db");
+
+        // Seed v1 index_jobs schema and insert a row, then set user_version=1
+        // so run_migrations skips v1 and only applies v2.
+        conn.execute_batch(
+            "CREATE TABLE index_jobs (
+                job_id TEXT PRIMARY KEY NOT NULL,
+                object_id TEXT,
+                job_type TEXT NOT NULL,
+                status TEXT NOT NULL,
+                attempts INTEGER NOT NULL DEFAULT 0,
+                not_before TEXT,
+                last_error TEXT
+            );
+            PRAGMA user_version = 1;",
+        )
+        .expect("v1 schema");
+        conn.execute(
+            "INSERT INTO index_jobs (job_id, job_type, status) \
+             VALUES ('j-legacy', 'legal_ingest', 'done')",
+            [],
+        )
+        .expect("insert v1 row");
+
+        run_migrations(&conn).expect("v1→v2 upgrade");
+
+        let cols: Vec<String> = conn
+            .prepare("PRAGMA table_info(index_jobs)")
+            .expect("prepare")
+            .query_map([], |row| row.get::<_, String>(1))
+            .expect("query")
+            .collect::<std::result::Result<Vec<_>, _>>()
+            .expect("collect");
+
+        for expected in [
+            "corpus_id",
+            "files_done",
+            "files_total",
+            "created_at",
+            "updated_at",
+        ] {
+            assert!(
+                cols.contains(&expected.to_string()),
+                "missing column {expected}"
+            );
+        }
+
+        // Old row must be preserved with defaults for new nullable/integer columns.
+        let (status, files_done): (String, i64) = conn
+            .query_row(
+                "SELECT status, files_done FROM index_jobs WHERE job_id = 'j-legacy'",
+                [],
+                |row| Ok((row.get(0)?, row.get(1)?)),
+            )
+            .expect("fetch v1 row after v2 migration");
+        assert_eq!(status, "done");
+        assert_eq!(files_done, 0, "files_done should default to 0");
+    }
 }

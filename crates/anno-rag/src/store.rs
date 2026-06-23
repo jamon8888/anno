@@ -1201,7 +1201,10 @@ impl Store {
                     error = %e,
                     "FTS index missing at search time; building inline and retrying"
                 );
-                self.maybe_build_fts_index().await?;
+                if let Err(build_err) = self.maybe_build_fts_index().await {
+                    // A concurrent request may have already built the index; retry anyway.
+                    tracing::warn!(error = %build_err, "FTS inline build failed; retrying search once anyway");
+                }
                 self.try_search(query_text, query_vec, k).await
             }
             Err(e) => Err(e),
