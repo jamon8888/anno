@@ -2140,6 +2140,86 @@ impl Pipeline {
             .collect())
     }
 
+    /// Legal hybrid search followed by cross-encoder reranking.
+    ///
+    /// Over-fetches a pool of `pool_size` candidates via [`Self::legal_search`],
+    /// rehydrates each hit's pseudonymized text, scores query/passage pairs with
+    /// the cross-encoder, and returns the top `top_k` sorted by descending score.
+    ///
+    /// Privacy invariant: embed + FTS run on the pseudonymized query; plaintext
+    /// is used only for the rerank stage, on already-retrieved candidates.
+    ///
+    /// # Errors
+    /// Returns errors from detect, embed, store, vault, or rerank layers.
+    #[cfg(feature = "rerank")]
+    pub async fn legal_search_reranked(
+        &self,
+        query: &str,
+        top_k: usize,
+        filters: crate::legal::types::LegalSearchFilters,
+        pool_size: usize,
+    ) -> Result<Vec<crate::legal::types::LegalSearchHit>> {
+        let pool = pool_size.max(top_k).max(1);
+        let mut hits = self.legal_search(query, pool, filters).await?;
+        if hits.is_empty() {
+            return Ok(hits);
+        }
+
+        let mut passages: Vec<String> = Vec::with_capacity(hits.len());
+        for h in &hits {
+            passages.push(self.rehydrate(&h.text_pseudo).await?.text);
+        }
+        let refs: Vec<&str> = passages.iter().map(String::as_str).collect();
+
+        let reranker = self.reranker().await?;
+        let scores = reranker.score_pairs_batched(query, &refs, self.cfg.rerank_batch_size)?;
+
+        for (h, s) in hits.iter_mut().zip(&scores) {
+            h.score = *s;
+        }
+        hits.sort_by(|a, b| b.score.partial_cmp(&a.score).unwrap_or(std::cmp::Ordering::Equal));
+        hits.truncate(top_k);
+        Ok(hits)
+    }
+
+    /// Legal hybrid search restricted to an explicit document set, with cross-encoder reranking.
+    ///
+    /// # Errors
+    /// Returns errors from detect, embed, store, vault, or rerank layers.
+    #[cfg(feature = "rerank")]
+    pub async fn legal_search_scoped_reranked(
+        &self,
+        query: &str,
+        top_k: usize,
+        filters: crate::legal::types::LegalSearchFilters,
+        allowed_doc_ids: &[uuid::Uuid],
+        pool_size: usize,
+    ) -> Result<Vec<crate::legal::types::LegalSearchHit>> {
+        let pool = pool_size.max(top_k).max(1);
+        let mut hits = self
+            .legal_search_scoped(query, pool, filters, allowed_doc_ids)
+            .await?;
+        if hits.is_empty() {
+            return Ok(hits);
+        }
+
+        let mut passages: Vec<String> = Vec::with_capacity(hits.len());
+        for h in &hits {
+            passages.push(self.rehydrate(&h.text_pseudo).await?.text);
+        }
+        let refs: Vec<&str> = passages.iter().map(String::as_str).collect();
+
+        let reranker = self.reranker().await?;
+        let scores = reranker.score_pairs_batched(query, &refs, self.cfg.rerank_batch_size)?;
+
+        for (h, s) in hits.iter_mut().zip(&scores) {
+            h.score = *s;
+        }
+        hits.sort_by(|a, b| b.score.partial_cmp(&a.score).unwrap_or(std::cmp::Ordering::Equal));
+        hits.truncate(top_k);
+        Ok(hits)
+    }
+
     /// Rehydrate a citation span from a stored pseudonymized chunk.
     ///
     /// Fetches the chunk by `chunk_id`, slices `byte_start..byte_end` from its
