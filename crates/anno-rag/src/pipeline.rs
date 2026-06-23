@@ -1631,6 +1631,14 @@ impl Pipeline {
     }
 }
 
+/// Count files that would be ingested for the given folder without running the
+/// ingest. Used by the MCP layer to populate `files_total` on the job row so
+/// callers see an accurate progress denominator from the start.
+#[must_use]
+pub fn count_ingest_candidates(folder: &Path, recursive: bool, output_dir: &Path) -> usize {
+    legal_ingest_candidate_paths(folder, recursive, output_dir).len()
+}
+
 fn legal_ingest_candidate_paths(
     folder: &Path,
     recursive: bool,

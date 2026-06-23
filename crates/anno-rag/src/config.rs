@@ -247,7 +247,7 @@ pub struct AnnoRagConfig {
     #[config_meta(
         env = "ANNO_RAG_EMBED_MODEL",
         cli = "--embed-model",
-        doc = "HuggingFace model ID for the embedder. Default: OrdalieTech/Solon-embeddings-large-0.1",
+        doc = "HuggingFace model ID for the embedder. Default: AlpEge/bge-m3-onnx-int8",
         since = "0.1"
     )]
     #[serde(default = "default_embed_model")]
@@ -1383,7 +1383,7 @@ impl AnnoRagConfig {
 
     /// Full embed model ID used as a two-level cache path.
     ///
-    /// Example: `"OrdalieTech/Solon-embeddings-large-0.1"` → `"OrdalieTech/Solon-embeddings-large-0.1"`
+    /// Example: `"AlpEge/bge-m3-onnx-int8"` → `"AlpEge/bge-m3-onnx-int8"`
     #[must_use]
     pub fn embedder_dir(&self) -> String {
         self.embed_model.clone()
@@ -1468,7 +1468,7 @@ mod tests {
         assert_eq!(c.ocr_batch_budget_secs, None);
         assert!(c.embedder_dtype.is_none());
         assert_eq!(c.memory_collection_name, "memories");
-        // absent field → current default (1024 for Solon-large)
+        // absent field → current default (1024 for bge-m3-onnx-int8)
         assert_eq!(c.memory_embedding_dim, 1024);
         assert!(c.ocr_cache_enabled);
         assert!(c.ocr_backend.is_none());
@@ -1841,8 +1841,8 @@ mod tests {
     #[test]
     fn embedder_dir_uses_custom_embed_model() {
         let mut cfg = AnnoRagConfig::default();
-        cfg.embed_model = "OrdalieTech/Solon-embeddings-large-0.1".to_string();
-        assert_eq!(cfg.embedder_dir(), "OrdalieTech/Solon-embeddings-large-0.1");
+        cfg.embed_model = "AlpEge/bge-m3-onnx-int8".to_string();
+        assert_eq!(cfg.embedder_dir(), "AlpEge/bge-m3-onnx-int8");
     }
 
     #[test]

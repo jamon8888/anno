@@ -190,8 +190,8 @@ pub struct ModelInventory {
     pub ready: bool,
     /// True when `.download-lock` exists under `path`.
     pub downloading: bool,
-    /// E5 embedder file readiness.
-    pub e5: ModelFamilyStatus,
+    /// Embedder file readiness.
+    pub embedder: ModelFamilyStatus,
     /// Detector backend selected for GLiNER readiness.
     pub detector_backend: String,
     /// Active GLiNER detector file readiness (legal model — gliner2-multi-v1-onnx).
@@ -283,7 +283,7 @@ impl ModelInventoryService {
         }
         let embedder_files = embedder_required_files(&self.embedder_dir);
         let embedder_file_refs: Vec<&str> = embedder_files.iter().map(String::as_str).collect();
-        let e5 = inspect_family(&path, &self.embedder_dir, &embedder_file_refs);
+        let embedder = inspect_family(&path, &self.embedder_dir, &embedder_file_refs);
         let gliner = match self.detector_kind {
             DetectorInventoryKind::Onnx => inspect_onnx_gliner_family(&path, &self.ner_onnx_dir),
             DetectorInventoryKind::Candle => {
@@ -304,7 +304,7 @@ impl ModelInventoryService {
         });
         let vlm_ready = vlm_safetensors.as_ref().map_or(true, |s| s.ready)
             && vlm_gguf.as_ref().map_or(true, |g| g.ready);
-        let ready = e5.ready && gliner.ready && gliner_pii.ready && vlm_ready;
+        let ready = embedder.ready && gliner.ready && gliner_pii.ready && vlm_ready;
         let state = if ready {
             ModelInventoryState::Ready
         } else if downloading {
@@ -321,7 +321,7 @@ impl ModelInventoryService {
             state,
             ready,
             downloading,
-            e5,
+            embedder,
             detector_backend: match self.detector_kind {
                 DetectorInventoryKind::Onnx => "onnx".to_string(),
                 DetectorInventoryKind::Candle => "candle-metal".to_string(),
@@ -598,9 +598,9 @@ mod tests {
 
         assert!(!inventory.ready);
         assert_ne!(inventory.state, ModelInventoryState::Ready);
-        assert!(!inventory.e5.ready);
+        assert!(!inventory.embedder.ready);
         assert!(!inventory.gliner.ready);
-        assert!(!inventory.e5.missing_files.is_empty());
+        assert!(!inventory.embedder.missing_files.is_empty());
         assert!(!inventory.gliner.missing_files.is_empty());
     }
 
@@ -623,10 +623,10 @@ mod tests {
 
         assert!(inventory.ready);
         assert_eq!(inventory.state, ModelInventoryState::Ready);
-        assert!(inventory.e5.ready);
+        assert!(inventory.embedder.ready);
         assert_eq!(inventory.detector_backend, "onnx");
         assert!(inventory.gliner.ready);
-        assert!(inventory.e5.missing_files.is_empty());
+        assert!(inventory.embedder.missing_files.is_empty());
         assert!(inventory.gliner.missing_files.is_empty());
     }
 

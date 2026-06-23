@@ -84,6 +84,20 @@ impl KnowledgeControlStore {
         }
     }
 
+    /// Set the total file count once the folder scan is complete.
+    pub fn set_job_total(&self, job_id: &str, files_total: i64) -> Result<()> {
+        let now = Utc::now().to_rfc3339();
+        let conn = self.conn_lock();
+        let changed = conn.execute(
+            "UPDATE index_jobs SET files_total = ?2, updated_at = ?3 WHERE job_id = ?1",
+            params![job_id, files_total, now],
+        )?;
+        if changed == 0 {
+            return Err(rusqlite::Error::QueryReturnedNoRows.into());
+        }
+        Ok(())
+    }
+
     /// Update `files_done` for an in-flight job.
     pub fn update_job_progress(&self, job_id: &str, files_done: i64) -> Result<()> {
         let now = Utc::now().to_rfc3339();

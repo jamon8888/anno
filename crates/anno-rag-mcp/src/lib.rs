@@ -45,7 +45,7 @@ use wire::*;
 /// Time budget for a single `knowledge_sync` / `index` MCP call.
 ///
 /// The MCP transport enforces a ~60 s request timeout.  On CPU-only machines
-/// each file costs ~6 s (GLiNER ONNX + Solon-large embedder), so processing
+/// each file costs ~6 s (GLiNER ONNX + bge-m3-onnx-int8 embedder), so processing
 /// more than ~10 files in a single call would reliably timeout.
 ///
 /// `max_millis` in `SyncOptions` makes the sync loop check elapsed time after
@@ -107,8 +107,8 @@ impl AnnoRagServer {
                         crate::model_inventory::ModelInventoryService::new(&cfg).inspect();
                     if !inventory.ready {
                         let mut missing: Vec<&str> = Vec::new();
-                        if !inventory.e5.ready {
-                            missing.extend(inventory.e5.missing_files.iter().map(String::as_str));
+                        if !inventory.embedder.ready {
+                            missing.extend(inventory.embedder.missing_files.iter().map(String::as_str));
                         }
                         if !inventory.gliner.ready {
                             missing
@@ -685,19 +685,23 @@ impl AnnoRagServer {
             }))
             .map_err(|e| e.to_string());
         }
+        let out = corpus_id
+            .map(|id| corpus_legal_output_dir(self.cfg.as_ref(), id))
+            .unwrap_or_else(|| folder.join("anon"));
+
+        // Count eligible files so job_status shows a meaningful denominator immediately.
+        let files_total =
+            anno_rag::pipeline::count_ingest_candidates(&folder, p.recursive, &out) as i64;
+
         if let Err(e) = knowledge.insert_job(
             &job_id,
             "legal_ingest",
             corpus_id.map(|id| id.as_string()).as_deref(),
-            0,
+            files_total,
         ) {
             self.active_ingest_jobs.write().await.remove(&corpus_key);
             return Err(e.to_string());
         }
-
-        let out = corpus_id
-            .map(|id| corpus_legal_output_dir(self.cfg.as_ref(), id))
-            .unwrap_or_else(|| folder.join("anon"));
 
         // Clone everything the background task needs.
         let cfg_arc = Arc::clone(&self.cfg);
@@ -741,13 +745,18 @@ impl AnnoRagServer {
                     // Register bindings/documents in corpus store.
                     if let Some(corpus_id) = corpus_id {
                         if let Ok(corpus_service) = crate::corpus::CorpusService::open(&cfg_arc) {
-                            let label = legal_folder_id(&folder_str_task);
+                            let binding_id = legal_folder_id(&folder_str_task);
+                            let display_label = std::path::Path::new(&folder_str_task)
+                                .file_name()
+                                .and_then(|n| n.to_str())
+                                .unwrap_or(&folder_str_task)
+                                .to_string();
                             let _ = corpus_service.store().add_binding(
                                 corpus_id,
                                 anno_corpus_core::CorpusBindingKind::LegalFolder,
-                                &label,
+                                &binding_id,
                                 &serde_json::json!({
-                                    "label": label.clone(),
+                                    "label": display_label,
                                     "source_path": folder_str_task.clone()
                                 }),
                             );
@@ -759,7 +768,7 @@ impl AnnoRagServer {
                                     &document.source_path,
                                     document.relative_path.as_deref(),
                                     &document.content_id,
-                                    &serde_json::json!({"folder_id": label.clone()}),
+                                    &serde_json::json!({"folder_id": binding_id.clone()}),
                                 );
                             }
                         }
@@ -983,12 +992,22 @@ impl AnnoRagServer {
     }
 
     pub(crate) async fn status_impl_routing(&self) -> String {
-        let knowledge = self
-            .knowledge_status_impl()
-            .await
-            .ok()
-            .and_then(|s| serde_json::to_value(s).ok())
-            .unwrap_or(serde_json::Value::Null);
+        let is_ready = matches!(*self.warmup_phase.read().await, WarmupPhase::Ready { .. });
+        let knowledge = {
+            let mut val = self
+                .knowledge_status_impl()
+                .await
+                .ok()
+                .and_then(|s| serde_json::to_value(s).ok())
+                .unwrap_or(serde_json::Value::Null);
+            if let serde_json::Value::Object(ref mut map) = val {
+                map.insert(
+                    "models_loaded".to_string(),
+                    serde_json::Value::Bool(is_ready),
+                );
+            }
+            val
+        };
 
         let legal = match self.legal_maintenance().await {
             Ok(service) => match service.count_chunks().await {
