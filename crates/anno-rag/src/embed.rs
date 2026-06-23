@@ -222,7 +222,7 @@ impl Embedder {
         let out = self
             .model
             .lock()
-            .expect("embedder mutex poisoned")
+            .unwrap_or_else(|e| e.into_inner())
             .forward(&input_ids, &token_type, Some(&attn))
             .map_err(|e| Error::Embed(format!("forward: {e}")))?;
         let out = out
