@@ -27,7 +27,10 @@ async fn embedded_ocr_extracts_text_from_scanned_pdf() {
             return;
         }
     };
-    assert!(pdf_path.exists(), "ANNO_TEST_SCANNED_PDF does not exist: {pdf_path:?}");
+    assert!(
+        pdf_path.exists(),
+        "ANNO_TEST_SCANNED_PDF does not exist: {pdf_path:?}"
+    );
 
     let dir = TempDir::new().expect("tempdir");
     let pdf_dir = dir.path().join("input");
