@@ -169,6 +169,7 @@ pub(crate) fn build_legal_search_params(p: &SearchUnifiedParams) -> LegalSearchP
         min_confidence: filter_f32(filters, "min_confidence"),
         corpus_id: p.corpus_id.clone(),
         allow_cross_corpus: p.allow_cross_corpus,
+        rerank: true,
     }
 }
 

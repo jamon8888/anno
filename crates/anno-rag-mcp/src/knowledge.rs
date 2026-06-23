@@ -41,6 +41,13 @@ pub struct KnowledgeSearchResponse {
     pub hits: Vec<anno_knowledge_core::KnowledgeSearchHit>,
 }
 
+/// Parameters for the `job_status` tool.
+#[derive(Debug, Deserialize, schemars::JsonSchema)]
+pub struct JobStatusParams {
+    /// The job_id returned by `legal_ingest`.
+    pub job_id: String,
+}
+
 /// Local knowledge service. Opens SQLite only; does not load `Pipeline`.
 pub struct KnowledgeService {
     store: KnowledgeControlStore,
@@ -249,6 +256,76 @@ impl KnowledgeService {
             hits,
         })
     }
+
+    /// Insert a new running ingestion job.
+    ///
+    /// # Errors
+    /// Returns store errors on SQLite failure.
+    pub fn insert_job(
+        &self,
+        job_id: &str,
+        job_type: &str,
+        corpus_id: Option<&str>,
+        files_total: i64,
+    ) -> anno_knowledge_store::Result<()> {
+        self.store
+            .insert_job(job_id, job_type, corpus_id, files_total)
+    }
+
+    /// Return the running job id for a corpus, if any.
+    ///
+    /// # Errors
+    /// Returns store errors on SQLite failure.
+    pub fn running_job_for_corpus(
+        &self,
+        corpus_id: &str,
+    ) -> anno_knowledge_store::Result<Option<String>> {
+        self.store.running_job_for_corpus(corpus_id)
+    }
+
+    /// Update job progress.
+    ///
+    /// # Errors
+    /// Returns store errors on SQLite failure.
+    pub fn update_job_progress(
+        &self,
+        job_id: &str,
+        files_done: i64,
+    ) -> anno_knowledge_store::Result<()> {
+        self.store.update_job_progress(job_id, files_done)
+    }
+
+    /// Set job status.
+    ///
+    /// # Errors
+    /// Returns store errors on SQLite failure.
+    pub fn set_job_status(
+        &self,
+        job_id: &str,
+        status: anno_knowledge_store::JobStatus,
+        last_error: Option<&str>,
+    ) -> anno_knowledge_store::Result<()> {
+        self.store.set_job_status(job_id, status, last_error)
+    }
+
+    /// Fetch a job row.
+    ///
+    /// # Errors
+    /// Returns store errors on SQLite failure.
+    pub fn get_job(
+        &self,
+        job_id: &str,
+    ) -> anno_knowledge_store::Result<Option<anno_knowledge_store::JobRow>> {
+        self.store.get_job(job_id)
+    }
+
+    /// Mark stale running jobs interrupted (startup recovery).
+    ///
+    /// # Errors
+    /// Returns store errors on SQLite failure.
+    pub fn mark_running_jobs_interrupted(&self) -> anno_knowledge_store::Result<usize> {
+        self.store.mark_running_jobs_interrupted()
+    }
 }
 
 fn knowledge_db_path(cfg: &AnnoRagConfig) -> PathBuf {
@@ -398,5 +475,25 @@ mod tests {
                 .expect("second forget"),
             0
         );
+    }
+
+    #[test]
+    fn service_tracks_job_lifecycle() {
+        let dir = tempfile::tempdir().expect("dir");
+        let cfg = AnnoRagConfig {
+            data_dir: dir.path().to_path_buf(),
+            ..AnnoRagConfig::default()
+        };
+        let svc = KnowledgeService::open(&cfg).expect("open");
+
+        svc.insert_job("j1", "legal_ingest", Some("c1"), 5)
+            .expect("insert");
+        svc.update_job_progress("j1", 3).expect("progress");
+        svc.set_job_status("j1", anno_knowledge_store::JobStatus::Done, None)
+            .expect("done");
+
+        let row = svc.get_job("j1").expect("get").expect("some");
+        assert_eq!(row.files_done, 3);
+        assert_eq!(row.status, "done");
     }
 }

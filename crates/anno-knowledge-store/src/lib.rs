@@ -3,6 +3,7 @@
 pub mod control_store;
 pub mod error;
 pub mod fts_query;
+pub mod jobs;
 pub mod migrations;
 
 pub use control_store::{
@@ -10,3 +11,4 @@ pub use control_store::{
     LocalFolderRegistration, ScopeRow, SourceRow, TestChunkInput,
 };
 pub use error::{KnowledgeStoreError, Result};
+pub use jobs::{JobRow, JobStatus};

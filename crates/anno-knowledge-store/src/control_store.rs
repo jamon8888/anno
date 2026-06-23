@@ -168,6 +168,11 @@ impl KnowledgeControlStore {
         })
     }
 
+    /// Lock the connection mutex. Shared by the jobs module.
+    pub(crate) fn conn_lock(&self) -> std::sync::MutexGuard<'_, Connection> {
+        self.conn.lock().expect("knowledge sqlite mutex poisoned")
+    }
+
     /// Return local status without loading ML models.
     ///
     /// # Errors
