@@ -1,8 +1,8 @@
-//! Embed text via candle (default: `intfloat/multilingual-e5-small`).
+//! Embed text via candle (default: `intfloat/multilingual-e5-base`).
 //!
 //! Weights are fetched from HuggingFace Hub on first use and cached under
 //! `cfg.models_cache()`. The local cache subdirectory is the full HF repo ID
-//! path (e.g. `intfloat/multilingual-e5-small/`).
+//! path (e.g. `intfloat/multilingual-e5-base/`).
 //!
 //! Following the e5 convention, every input is prefixed with `"passage: "`
 //! before tokenization. The final embedding is mean-pooled (weighted by the
@@ -109,7 +109,7 @@ impl Embedder {
         let tokenizer = Tokenizer::from_file(&tokenizer_path)
             .map_err(|e| Error::Embed(format!("tokenizer load: {e}")))?;
 
-        // F32 is the default: the e5-small BERT forward pass on CPU can
+        // F32 is the default: the e5-base BERT forward pass on CPU can
         // produce degenerate (NaN) embeddings in F16 — overflow in the
         // attention softmax — which collapses recall@10 to 0. F16 halves
         // embedder RSS (~236 MB) and stays available as an explicit opt-in

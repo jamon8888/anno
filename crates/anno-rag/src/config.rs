@@ -201,7 +201,7 @@ fn default_ner_candle_model_id() -> String {
 }
 
 fn default_embed_model() -> String {
-    "intfloat/multilingual-e5-small".to_string()
+    "intfloat/multilingual-e5-base".to_string()
 }
 
 fn default_ner_pii_model_id() -> String {
@@ -209,7 +209,7 @@ fn default_ner_pii_model_id() -> String {
 }
 
 fn default_embed_dim() -> usize {
-    384
+    768
 }
 
 fn default_default_top_k() -> usize {
@@ -247,7 +247,7 @@ pub struct AnnoRagConfig {
     #[config_meta(
         env = "ANNO_RAG_EMBED_MODEL",
         cli = "--embed-model",
-        doc = "HuggingFace model ID for the embedder. Default: intfloat/multilingual-e5-small",
+        doc = "HuggingFace model ID for the embedder. Default: intfloat/multilingual-e5-base",
         since = "0.1"
     )]
     #[serde(default = "default_embed_model")]
@@ -256,7 +256,7 @@ pub struct AnnoRagConfig {
     #[config_meta(
         env = "ANNO_RAG_EMBED_DIM",
         cli = "--embed-dim",
-        doc = "Vector dimension; must match embedder output. Default: 384 (e5-small/e5-base)",
+        doc = "Vector dimension; must match embedder output. Default: 768 (e5-base)",
         since = "0.1"
     )]
     #[serde(default = "default_embed_dim")]
@@ -564,7 +564,7 @@ pub struct AnnoRagConfig {
 
     /// Embedder weight dtype. `"f32"` (default) or `"f16"` (experimental
     /// opt-in). Read by `Embedder::load`. `None` → `"f32"`. F16 halves
-    /// embedder RSS (~236 MB) but the e5-small BERT forward can produce
+    /// embedder RSS (~270 MB) but the e5-base BERT forward can produce
     /// degenerate (NaN) vectors on CPU — opt-in until numerically stable.
     #[config_meta(
         env = "ANNO_RAG_EMBEDDER_DTYPE",
@@ -639,7 +639,7 @@ pub struct AnnoRagConfig {
     pub memory_collection_name: String,
 
     /// Embedding dimension for memory vectors. Matches `embed_dim` by
-    /// default (384 for e5-small) but kept independent so the memory
+    /// default (768 for e5-base) but kept independent so the memory
     /// store can migrate to a different embedder than documents.
     #[config_meta(
         env = "ANNO_RAG_MEMORY_EMBEDDING_DIM",
@@ -1397,16 +1397,16 @@ mod tests {
     #[test]
     fn defaults_are_sensible() {
         let c = AnnoRagConfig::default();
-        assert_eq!(c.embed_dim, 384);
+        assert_eq!(c.embed_dim, 768);
         assert!(c.default_top_k > 0);
         assert!(c.chunk_max_chars > c.chunk_overlap);
     }
 
     #[test]
-    fn default_embed_model_is_e5_small() {
+    fn default_embed_model_is_e5_base() {
         let c = AnnoRagConfig::default();
-        assert_eq!(c.embed_model, "intfloat/multilingual-e5-small");
-        assert_eq!(c.embed_dim, 384);
+        assert_eq!(c.embed_model, "intfloat/multilingual-e5-base");
+        assert_eq!(c.embed_dim, 768);
     }
 
     #[test]
