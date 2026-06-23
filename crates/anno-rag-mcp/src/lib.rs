@@ -1045,12 +1045,23 @@ impl AnnoRagServer {
             "warmup": warmup_info,
         });
 
+        let ingest_jobs = {
+            let guard = self.active_ingest_jobs.read().await;
+            guard
+                .iter()
+                .map(|(corpus_key, job_id)| {
+                    serde_json::json!({ "corpus_key": corpus_key, "job_id": job_id })
+                })
+                .collect::<Vec<_>>()
+        };
+
         serde_json::json!({
             "ok": true,
             "knowledge": knowledge,
             "legal": legal,
             "vault": vault,
             "models": models,
+            "ingest_jobs": ingest_jobs,
         })
         .to_string()
     }
