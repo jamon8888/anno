@@ -665,6 +665,21 @@ impl AnnoRagServer {
         // Register the job in the knowledge store.
         let job_id = uuid::Uuid::new_v4().to_string();
         let knowledge = self.knowledge().await.map_err(|e| e.to_string())?;
+        // Cross-process dedup: check the DB for a running job that may have been
+        // started by another server instance (the in-memory map only covers this process).
+        if let Some(existing_job_id) = knowledge
+            .running_job_for_corpus(&corpus_key)
+            .map_err(|e| e.to_string())?
+        {
+            return serde_json::to_value(serde_json::json!({
+                "ok": false,
+                "job_id": existing_job_id,
+                "status": "already_running",
+                "folder": p.folder,
+                "message": "an ingest job is already running for this corpus"
+            }))
+            .map_err(|e| e.to_string());
+        }
         knowledge
             .insert_job(
                 &job_id,
@@ -855,6 +870,7 @@ impl AnnoRagServer {
                     }
                     #[cfg(not(feature = "rerank"))]
                     {
+                        tracing::warn!("rerank requested but server built without `rerank` feature; falling back to unranked scoped search");
                         pipeline
                             .legal_search_scoped(&query, top_k, filters, &doc_ids)
                             .await
@@ -875,6 +891,7 @@ impl AnnoRagServer {
                     }
                     #[cfg(not(feature = "rerank"))]
                     {
+                        tracing::warn!("rerank requested but server built without `rerank` feature; falling back to unranked search");
                         pipeline.legal_search(&query, top_k, filters).await
                     }
                 } else {

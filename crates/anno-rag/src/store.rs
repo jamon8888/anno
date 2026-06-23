@@ -1197,7 +1197,10 @@ impl Store {
         match self.try_search(query_text, query_vec, k).await {
             Ok(hits) => Ok(hits),
             Err(e) if is_missing_fts_index_error(&e) => {
-                tracing::warn!("FTS index missing at search time; building inline and retrying");
+                tracing::warn!(
+                    error = %e,
+                    "FTS index missing at search time; building inline and retrying"
+                );
                 self.maybe_build_fts_index().await?;
                 self.try_search(query_text, query_vec, k).await
             }
