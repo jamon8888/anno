@@ -7,8 +7,8 @@ Precedence (lowest → highest): defaults → `~/.anno-rag/config.toml` → env 
 | Field | Env var | CLI flag | Default | Since | Description |
 |-------|---------|----------|---------|-------|-------------|
 | `data_dir` | `ANNO_RAG_DATA_DIR` | `--data-dir` | `"~/.anno-rag"` | 0.1 | Root directory for vault, index, and model weights. Default: platform data dir (Windows: %APPDATA%\anno-rag, macOS: ~/Library/Application Support/anno-rag) |
-| `embed_model` | `ANNO_RAG_EMBED_MODEL` | `--embed-model` | `"AlpEge/bge-m3-onnx-int8"` | 0.1 | HuggingFace model ID for the embedder. Default: OrdalieTech/Solon-embeddings-large-0.1 |
-| `embed_dim` | `ANNO_RAG_EMBED_DIM` | `--embed-dim` | `1024` | 0.1 | Vector dimension; must match embedder output. Default: 1024 |
+| `embed_model` | `ANNO_RAG_EMBED_MODEL` | `--embed-model` | `"intfloat/multilingual-e5-base"` | 0.1 | HuggingFace model ID for the embedder. Default: intfloat/multilingual-e5-base |
+| `embed_dim` | `ANNO_RAG_EMBED_DIM` | `--embed-dim` | `768` | 0.1 | Vector dimension; must match embedder output. Default: 768 (e5-base) |
 | `default_top_k` | `ANNO_RAG_DEFAULT_TOP_K` | `--default-top-k` | `10` | 0.1 | Default number of results returned by search. Default: 10 |
 | `chunk_max_chars` | `ANNO_RAG_CHUNK_MAX_CHARS` | `--chunk-max-chars` | `2048` | 0.1 | Max chunk size in characters. Default: 2048 |
 | `chunk_overlap` | `ANNO_RAG_CHUNK_OVERLAP` | `--chunk-overlap` | `256` | 0.1 | Chunk overlap in characters. Default: 256 |
