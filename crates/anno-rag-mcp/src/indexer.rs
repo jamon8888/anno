@@ -189,6 +189,13 @@ pub async fn sync_local_scope(
         }
     }
 
+    if !summary.truncated {
+        tracing::info!(
+            fts_ready = summary.fts_ready,
+            "knowledge sync complete (SQLite FTS auto-populated)"
+        );
+    }
+
     Ok(summary)
 }
 

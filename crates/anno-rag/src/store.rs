@@ -1194,6 +1194,23 @@ impl Store {
         query_vec: &[f32],
         k: usize,
     ) -> Result<Vec<SearchHit>> {
+        match self.try_search(query_text, query_vec, k).await {
+            Ok(hits) => Ok(hits),
+            Err(e) if is_missing_fts_index_error(&e) => {
+                tracing::warn!("FTS index missing at search time; building inline and retrying");
+                self.maybe_build_fts_index().await?;
+                self.try_search(query_text, query_vec, k).await
+            }
+            Err(e) => Err(e),
+        }
+    }
+
+    async fn try_search(
+        &self,
+        query_text: &str,
+        query_vec: &[f32],
+        k: usize,
+    ) -> Result<Vec<SearchHit>> {
         use lance_index::scalar::FullTextSearchQuery;
         use lancedb::query::QueryBase;
         use lancedb::rerankers::rrf::RRFReranker;
@@ -1334,6 +1351,12 @@ impl Store {
             .map_err(|e| Error::Store(format!("create_fts_index: {e}")))?;
         Ok(true)
     }
+}
+
+/// True when a LanceDB error is the "no inverted index" failure, which we can
+/// recover from by building the FTS index and retrying once.
+fn is_missing_fts_index_error(e: &Error) -> bool {
+    e.to_string().contains("INVERTED index")
 }
 
 /// Open an existing LanceDB table by name, or create an empty one with `schema`
