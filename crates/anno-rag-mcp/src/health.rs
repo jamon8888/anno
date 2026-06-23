@@ -130,6 +130,8 @@ pub fn all_tool_names() -> Vec<String> {
         "anno_health",
         "anno_init_vault",
         "download_models",
+        // Job management
+        "job_status",
         // Legal D1 — ingest + search
         "legal_ingest",
         "legal_search",

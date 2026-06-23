@@ -1060,6 +1060,39 @@ impl AnnoRagServer {
         service.status().map_err(|e| e.to_string())
     }
 
+    /// Mark any jobs left in `running` state from a previous crashed/killed
+    /// process as `interrupted`. Called once at server startup.
+    async fn sweep_interrupted_jobs(&self) {
+        match self.knowledge().await {
+            Ok(ks) => match ks.mark_running_jobs_interrupted() {
+                Ok(n) if n > 0 => tracing::warn!(
+                    swept = n,
+                    "marked {n} stale running job(s) as interrupted at startup"
+                ),
+                Ok(_) => {}
+                Err(e) => tracing::warn!("startup job sweep failed: {e}"),
+            },
+            Err(e) => tracing::warn!("startup job sweep: could not open knowledge store: {e}"),
+        }
+    }
+
+    async fn job_status_impl(&self, job_id: &str) -> Result<serde_json::Value, String> {
+        let knowledge = self.knowledge().await.map_err(|e| e.to_string())?;
+        match knowledge.get_job(job_id).map_err(|e| e.to_string())? {
+            Some(row) => serde_json::to_value(serde_json::json!({
+                "job_id":     row.job_id,
+                "job_type":   row.job_type,
+                "corpus_id":  row.corpus_id,
+                "status":     row.status,
+                "files_done": row.files_done,
+                "files_total": row.files_total,
+                "last_error": row.last_error,
+            }))
+            .map_err(|e| e.to_string()),
+            None => Err(format!("no job found with id={job_id}")),
+        }
+    }
+
     async fn resolve_effective_corpus(
         &self,
         corpus_id: Option<&str>,
@@ -2160,13 +2193,24 @@ impl AnnoRagServer {
     async fn corpus_list(&self) -> String {
         match self.corpus().await {
             Ok(service) => {
-                let count = match service.store().corpus_count() {
-                    Ok(count) => count,
+                let rows = match service.store().list_corpora() {
+                    Ok(rows) => rows,
                     Err(e) => return format!("Error: {e}"),
                 };
+                let corpora: Vec<_> = rows
+                    .iter()
+                    .map(|r| {
+                        serde_json::json!({
+                            "corpus_id":   r.corpus_id.as_string(),
+                            "label":       r.label_pseudo,
+                            "health":      r.health,
+                        })
+                    })
+                    .collect();
                 serde_json::json!({
-                    "ok": true,
-                    "count": count
+                    "ok":    true,
+                    "count": corpora.len(),
+                    "corpora": corpora,
                 })
                 .to_string()
             }
@@ -3719,6 +3763,20 @@ impl AnnoRagServer {
         }
     }
 
+    /// Check the status of an async ingest job.
+    #[tool(
+        description = "Return the current status of a background ingest job. Use the job_id returned by legal_ingest. Returns status (running|done|failed|interrupted), files_done, files_total, and last_error if any."
+    )]
+    async fn job_status(
+        &self,
+        Parameters(p): Parameters<crate::knowledge::JobStatusParams>,
+    ) -> String {
+        match self.job_status_impl(&p.job_id).await {
+            Ok(v) => serde_json::to_string_pretty(&v).unwrap_or_else(|e| format!("Error: {e}")),
+            Err(e) => format!("Error: {e}"),
+        }
+    }
+
     /// Return local Anno knowledge status without loading ML models.
     #[tool(description = "Deprecated - use 'status()' instead. Continues to work.")]
     async fn knowledge_status(&self) -> String {
@@ -3881,6 +3939,7 @@ impl AnnoRagServer {
 /// initialize or the server loop returns an error.
 pub async fn serve_stdio(pipeline: Pipeline, cfg: AnnoRagConfig) -> anno_rag::error::Result<()> {
     let server = AnnoRagServer::new(pipeline, cfg);
+    server.sweep_interrupted_jobs().await;
     tracing::info!("anno-rag MCP server starting on stdio");
 
     let transport = rmcp::transport::stdio();
@@ -3927,6 +3986,7 @@ pub async fn serve_stdio(pipeline: Pipeline, cfg: AnnoRagConfig) -> anno_rag::er
 /// initialize or the server loop returns an error.
 pub async fn serve_stdio_lazy(cfg: AnnoRagConfig, key: [u8; 32]) -> anno_rag::error::Result<()> {
     let server = AnnoRagServer::new_lazy(cfg, key);
+    server.sweep_interrupted_jobs().await;
     tracing::info!("anno-rag MCP server starting (lazy) on stdio");
 
     let transport = rmcp::transport::stdio();

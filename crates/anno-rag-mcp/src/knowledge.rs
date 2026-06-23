@@ -41,6 +41,13 @@ pub struct KnowledgeSearchResponse {
     pub hits: Vec<anno_knowledge_core::KnowledgeSearchHit>,
 }
 
+/// Parameters for the `job_status` tool.
+#[derive(Debug, Deserialize, schemars::JsonSchema)]
+pub struct JobStatusParams {
+    /// The job_id returned by `legal_ingest`.
+    pub job_id: String,
+}
+
 /// Local knowledge service. Opens SQLite only; does not load `Pipeline`.
 pub struct KnowledgeService {
     store: KnowledgeControlStore,
@@ -261,7 +268,8 @@ impl KnowledgeService {
         corpus_id: Option<&str>,
         files_total: i64,
     ) -> anno_knowledge_store::Result<()> {
-        self.store.insert_job(job_id, job_type, corpus_id, files_total)
+        self.store
+            .insert_job(job_id, job_type, corpus_id, files_total)
     }
 
     /// Return the running job id for a corpus, if any.
@@ -478,9 +486,11 @@ mod tests {
         };
         let svc = KnowledgeService::open(&cfg).expect("open");
 
-        svc.insert_job("j1", "legal_ingest", Some("c1"), 5).expect("insert");
+        svc.insert_job("j1", "legal_ingest", Some("c1"), 5)
+            .expect("insert");
         svc.update_job_progress("j1", 3).expect("progress");
-        svc.set_job_status("j1", anno_knowledge_store::JobStatus::Done, None).expect("done");
+        svc.set_job_status("j1", anno_knowledge_store::JobStatus::Done, None)
+            .expect("done");
 
         let row = svc.get_job("j1").expect("get").expect("some");
         assert_eq!(row.files_done, 3);

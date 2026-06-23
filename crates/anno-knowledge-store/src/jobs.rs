@@ -159,11 +159,16 @@ mod tests {
     #[test]
     fn job_lifecycle_running_to_done() {
         let s = store();
-        s.insert_job("job-1", "legal_ingest", Some("corp-1"), 3).expect("insert");
-        assert_eq!(s.running_job_for_corpus("corp-1").expect("q"), Some("job-1".into()));
+        s.insert_job("job-1", "legal_ingest", Some("corp-1"), 3)
+            .expect("insert");
+        assert_eq!(
+            s.running_job_for_corpus("corp-1").expect("q"),
+            Some("job-1".into())
+        );
 
         s.update_job_progress("job-1", 2).expect("progress");
-        s.set_job_status("job-1", JobStatus::Done, None).expect("done");
+        s.set_job_status("job-1", JobStatus::Done, None)
+            .expect("done");
 
         let row = s.get_job("job-1").expect("get").expect("some");
         assert_eq!(row.status, "done");
@@ -175,9 +180,13 @@ mod tests {
     #[test]
     fn interrupted_sweep_marks_running() {
         let s = store();
-        s.insert_job("job-2", "legal_ingest", Some("corp-2"), 1).expect("insert");
+        s.insert_job("job-2", "legal_ingest", Some("corp-2"), 1)
+            .expect("insert");
         let changed = s.mark_running_jobs_interrupted().expect("sweep");
         assert_eq!(changed, 1);
-        assert_eq!(s.get_job("job-2").expect("get").expect("some").status, "interrupted");
+        assert_eq!(
+            s.get_job("job-2").expect("get").expect("some").status,
+            "interrupted"
+        );
     }
 }
