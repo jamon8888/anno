@@ -1796,13 +1796,13 @@ mod tests {
         let cfg = AnnoRagConfig::load_from_file(Some(&toml_path), None).expect("load");
 
         assert_eq!(cfg.default_top_k, 42);
-        assert_eq!(cfg.embed_dim, 1024); // unchanged default
+        assert_eq!(cfg.embed_dim, 768); // unchanged default
     }
 
     #[test]
     fn load_with_no_file_returns_defaults() {
         let cfg = AnnoRagConfig::load_from_file(None, None).expect("load");
-        assert_eq!(cfg.embed_dim, 384);
+        assert_eq!(cfg.embed_dim, 768);
         assert_eq!(cfg.default_top_k, 10);
     }
 

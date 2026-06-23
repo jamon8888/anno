@@ -12,8 +12,8 @@
     "name": "embed_model",
     "env_var": "ANNO_RAG_EMBED_MODEL",
     "cli_flag": "--embed-model",
-    "doc": "HuggingFace model ID for the embedder. Default: OrdalieTech/Solon-embeddings-large-0.1",
-    "default_value": "\"AlpEge/bge-m3-onnx-int8\"",
+    "doc": "HuggingFace model ID for the embedder. Default: intfloat/multilingual-e5-base",
+    "default_value": "\"intfloat/multilingual-e5-base\"",
     "since": "0.1",
     "type_name": "String"
   },
@@ -21,8 +21,8 @@
     "name": "embed_dim",
     "env_var": "ANNO_RAG_EMBED_DIM",
     "cli_flag": "--embed-dim",
-    "doc": "Vector dimension; must match embedder output. Default: 1024",
-    "default_value": "1024",
+    "doc": "Vector dimension; must match embedder output. Default: 768 (e5-base)",
+    "default_value": "768",
     "since": "0.1",
     "type_name": "usize"
   },

@@ -5,11 +5,11 @@
 # Root directory for vault, index, and model weights. Default: platform data dir (Windows: %APPDATA%\anno-rag, macOS: ~/Library/Application Support/anno-rag) (env: ANNO_RAG_DATA_DIR)
 # data_dir = "~/.anno-rag"
 
-# HuggingFace model ID for the embedder. Default: OrdalieTech/Solon-embeddings-large-0.1 (env: ANNO_RAG_EMBED_MODEL)
-# embed_model = "AlpEge/bge-m3-onnx-int8"
+# HuggingFace model ID for the embedder. Default: intfloat/multilingual-e5-base (env: ANNO_RAG_EMBED_MODEL)
+# embed_model = "intfloat/multilingual-e5-base"
 
-# Vector dimension; must match embedder output. Default: 1024 (env: ANNO_RAG_EMBED_DIM)
-# embed_dim = 1024
+# Vector dimension; must match embedder output. Default: 768 (e5-base) (env: ANNO_RAG_EMBED_DIM)
+# embed_dim = 768
 
 # Default number of results returned by search. Default: 10 (env: ANNO_RAG_DEFAULT_TOP_K)
 # default_top_k = 10
