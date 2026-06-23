@@ -86,6 +86,8 @@ pub struct AnnoRagServer {
     allowed_roots: AllowedRoots,
     tabular_storage: Arc<OnceCell<Arc<anno_rag_tabular::storage::StorageHandle>>>,
     extraction_status: Arc<RwLock<HashMap<anno_rag_tabular::ReviewId, ReviewExtractionStatus>>>,
+    /// corpus_key → running job_id; guards against duplicate concurrent ingest.
+    active_ingest_jobs: Arc<RwLock<HashMap<String, String>>>,
     warmup_phase: Arc<RwLock<WarmupPhase>>,
     #[allow(dead_code)] // populated + consumed by the rmcp #[tool_router] macro
     tool_router: ToolRouter<Self>,
@@ -396,6 +398,7 @@ impl AnnoRagServer {
             allowed_roots: allowed_roots_from_env(),
             tabular_storage: Arc::new(OnceCell::new()),
             extraction_status: Arc::new(RwLock::new(HashMap::new())),
+            active_ingest_jobs: Arc::new(RwLock::new(HashMap::new())),
             warmup_phase: Arc::new(RwLock::new(WarmupPhase::Idle)),
             tool_router: Self::tool_router(),
         }
@@ -414,6 +417,7 @@ impl AnnoRagServer {
             allowed_roots: allowed_roots_from_env(),
             tabular_storage: Arc::new(OnceCell::new()),
             extraction_status: Arc::new(RwLock::new(HashMap::new())),
+            active_ingest_jobs: Arc::new(RwLock::new(HashMap::new())),
             warmup_phase: Arc::new(RwLock::new(WarmupPhase::Idle)),
             tool_router: Self::tool_router(),
         }
@@ -633,95 +637,164 @@ impl AnnoRagServer {
     ) -> Result<serde_json::Value, String> {
         let folder = self.validate_existing_mcp_path("folder", &p.folder)?;
         let folder_string = folder.display().to_string();
-        let pipeline = self.require_models().await?;
-        let out = corpus_id
-            .map(|corpus_id| corpus_legal_output_dir(self.cfg.as_ref(), corpus_id))
-            .unwrap_or_else(|| folder.join("anon"));
-        let start = std::time::Instant::now();
-        let ingest_result = if let Some(corpus_id) = corpus_id {
-            pipeline
-                .ingest_folder_scoped_summary(
-                    &folder,
-                    p.recursive,
-                    &out,
-                    anno_rag::pipeline::LegalIngestScope {
-                        corpus_id,
-                        root: folder.clone(),
-                    },
-                )
-                .await
-        } else {
-            pipeline
-                .ingest_folder(&folder, p.recursive, &out)
-                .await
-                .map(|ingested| anno_rag::pipeline::LegalIngestSummary {
-                    ingested,
-                    documents: Vec::new(),
-                })
-        };
 
-        match ingest_result {
-            Ok(summary) => {
-                if let Some(corpus_id) = corpus_id {
-                    let service = self.corpus().await.map_err(|e| e.to_string())?;
-                    let label = legal_folder_id(&folder_string);
-                    service
-                        .store()
-                        .add_binding(
-                            corpus_id,
-                            anno_corpus_core::CorpusBindingKind::LegalFolder,
-                            &label,
-                            &serde_json::json!({
-                                "label": label.clone(),
-                                "source_path": p.folder.clone()
-                            }),
-                        )
-                        .map_err(|e| e.to_string())?;
-                    for document in &summary.documents {
-                        service
-                            .store()
-                            .add_document(
-                                corpus_id,
-                                document.document_id,
-                                "legal",
-                                &document.source_path,
-                                document.relative_path.as_deref(),
-                                &document.content_id,
-                                &serde_json::json!({"folder_id": label.clone()}),
-                            )
-                            .map_err(|e| e.to_string())?;
-                    }
-                }
-                tracing::info!(
-                    target: "anno_rag::legal::audit",
-                    tool = "legal_ingest",
-                    result = "ok",
-                    duration_ms = start.elapsed().as_millis() as u64,
-                    ingested = summary.ingested,
-                    ""
-                );
-                serde_json::to_value(LegalIngestResult {
-                    ingested: summary.ingested,
-                    folder: p.folder,
-                    output_root: out.display().to_string(),
-                    output_scope: if corpus_id.is_some() {
-                        "corpus_internal".to_string()
-                    } else {
-                        "legacy_source_anon".to_string()
-                    },
-                })
-                .map_err(|e| e.to_string())
-            }
-            Err(e) => {
-                tracing::warn!(
-                    target: "anno_rag::legal::audit",
-                    tool = "legal_ingest",
-                    result = "error",
-                    "{e}"
-                );
-                Err(e.to_string())
+        // Ensure models are loaded before spawning — avoids a warmup race inside the task.
+        self.require_models().await?;
+        let pipeline_arc = self
+            .pipeline_arc()
+            .expect("require_models succeeded → pipeline is set");
+
+        // Dedup guard: one active ingest per corpus key.
+        let corpus_key = corpus_id
+            .map(|id| id.as_string())
+            .unwrap_or_else(|| folder_string.clone());
+        {
+            let guard = self.active_ingest_jobs.read().await;
+            if let Some(existing_job_id) = guard.get(&corpus_key) {
+                return serde_json::to_value(serde_json::json!({
+                    "ok": false,
+                    "job_id": existing_job_id,
+                    "status": "already_running",
+                    "folder": p.folder,
+                    "message": "an ingest job is already running for this corpus"
+                }))
+                .map_err(|e| e.to_string());
             }
         }
+
+        // Register the job in the knowledge store.
+        let job_id = uuid::Uuid::new_v4().to_string();
+        let knowledge = self.knowledge().await.map_err(|e| e.to_string())?;
+        knowledge
+            .insert_job(
+                &job_id,
+                "legal_ingest",
+                corpus_id.map(|id| id.as_string()).as_deref(),
+                0,
+            )
+            .map_err(|e| e.to_string())?;
+
+        self.active_ingest_jobs
+            .write()
+            .await
+            .insert(corpus_key.clone(), job_id.clone());
+
+        let out = corpus_id
+            .map(|id| corpus_legal_output_dir(self.cfg.as_ref(), id))
+            .unwrap_or_else(|| folder.join("anon"));
+
+        // Clone everything the background task needs.
+        let cfg_arc = Arc::clone(&self.cfg);
+        let active_jobs = Arc::clone(&self.active_ingest_jobs);
+        let job_id_task = job_id.clone();
+        let folder_task = folder.clone();
+        let folder_str_task = p.folder.clone();
+        let out_task = out.clone();
+        let recursive = p.recursive;
+
+        tokio::task::spawn(async move {
+            let start = std::time::Instant::now();
+
+            let ingest_result = if let Some(corpus_id) = corpus_id {
+                pipeline_arc
+                    .ingest_folder_scoped_summary(
+                        &folder_task,
+                        recursive,
+                        &out_task,
+                        anno_rag::pipeline::LegalIngestScope {
+                            corpus_id,
+                            root: folder_task.clone(),
+                        },
+                    )
+                    .await
+            } else {
+                pipeline_arc
+                    .ingest_folder(&folder_task, recursive, &out_task)
+                    .await
+                    .map(|ingested| anno_rag::pipeline::LegalIngestSummary {
+                        ingested,
+                        documents: Vec::new(),
+                    })
+            };
+
+            // Re-open knowledge store for progress/status updates.
+            let knowledge_task = crate::knowledge::KnowledgeService::open(&cfg_arc).ok();
+
+            match ingest_result {
+                Ok(summary) => {
+                    // Register bindings/documents in corpus store.
+                    if let Some(corpus_id) = corpus_id {
+                        if let Ok(corpus_service) = crate::corpus::CorpusService::open(&cfg_arc) {
+                            let label = legal_folder_id(&folder_str_task);
+                            let _ = corpus_service.store().add_binding(
+                                corpus_id,
+                                anno_corpus_core::CorpusBindingKind::LegalFolder,
+                                &label,
+                                &serde_json::json!({
+                                    "label": label.clone(),
+                                    "source_path": folder_str_task.clone()
+                                }),
+                            );
+                            for document in &summary.documents {
+                                let _ = corpus_service.store().add_document(
+                                    corpus_id,
+                                    document.document_id,
+                                    "legal",
+                                    &document.source_path,
+                                    document.relative_path.as_deref(),
+                                    &document.content_id,
+                                    &serde_json::json!({"folder_id": label.clone()}),
+                                );
+                            }
+                        }
+                    }
+                    tracing::info!(
+                        target: "anno_rag::legal::audit",
+                        tool = "legal_ingest",
+                        result = "ok",
+                        duration_ms = start.elapsed().as_millis() as u64,
+                        ingested = summary.ingested,
+                        job_id = %job_id_task,
+                        ""
+                    );
+                    if let Some(ref ks) = knowledge_task {
+                        let _ = ks.update_job_progress(&job_id_task, summary.ingested as i64);
+                        let _ = ks.set_job_status(
+                            &job_id_task,
+                            anno_knowledge_store::JobStatus::Done,
+                            None,
+                        );
+                    }
+                }
+                Err(e) => {
+                    tracing::warn!(
+                        target: "anno_rag::legal::audit",
+                        tool = "legal_ingest",
+                        result = "error",
+                        job_id = %job_id_task,
+                        "{e}"
+                    );
+                    if let Some(ref ks) = knowledge_task {
+                        let _ = ks.set_job_status(
+                            &job_id_task,
+                            anno_knowledge_store::JobStatus::Failed,
+                            Some(&e.to_string()),
+                        );
+                    }
+                }
+            }
+
+            active_jobs.write().await.remove(&corpus_key);
+        });
+
+        serde_json::to_value(serde_json::json!({
+            "ok": true,
+            "job_id": job_id,
+            "status": "running",
+            "folder": p.folder,
+            "output_root": out.display().to_string(),
+        }))
+        .map_err(|e| e.to_string())
     }
 
     async fn legal_search_impl(&self, p: LegalSearchParams) -> Result<serde_json::Value, String> {
