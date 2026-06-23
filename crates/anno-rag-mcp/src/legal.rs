@@ -69,6 +69,14 @@ pub struct LegalSearchParams {
     /// Explicitly allow cross-corpus legal search.
     #[serde(default)]
     pub allow_cross_corpus: bool,
+    /// Rerank results with the cross-encoder. Default `true` (accuracy-first).
+    /// Set `false` for RRF-only hybrid (faster, no model warm-up).
+    #[serde(default = "default_legal_rerank")]
+    pub rerank: bool,
+}
+
+fn default_legal_rerank() -> bool {
+    true
 }
 
 #[derive(Serialize)]
@@ -211,4 +219,16 @@ pub struct LegalValidateFieldParams {
     pub note: Option<String>,
     /// Optional reviewer identifier (email or system name).
     pub actor: Option<String>,
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn legal_search_params_default_rerank_is_true() {
+        let p: LegalSearchParams =
+            serde_json::from_value(serde_json::json!({ "query": "clause" })).expect("parse");
+        assert!(p.rerank, "legal rerank must default ON");
+    }
 }

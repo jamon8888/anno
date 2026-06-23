@@ -753,6 +753,7 @@ impl AnnoRagServer {
             min_confidence,
             corpus_id: _,
             allow_cross_corpus: _,
+            rerank,
         } = p;
         let filters = anno_rag::legal::types::LegalSearchFilters {
             doc_type,
@@ -768,14 +769,45 @@ impl AnnoRagServer {
             min_confidence,
             ..Default::default()
         };
+        let pool = self.cfg.rerank_pool_size;
         let start = std::time::Instant::now();
         let result = match self.legal_document_ids_for_effective(effective).await? {
             Some(doc_ids) => {
-                pipeline
-                    .legal_search_scoped(&query, top_k, filters, &doc_ids)
-                    .await
+                if rerank {
+                    #[cfg(feature = "rerank")]
+                    {
+                        pipeline
+                            .legal_search_scoped_reranked(&query, top_k, filters, &doc_ids, pool)
+                            .await
+                    }
+                    #[cfg(not(feature = "rerank"))]
+                    {
+                        pipeline
+                            .legal_search_scoped(&query, top_k, filters, &doc_ids)
+                            .await
+                    }
+                } else {
+                    pipeline
+                        .legal_search_scoped(&query, top_k, filters, &doc_ids)
+                        .await
+                }
             }
-            None => pipeline.legal_search(&query, top_k, filters).await,
+            None => {
+                if rerank {
+                    #[cfg(feature = "rerank")]
+                    {
+                        pipeline
+                            .legal_search_reranked(&query, top_k, filters, pool)
+                            .await
+                    }
+                    #[cfg(not(feature = "rerank"))]
+                    {
+                        pipeline.legal_search(&query, top_k, filters).await
+                    }
+                } else {
+                    pipeline.legal_search(&query, top_k, filters).await
+                }
+            }
         };
         match result {
             Ok(hits) => {
