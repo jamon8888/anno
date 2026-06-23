@@ -1,8 +1,8 @@
-//! Embed text via candle (default: `AlpEge/bge-m3-onnx-int8`).
+//! Embed text via candle (default: `intfloat/multilingual-e5-small`).
 //!
 //! Weights are fetched from HuggingFace Hub on first use and cached under
 //! `cfg.models_cache()`. The local cache subdirectory is the full HF repo ID
-//! path (e.g. `AlpEge/bge-m3-onnx-int8/`).
+//! path (e.g. `intfloat/multilingual-e5-small/`).
 //!
 //! Following the e5 convention, every input is prefixed with `"passage: "`
 //! before tokenization. The final embedding is mean-pooled (weighted by the

@@ -45,7 +45,7 @@ use wire::*;
 /// Time budget for a single `knowledge_sync` / `index` MCP call.
 ///
 /// The MCP transport enforces a ~60 s request timeout.  On CPU-only machines
-/// each file costs ~6 s (GLiNER ONNX + bge-m3-onnx-int8 embedder), so processing
+/// each file costs ~6 s (GLiNER ONNX + e5-small embedder), so processing
 /// more than ~10 files in a single call would reliably timeout.
 ///
 /// `max_millis` in `SyncOptions` makes the sync loop check elapsed time after
