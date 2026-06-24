@@ -230,8 +230,23 @@ impl Store {
         let tbl = open_or_create_table(&conn, TABLE_NAME, &chunks_schema).await?;
 
         let memories_schema = memories_schema(cfg.memory_embedding_dim);
-        let memories_tbl =
-            open_or_create_table(&conn, &cfg.memory_collection_name, &memories_schema).await?;
+        let memories_tbl = {
+            if let Some(stored) =
+                stored_vector_dim(&conn, &cfg.memory_collection_name, "embedding").await
+            {
+                if stored != cfg.memory_embedding_dim {
+                    tracing::warn!(
+                        stored_dim = stored,
+                        config_dim = cfg.memory_embedding_dim,
+                        table = %cfg.memory_collection_name,
+                        "memory table embedding dim mismatch — dropping and rebuilding (memories are ephemeral)"
+                    );
+                    conn.drop_table(&cfg.memory_collection_name, &[])
+                        .await?;
+                }
+            }
+            open_or_create_table(&conn, &cfg.memory_collection_name, &memories_schema).await?
+        };
 
         Ok(Self {
             tbl,
@@ -1365,6 +1380,27 @@ fn is_missing_fts_index_error(e: &Error) -> bool {
     e.to_string().contains("INVERTED index")
 }
 
+/// Read the FixedSizeList dimension of the named vector column from an existing
+/// LanceDB table. Returns `None` if the table doesn't exist or has no such column.
+async fn stored_vector_dim(conn: &Connection, table_name: &str, field_name: &str) -> Option<usize> {
+    let names = conn.table_names().execute().await.ok()?;
+    if !names.iter().any(|n| n == table_name) {
+        return None;
+    }
+    let tbl = conn.open_table(table_name).execute().await.ok()?;
+    let schema = tbl.schema().await.ok()?;
+    schema.fields().iter().find_map(|f| {
+        if f.name() != field_name {
+            return None;
+        }
+        if let DataType::FixedSizeList(_, dim) = f.data_type() {
+            Some(*dim as usize)
+        } else {
+            None
+        }
+    })
+}
+
 /// Open an existing LanceDB table by name, or create an empty one with `schema`
 /// if no table by that name exists. Idempotent across process restarts.
 async fn open_or_create_table(
@@ -2237,5 +2273,26 @@ mod tests {
         assert_eq!(updated.text, m.text);
         assert_eq!(updated.token_refs[0].token, "PERSON_1");
         assert_eq!(updated.entity_refs, vec!["pii:Person:PERSON_1"]);
+    }
+
+    #[tokio::test]
+    #[ignore = "opens LanceDB (~30s); run with --ignored"]
+    async fn memory_table_rebuilds_on_dim_mismatch() {
+        // Open with dim=4 — creates the memories table at that dimension.
+        let (dir, cfg4) = fresh_cfg(4);
+        {
+            let _store = Store::open(&cfg4).await.expect("open at dim=4");
+        }
+
+        // Reopen with dim=8 — must succeed; table is dropped and rebuilt.
+        let cfg8 = AnnoRagConfig {
+            data_dir: dir.path().to_path_buf(),
+            embed_dim: 8,
+            memory_embedding_dim: 8,
+            ..Default::default()
+        };
+        Store::open(&cfg8)
+            .await
+            .expect("open at dim=8 must succeed after dim mismatch");
     }
 }
