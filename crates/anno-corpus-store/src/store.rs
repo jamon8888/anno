@@ -7,7 +7,7 @@ use anno_corpus_core::{
 };
 use chrono::Utc;
 use rusqlite::types::Type;
-use rusqlite::{params, Connection};
+use rusqlite::{params, Connection, OptionalExtension};
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use std::path::Path;
@@ -96,9 +96,33 @@ impl CorpusStore {
         }
         let conn = Connection::open(path)?;
         migrations::migrate(&conn)?;
+        Self::backfill_aliases(&conn)?;
         Ok(Self {
             conn: Mutex::new(conn),
         })
+    }
+
+    fn backfill_aliases(conn: &Connection) -> Result<()> {
+        let ids: Vec<String> = {
+            let mut stmt = conn.prepare(
+                "SELECT corpus_id FROM corpora WHERE alias IS NULL ORDER BY created_at, corpus_id",
+            )?;
+            let collected = stmt.query_map([], |row| row.get::<_, String>(0))?
+                .collect::<std::result::Result<Vec<_>, _>>()?;
+            collected
+        };
+        for id in ids {
+            let next: i64 = conn.query_row(
+                "SELECT COUNT(*) FROM corpora WHERE alias IS NOT NULL",
+                [],
+                |row| row.get(0),
+            )?;
+            conn.execute(
+                "UPDATE corpora SET alias = ?2 WHERE corpus_id = ?1",
+                params![id, format!("corpus-{:02}", next + 1)],
+            )?;
+        }
+        Ok(())
     }
 
     /// Register a normalized corpus root.
@@ -145,6 +169,29 @@ impl CorpusStore {
                 &now,
             ],
         )?;
+
+        // Assign an auto-alias `corpus-NN` only if this corpus has none yet.
+        // Re-registration of an existing root keeps any prior (user or auto) alias.
+        let existing_alias: Option<String> = conn
+            .query_row(
+                "SELECT alias FROM corpora WHERE corpus_id = ?1",
+                params![corpus_id.as_string()],
+                |row| row.get(0),
+            )
+            .optional()?
+            .flatten();
+        if existing_alias.is_none() {
+            let next: i64 = conn.query_row(
+                "SELECT COUNT(*) FROM corpora WHERE alias IS NOT NULL",
+                [],
+                |row| row.get(0),
+            )?;
+            let auto = format!("corpus-{:02}", next + 1);
+            conn.execute(
+                "UPDATE corpora SET alias = ?2 WHERE corpus_id = ?1",
+                params![corpus_id.as_string(), auto],
+            )?;
+        }
 
         Ok(RegisterCorpusResult {
             corpus_id,
@@ -697,7 +744,6 @@ mod tests {
     }
 
     #[test]
-    #[ignore = "alias populated by the auto-alias task (A4)"]
     fn list_corpora_exposes_alias_field() {
         let dir = tempfile::tempdir().expect("tempdir");
         let store = CorpusStore::open(dir.path().join("c.sqlite3")).expect("open");
@@ -707,6 +753,29 @@ mod tests {
         let rows = store.list_corpora().expect("list");
         assert_eq!(rows.len(), 1);
         assert!(rows[0].alias.is_some(), "alias field populated");
+    }
+
+    #[test]
+    fn register_root_auto_assigns_sequential_alias() {
+        let dir = tempfile::tempdir().expect("tempdir");
+        let store = CorpusStore::open(dir.path().join("c.sqlite3")).expect("open");
+        store.register_root(dir.path().join("a").to_str().unwrap(), &[CorpusProfile::All]).expect("a");
+        store.register_root(dir.path().join("b").to_str().unwrap(), &[CorpusProfile::All]).expect("b");
+        let rows = store.list_corpora().expect("list");
+        let aliases: Vec<String> = rows.iter().filter_map(|r| r.alias.clone()).collect();
+        assert!(aliases.contains(&"corpus-01".to_string()), "first auto-alias");
+        assert!(aliases.contains(&"corpus-02".to_string()), "second auto-alias");
+    }
+
+    #[test]
+    fn reregister_same_root_keeps_alias() {
+        let dir = tempfile::tempdir().expect("tempdir");
+        let store = CorpusStore::open(dir.path().join("c.sqlite3")).expect("open");
+        let path = dir.path().join("a");
+        let first = store.register_root(path.to_str().unwrap(), &[CorpusProfile::All]).expect("first");
+        store.set_alias(first.corpus_id, "matter-7").expect("user alias");
+        store.register_root(path.to_str().unwrap(), &[CorpusProfile::All]).expect("second");
+        assert_eq!(store.lookup_by_alias("matter-7").expect("lookup"), Some(first.corpus_id));
     }
 
     #[test]
