@@ -114,7 +114,7 @@ structured_sidecar = false
 
 **`local-path` type**: `model_id` is interpreted as an absolute filesystem path to a directory containing `config.json` + safetensors weights. Used by the `offline` profile where no HF Hub access is available.
 
-**`ModelDimRegistry`**: a compile-time lookup table (HF model ID → known output dim) in `anno-rag`. Covers all shipped defaults. Unknown model IDs trigger a one-time runtime probe on first load (embed a short test string, measure output length), result cached to `data_dir/.model_dims.json`.
+**Auto-dim detection**: `Embedder::load` already downloads and parses `config.json` from HuggingFace (or reads it from local cache). The `candle_transformers::models::bert::Config` struct has a `hidden_size` field that is the actual output dimension. In v2, `Embedder::load` reads `config.hidden_size` and returns it alongside the loaded model; `Store::open` uses that value instead of `cfg.embed_dim`. No lookup table, no separate probe, no manual sync required. The `embed_dim` config field is removed; `ANNO_RAG_EMBED_DIM` is deprecated (accepted for one version as a validation override, then removed).
 
 **`memory.embedding_dim`** stays independent from `models.embedder` dim by design — the memory store may use a different embedder than the document index (currently defaults to 1024 while the document embedder uses 768).
 
@@ -330,7 +330,7 @@ Error: config sets ocr.mode = "vlm" but this binary was built without the vlm-oc
 
 | Crate | Change |
 |-------|--------|
-| `anno-rag` | `config.rs` split into `config/v2/` module tree; `v1_compat.rs` shim; `ModelDimRegistry`; new fields: `ocr.vlm.language`, `ocr.vlm.prompt_template` |
+| `anno-rag` | `config.rs` split into `config/v2/` module tree; `v1_compat.rs` shim; `Embedder::load` returns actual dim from `config.hidden_size`; `Store::open` uses returned dim instead of `cfg.embed_dim`; new fields: `ocr.vlm.language`, `ocr.vlm.prompt_template`. Callees of `Pipeline::new` (`vault::open`, `model_cache::migrate_legacy_cache`, `legal/store::setup_indexes`) all read from `AnnoRagConfig` and need updating for the v2 field paths. |
 | `anno-rag-bin` | `config_cmd.rs` gains `migrate` subcommand; `main.rs` gains reload signal handler |
 | `anno-rag-mcp` | `Arc<OnceCell<Arc<Pipeline>>>` → `Arc<RwLock<Option<Arc<Pipeline>>>>` for hot-swap; reload signal listener |
 | `anno-rag-tabular` | `routing.rs`: wire `vlm_safetensors_model_id` / `vlm_gguf_model_id` from config instead of hardcoded strings |
