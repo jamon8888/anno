@@ -2,20 +2,21 @@
 
 **Date**: 2026-06-24  
 **Status**: Approved — ready for implementation planning  
-**Branch target**: `feat/config-v2`
+**Branch target**: `feat/config-v2`  
+**Last reviewed**: 2026-06-24 (full codebase read — config.rs complete, vlm routing.rs, MCP lib.rs)
 
 ---
 
 ## Problem Statement
 
-`AnnoRagConfig` is a flat ~40-field struct in `crates/anno-rag/src/config.rs` (66 KB). Key pain points:
+`AnnoRagConfig` is a flat ~50-field struct in `crates/anno-rag/src/config.rs` (66 KB). Key pain points:
 
 - `embed_model` and `embed_dim` are separate fields — must be kept in sync manually; mismatch silently corrupts the index
-- VLM-OCR prompt is hardcoded (`VLM_OCR_PROMPT_FR` constant in `vlm.rs`); VLM server URL/model not in `AnnoRagConfig`
-- `OcrMode` enum has no `Vlm` variant — VLM config lives in `anno-rag-tabular`, detached from the main config
+- VLM-OCR prompt language (`VLM_OCR_PROMPT_FR`) is hardcoded in `vlm.rs`; `prompt_template` is not configurable at all
+- VLM config exists in `AnnoRagConfig` (v0.15: `vlm_backend`, `vlm_vllm_url`, `vlm_local_url`, `vlm_safetensors_model_id`, `vlm_gguf_model_id`) but `routing.rs:100-101` hardcodes `"lightonai/LightOnOCR-2-1B"` and ignores the model-id fields — the config fields are wired but never read
 - No named profiles — switching from "lightweight dev" to "full legal stack" requires editing 10+ fields
 - Cargo features (`embedded-ocr`, `vlm-ocr`) are undiscoverable; no documented build presets
-- No hot-reload — switching models requires a full MCP server restart
+- No hot-reload — `AnnoRagServer` uses `Arc<OnceCell<Arc<Pipeline>>>` which can only be set once; switching models requires a full MCP server restart
 
 ---
 
@@ -30,6 +31,9 @@ schema_version = 2
 profile = "legal-full"   # optional; see §3
 data_dir = "~/.anno-rag"
 accelerator = "auto"     # auto | cpu | cuda | metal
+mcp_server_name = "anno-rag"
+default_top_k = 10
+gdpr_layers = "defense"  # basic | defense | shadow | full
 
 [models.embedder]
 type = "hf-candle"        # hf-candle | hf-onnx | openai-compat | local-path
@@ -42,6 +46,7 @@ type = "hf-onnx"
 model_id = "SemplificaAI/gliner2-multi-v1-onnx"
 precision = "fp16"        # fp16 | fp32
 candle_fallback_id = "fastino/gliner2-multi-v1"
+warmup_model = "fastino/gliner2-multi-v1"
 
 [models.ner_pii]
 type = "hf-onnx"
@@ -56,7 +61,7 @@ batch_size = 8
 
 [ocr]
 mode = "auto_embedded"    # off | auto_embedded | vlm
-confidence_threshold = 0.7  # VLM quality score below this → embedded fallback
+confidence_threshold = 0.6  # VLM quality score below this → embedded fallback
 
 [ocr.embedded]
 backend = "tesseract"     # tesseract | paddleocr
@@ -64,10 +69,16 @@ cache = true
 batch_budget_secs = null  # null = unlimited
 
 [ocr.vlm]                 # only active when mode = "vlm"
-server_url = "http://localhost:8000"
-model_id = "mistralai/Mistral-7B-Instruct-v0.3"
-language = "fra"          # replaces hardcoded VLM_OCR_PROMPT_FR constant
-prompt_template = null    # null = built-in template; set to override entirely
+# Security: server_url MUST be a loopback address (localhost / 127.0.0.1 / [::1]).
+# Non-loopback URLs are rejected at startup by the trust-boundary guard (Spec B §4.3).
+# To reach a remote GPU server, set up a local port-forward first.
+backend = "vllm"           # vllm (safetensors, vLLM server) | local (GGUF, llama-server)
+vllm_url = "http://127.0.0.1:8000"
+local_url = "http://127.0.0.1:8080"
+safetensors_model_id = "lightonai/LightOnOCR-2-1B"
+gguf_model_id = "Mungert/LightOnOCR-1B-1025-GGUF"
+language = "fra"           # language hint injected into the OCR prompt
+prompt_template = null     # null = built-in template; set to override entirely
 
 [index]
 distance = "cosine"
@@ -82,11 +93,17 @@ overlap = 256
 
 [memory]
 collection_name = "memories"
-ner_mode = "async"        # disabled | async | sync
+embedding_dim = 1024       # separate from [models.embedder] dim; memory may use a different model
+ner_mode = "async"         # disabled | async | sync
 compaction_interval_secs = 86400
+compaction_min_age_secs = 3600
+conflict_cosine_threshold = 0.85
+graph_max_hops = 2
+graph_per_hop_limit = 50
+entity_aliases = {}        # JSON object: { "me dupont": "dupont" }
 
 [pdf]
-native_mode = "off"       # off | structured
+native_mode = "off"        # off | structured
 keep_headers = false
 keep_footers = false
 extract_annotations = false
@@ -99,7 +116,11 @@ structured_sidecar = false
 
 **`ModelDimRegistry`**: a compile-time lookup table (HF model ID → known output dim) in `anno-rag`. Covers all shipped defaults. Unknown model IDs trigger a one-time runtime probe on first load (embed a short test string, measure output length), result cached to `data_dir/.model_dims.json`.
 
-**`[models.*]` type discriminant** makes it possible to add provider backends (e.g. `openai-compat`, `local-path`) without adding new top-level fields.
+**`memory.embedding_dim`** stays independent from `models.embedder` dim by design — the memory store may use a different embedder than the document index (currently defaults to 1024 while the document embedder uses 768).
+
+**`[models.*]` type discriminant** makes it possible to add provider backends without new top-level fields.
+
+**VLM loopback security constraint**: `RoutingVlmClient::from_config` enforces that `vllm_url` and `local_url` must resolve to a loopback host (`localhost`, `127.0.0.1`, `[::1]`). Remote GPU servers must be reached via a local port-forward. This is not a config v2 change — it exists today and is preserved.
 
 ---
 
@@ -131,7 +152,7 @@ ANNO_RAG_* env vars  ← highest priority, always
 
 **User-defined profiles**: drop a file at `~/.anno-rag/profiles/<name>.toml` using the same block syntax (no `schema_version` needed). Reference it with `profile = "<name>"` in the main config.
 
-Example user profile:
+Example user profile (note: VLM URLs must remain loopback — use a port-forward for remote GPU):
 ```toml
 # ~/.anno-rag/profiles/my-fr-legal.toml
 [models.embedder]
@@ -141,7 +162,7 @@ model_id = "dangvantuan/sentence-camembert-large"
 mode = "vlm"
 
 [ocr.vlm]
-server_url = "http://gpu-server:8000"
+vllm_url = "http://127.0.0.1:8000"   # port-forward from remote GPU server
 language = "fra"
 ```
 
@@ -163,19 +184,72 @@ Warning: config.toml is schema v1 — run 'anno-rag config migrate' to upgrade.
 - Prints a human-readable diff showing field renames and dropped deprecated fields (`tesseract_path`, `enable_ocr`)
 - User reviews and deletes the old file manually
 
-**Env var mapping** (all existing vars preserved):
+**V1 → V2 field mapping** (complete):
+
+| V1 flat field | V2 block path |
+|---------------|--------------|
+| `embed_model` | `models.embedder.model_id` |
+| `embed_dim` | *(deprecated — auto-detected; still accepted as override)* |
+| `embedder_dtype` | `models.embedder.dtype` |
+| `ner_model_id` | `models.ner.model_id` |
+| `ner_onnx_precision` | `models.ner.precision` |
+| `ner_candle_model_id` | `models.ner.candle_fallback_id` |
+| `ner_warmup_model` | `models.ner.warmup_model` |
+| `ner_pii_model_id` | `models.ner_pii.model_id` |
+| `rerank_model` | `models.reranker.model_id` |
+| `rerank_onnx_file` | `models.reranker.onnx_file` |
+| `rerank_pool_size` | `models.reranker.pool_size` |
+| `rerank_batch_size` | `models.reranker.batch_size` |
+| `ocr_mode` | `ocr.mode` |
+| `ocr_backend` | `ocr.embedded.backend` |
+| `ocr_cache_enabled` | `ocr.embedded.cache` |
+| `ocr_batch_budget_secs` | `ocr.embedded.batch_budget_secs` |
+| `vlm_backend` | `ocr.vlm.backend` |
+| `vlm_vllm_url` | `ocr.vlm.vllm_url` |
+| `vlm_local_url` | `ocr.vlm.local_url` |
+| `vlm_confidence_threshold` | `ocr.confidence_threshold` |
+| `vlm_safetensors_model_id` | `ocr.vlm.safetensors_model_id` |
+| `vlm_gguf_model_id` | `ocr.vlm.gguf_model_id` |
+| `index_distance` | `index.distance` |
+| `vector_index_threshold` | `index.vector_index_threshold` |
+| `index_num_partitions` | `index.num_partitions` |
+| `search_nprobes` | `index.nprobes` |
+| `search_refine_factor` | `index.refine_factor` |
+| `chunk_max_chars` | `chunking.max_chars` |
+| `chunk_overlap` | `chunking.overlap` |
+| `memory_collection_name` | `memory.collection_name` |
+| `memory_embedding_dim` | `memory.embedding_dim` |
+| `memory_ner_mode` | `memory.ner_mode` |
+| `compaction_interval_secs` | `memory.compaction_interval_secs` |
+| `compaction_min_age_secs` | `memory.compaction_min_age_secs` |
+| `conflict_cosine_threshold` | `memory.conflict_cosine_threshold` |
+| `graph_max_hops` | `memory.graph_max_hops` |
+| `graph_per_hop_limit` | `memory.graph_per_hop_limit` |
+| `entity_aliases` | `memory.entity_aliases` |
+| `advanced_pdf_native` | `pdf.native_mode` |
+| `pdf_keep_headers` | `pdf.keep_headers` |
+| `pdf_keep_footers` | `pdf.keep_footers` |
+| `pdf_extract_annotations` | `pdf.extract_annotations` |
+| `pdf_hierarchy_clusters` | `pdf.hierarchy_clusters` |
+| `pdf_allow_single_column_tables` | `pdf.allow_single_column_tables` |
+| `pdf_structured_sidecar` | `pdf.structured_sidecar` |
+| `enable_ocr` | *(deprecated — use `ocr.mode = "auto_embedded"`)* |
+| `tesseract_path` | *(deprecated — embedded OCR does not use it)* |
+
+**Env var mapping** (all existing vars preserved — new v2 vars added alongside):
 
 | V1 env var | V2 config path |
 |------------|---------------|
 | `ANNO_RAG_EMBED_MODEL` | `models.embedder.model_id` |
-| `ANNO_RAG_EMBED_DIM` | *(deprecated — auto-detected; still accepted for override)* |
-| `ANNO_RAG_OCR_MODE` | `ocr.mode` |
-| `ANNO_RAG_OCR_BACKEND` | `ocr.embedded.backend` |
-| `ANNO_RAG_NER_MODEL` | `models.ner.model_id` |
-| `ANNO_RAG_RERANK_MODEL` | `models.reranker.model_id` |
+| `ANNO_RAG_VLM_BACKEND` | `ocr.vlm.backend` |
+| `ANNO_RAG_VLM_VLLM_URL` | `ocr.vlm.vllm_url` |
+| `ANNO_RAG_VLM_LOCAL_URL` | `ocr.vlm.local_url` |
+| `ANNO_RAG_VLM_SAFETENSORS_MODEL_ID` | `ocr.vlm.safetensors_model_id` |
+| `ANNO_RAG_VLM_GGUF_MODEL_ID` | `ocr.vlm.gguf_model_id` |
+| `ANNO_RAG_VLM_CONFIDENCE_THRESHOLD` | `ocr.confidence_threshold` |
 | … | … |
 
-New v2-only vars follow block-path convention: `ANNO_RAG_OCR_VLM_SERVER_URL`, `ANNO_RAG_OCR_VLM_LANGUAGE`, `ANNO_RAG_MODELS_EMBEDDER_DTYPE`.
+New v2-only vars: `ANNO_RAG_OCR_VLM_LANGUAGE`, `ANNO_RAG_OCR_VLM_PROMPT_TEMPLATE`.
 
 **Deprecation timeline**: v1 compat shim remains until v1.0, removed with a semver major bump.
 
@@ -198,7 +272,7 @@ default_runtime_profile = "standard"
 
 [profiles.legal]
 features = ["embedded-ocr", "vlm-ocr"]
-description = "Adds VLM-OCR client. Requires external VLM server at runtime."
+description = "Adds VLM-OCR client (LightOnOCR). Requires loopback VLM server at runtime."
 default_runtime_profile = "legal-full"
 
 [profiles.full]
@@ -228,6 +302,8 @@ Error: config sets ocr.mode = "vlm" but this binary was built without the vlm-oc
 
 ### 5. Hot-Reload
 
+**Structural prerequisite**: `AnnoRagServer` in `anno-rag-mcp/src/lib.rs` currently uses `Arc<OnceCell<Arc<Pipeline>>>` — this can only be set once and cannot be replaced. Hot-reload requires changing this to `Arc<RwLock<Option<Arc<Pipeline>>>>`. This is a real structural change to the MCP server, not just config plumbing. It must be implemented before the reload signal handler can work.
+
 **Trigger**:
 - `SIGHUP` (Unix)
 - Named Windows event `Global\AnnoRagReload`, polled every 2 s
@@ -254,10 +330,10 @@ Error: config sets ocr.mode = "vlm" but this binary was built without the vlm-oc
 
 | Crate | Change |
 |-------|--------|
-| `anno-rag` | `config.rs` split into `config/v2/` module tree; `v1_compat.rs` shim; `ModelDimRegistry` |
+| `anno-rag` | `config.rs` split into `config/v2/` module tree; `v1_compat.rs` shim; `ModelDimRegistry`; new fields: `ocr.vlm.language`, `ocr.vlm.prompt_template` |
 | `anno-rag-bin` | `config_cmd.rs` gains `migrate` subcommand; `main.rs` gains reload signal handler |
-| `anno-rag-mcp` | `ProviderSet` behind `Arc<RwLock<_>>` for hot-swap |
-| `anno-rag-tabular` | VLM config moved into `AnnoRagConfig`; `llm::vlm` reads from shared config |
+| `anno-rag-mcp` | `Arc<OnceCell<Arc<Pipeline>>>` → `Arc<RwLock<Option<Arc<Pipeline>>>>` for hot-swap; reload signal listener |
+| `anno-rag-tabular` | `routing.rs`: wire `vlm_safetensors_model_id` / `vlm_gguf_model_id` from config instead of hardcoded strings |
 | `anno-config-meta` | Proc-macro extended for nested block types (currently only flat struct) |
 
 ---
@@ -268,3 +344,4 @@ Error: config sets ocr.mode = "vlm" but this binary was built without the vlm-oc
 - Multi-tenant per-corpus config — future work
 - Config encryption — handled by the vault layer, not the config layer
 - GUI config editor — Hacienda Workbench concern
+- Allowing non-loopback VLM URLs — intentionally excluded (trust-boundary policy)
