@@ -229,6 +229,29 @@ impl Store {
         let chunks_schema = chunks_schema(cfg.embed_dim);
         let tbl = open_or_create_table(&conn, TABLE_NAME, &chunks_schema).await?;
 
+        // Detect stale index built with a different embedder — surface a clear
+        // error rather than returning silent empty results on every search.
+        if let Ok(schema) = tbl.schema().await {
+            let stored_dim = schema.fields().iter().find_map(|f| {
+                if f.name() == "vector" {
+                    if let DataType::FixedSizeList(_, dim) = f.data_type() {
+                        return Some(*dim as usize);
+                    }
+                }
+                None
+            });
+            if let Some(stored) = stored_dim {
+                if stored != cfg.embed_dim {
+                    return Err(Error::Store(format!(
+                        "legal index was built with {stored}-dim embeddings but the current \
+                         embedder produces {}-dim vectors. \
+                         Re-index your documents with `anno-rag index` to fix this.",
+                        cfg.embed_dim
+                    )));
+                }
+            }
+        }
+
         let memories_schema = memories_schema(cfg.memory_embedding_dim);
         let memories_tbl = {
             if let Some(stored) =
