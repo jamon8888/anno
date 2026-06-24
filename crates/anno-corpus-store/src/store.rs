@@ -287,6 +287,29 @@ impl CorpusStore {
         }
     }
 
+    /// Set (or replace) the human-readable alias for a corpus.
+    /// Errors (via rusqlite UNIQUE violation) if the alias is already taken.
+    pub fn set_alias(&self, corpus_id: CorpusId, alias: &str) -> Result<()> {
+        let conn = self.conn.lock().expect("corpus sqlite mutex poisoned");
+        ensure_corpus_exists(&conn, corpus_id)?;
+        conn.execute(
+            "UPDATE corpora SET alias = ?2, updated_at = ?3 WHERE corpus_id = ?1",
+            params![corpus_id.as_string(), alias, Utc::now().to_rfc3339()],
+        )?;
+        Ok(())
+    }
+
+    /// Resolve a corpus id by its alias. Returns `None` if no corpus has it.
+    pub fn lookup_by_alias(&self, alias: &str) -> Result<Option<CorpusId>> {
+        let conn = self.conn.lock().expect("corpus sqlite mutex poisoned");
+        let mut stmt = conn.prepare("SELECT corpus_id FROM corpora WHERE alias = ?1")?;
+        let mut rows = stmt.query(params![alias])?;
+        match rows.next()? {
+            Some(row) => Ok(Some(CorpusId::new(parse_uuid(row.get::<_, String>(0)?)?))),
+            None => Ok(None),
+        }
+    }
+
     /// Return binding ids for a corpus and binding kind.
     pub fn binding_ids_for_corpus_kind(
         &self,
@@ -684,6 +707,33 @@ mod tests {
         let rows = store.list_corpora().expect("list");
         assert_eq!(rows.len(), 1);
         assert!(rows[0].alias.is_some(), "alias field populated");
+    }
+
+    #[test]
+    fn set_and_lookup_alias_roundtrip() {
+        let dir = tempfile::tempdir().expect("tempdir");
+        let store = CorpusStore::open(dir.path().join("c.sqlite3")).expect("open");
+        let reg = store
+            .register_root(dir.path().join("folderA").to_str().unwrap(), &[CorpusProfile::All])
+            .expect("register");
+        store.set_alias(reg.corpus_id, "2026-0042").expect("set alias");
+        let found = store.lookup_by_alias("2026-0042").expect("lookup");
+        assert_eq!(found, Some(reg.corpus_id));
+        assert_eq!(store.lookup_by_alias("nope").expect("lookup miss"), None);
+    }
+
+    #[test]
+    fn set_alias_rejects_duplicate() {
+        let dir = tempfile::tempdir().expect("tempdir");
+        let store = CorpusStore::open(dir.path().join("c.sqlite3")).expect("open");
+        let a = store
+            .register_root(dir.path().join("a").to_str().unwrap(), &[CorpusProfile::All])
+            .expect("register a");
+        let b = store
+            .register_root(dir.path().join("b").to_str().unwrap(), &[CorpusProfile::All])
+            .expect("register b");
+        store.set_alias(a.corpus_id, "dup").expect("first alias ok");
+        assert!(store.set_alias(b.corpus_id, "dup").is_err(), "duplicate rejected");
     }
 
     #[test]
