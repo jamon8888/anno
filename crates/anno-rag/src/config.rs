@@ -644,7 +644,7 @@ pub struct AnnoRagConfig {
     #[config_meta(
         env = "ANNO_RAG_MEMORY_EMBEDDING_DIM",
         cli = "--memory-embedding-dim",
-        doc = "Embedding dimension for memory vectors. Default: 1024",
+        doc = "Embedding dimension for memory vectors. Default: 768 (matches multilingual-e5-base)",
         since = "0.8"
     )]
     #[serde(default = "default_memory_embedding_dim")]
@@ -816,7 +816,7 @@ fn default_memory_collection_name() -> String {
 }
 
 fn default_memory_embedding_dim() -> usize {
-    1024
+    768
 }
 
 fn default_compaction_interval_secs() -> u64 {
@@ -1468,8 +1468,7 @@ mod tests {
         assert_eq!(c.ocr_batch_budget_secs, None);
         assert!(c.embedder_dtype.is_none());
         assert_eq!(c.memory_collection_name, "memories");
-        // absent field → legacy default (kept at 1024 for existing memory stores)
-        assert_eq!(c.memory_embedding_dim, 1024);
+        assert_eq!(c.memory_embedding_dim, 768);
         assert!(c.ocr_cache_enabled);
         assert!(c.ocr_backend.is_none());
     }
@@ -1490,7 +1489,7 @@ mod tests {
         assert_eq!(c.ocr_batch_budget_secs, None);
         assert!(c.embedder_dtype.is_none());
         assert_eq!(c.memory_collection_name, "memories");
-        assert_eq!(c.memory_embedding_dim, 1024);
+        assert_eq!(c.memory_embedding_dim, 768);
         assert_eq!(c.memory_ner_mode, MemoryNerMode::Async);
         assert!(c.ocr_cache_enabled);
         assert!(c.ocr_backend.is_none());
