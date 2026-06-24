@@ -231,7 +231,7 @@ impl Store {
 
         // Detect stale index built with a different embedder — surface a clear
         // error rather than returning silent empty results on every search.
-        if let Some(stored) = stored_vector_dim(&conn, TABLE_NAME, "vector").await {
+        if let Some(stored) = stored_vector_dim(&conn, TABLE_NAME, "vector").await? {
             if stored != cfg.embed_dim {
                 return Err(Error::Store(format!(
                     "legal index was built with {stored}-dim embeddings but the current \
@@ -244,10 +244,8 @@ impl Store {
 
         let memories_schema = memories_schema(cfg.memory_embedding_dim);
         let memories_tbl = {
-            if let Some(stored) =
-                stored_vector_dim(&conn, &cfg.memory_collection_name, "embedding").await
-            {
-                if stored != cfg.memory_embedding_dim {
+            match stored_vector_dim(&conn, &cfg.memory_collection_name, "embedding").await {
+                Ok(Some(stored)) if stored != cfg.memory_embedding_dim => {
                     tracing::warn!(
                         stored_dim = stored,
                         config_dim = cfg.memory_embedding_dim,
@@ -256,6 +254,17 @@ impl Store {
                     );
                     conn.drop_table(&cfg.memory_collection_name, &[]).await?;
                 }
+                Err(e) => {
+                    tracing::warn!(
+                        error = %e,
+                        table = %cfg.memory_collection_name,
+                        "memory table schema malformed — dropping and rebuilding (memories are ephemeral)"
+                    );
+                    // Best-effort: if the table is corrupt the drop may itself fail;
+                    // open_or_create_table below will create a fresh one regardless.
+                    let _ = conn.drop_table(&cfg.memory_collection_name, &[]).await;
+                }
+                _ => {}
             }
             open_or_create_table(&conn, &cfg.memory_collection_name, &memories_schema).await?
         };
@@ -1392,21 +1401,42 @@ fn is_missing_fts_index_error(e: &Error) -> bool {
     e.to_string().contains("INVERTED index")
 }
 
+/// True when a LanceDB error indicates the requested table does not exist.
+fn is_lancedb_table_not_found(e: &lancedb::Error) -> bool {
+    let msg = e.to_string();
+    msg.contains("was not found") || msg.contains("not found") || msg.contains("does not exist")
+}
+
 /// Read the FixedSizeList dimension of the named vector column from an existing
-/// LanceDB table. Returns `None` if the table doesn't exist or has no such column.
-async fn stored_vector_dim(conn: &Connection, table_name: &str, field_name: &str) -> Option<usize> {
-    let tbl = conn.open_table(table_name).execute().await.ok()?;
-    let schema = tbl.schema().await.ok()?;
-    schema.fields().iter().find_map(|f| {
-        if f.name() != field_name {
-            return None;
-        }
-        if let DataType::FixedSizeList(_, dim) = f.data_type() {
-            Some(*dim as usize)
-        } else {
-            None
-        }
-    })
+/// LanceDB table.
+///
+/// Returns:
+/// - `Ok(None)` — table does not exist (safe to create fresh).
+/// - `Ok(Some(dim))` — table exists and `field_name` is a `FixedSizeList` of `dim` elements.
+/// - `Err` — table exists but its schema cannot be read, `field_name` is absent, or the
+///   field is not a `FixedSizeList` (indicates a malformed table that callers must handle).
+async fn stored_vector_dim(
+    conn: &Connection,
+    table_name: &str,
+    field_name: &str,
+) -> Result<Option<usize>> {
+    let tbl = match conn.open_table(table_name).execute().await {
+        Ok(tbl) => tbl,
+        Err(e) if is_lancedb_table_not_found(&e) => return Ok(None),
+        Err(e) => return Err(e.into()),
+    };
+    let schema = tbl.schema().await?;
+    match schema.fields().iter().find(|f| f.name() == field_name) {
+        None => Err(Error::Store(format!(
+            "table '{table_name}' exists but has no '{field_name}' column — schema may be malformed"
+        ))),
+        Some(f) => match f.data_type() {
+            DataType::FixedSizeList(_, dim) => Ok(Some(*dim as usize)),
+            other => Err(Error::Store(format!(
+                "table '{table_name}' column '{field_name}' has type {other:?}, expected FixedSizeList — schema may be malformed"
+            ))),
+        },
+    }
 }
 
 /// Open an existing LanceDB table by name, or create an empty one with `schema`
