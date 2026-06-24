@@ -1307,10 +1307,8 @@ impl AnnoRagServer {
             }
         };
 
-        let sync_status = self
-            .maybe_sync_knowledge_before_search(&effective, &scope, &mut warnings)
-            .await;
-
+        // Read freshness BEFORE the opportunistic sync so search.freshness and
+        // corpus_health.freshness always report the same pre-sync index state (issue #75).
         let (index_fresh, freshness) = match self.freshness_for_effective(&effective).await {
             Ok(value) => value,
             Err(error) => {
@@ -1318,6 +1316,10 @@ impl AnnoRagServer {
                 (false, "unknown".to_string())
             }
         };
+
+        let sync_status = self
+            .maybe_sync_knowledge_before_search(&effective, &scope, &mut warnings)
+            .await;
 
         if scope == "all" || scope == "knowledge" {
             if plan.knowledge == SearchBackendMode::Fast {
