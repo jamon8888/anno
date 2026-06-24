@@ -5009,11 +5009,14 @@ mod lazy_tests {
         assert_eq!(v["mode_used"], "semantic");
         assert_eq!(v["scope_used"], "knowledge");
         let warnings = v["warnings"].as_array().expect("warnings array");
+        // Should warn about FTS fallback, not silently skip.
         assert!(warnings.iter().any(|w| {
             w.as_str()
                 .unwrap_or("")
-                .contains("knowledge scope skipped in semantic mode")
+                .contains("knowledge index uses FTS only")
         }));
+        // Knowledge scope must NOT be skipped — it falls back to fast mode.
+        assert_eq!(v["scope_modes"]["knowledge"], "fast");
     }
 
     #[tokio::test]
