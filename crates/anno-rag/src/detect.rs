@@ -47,10 +47,10 @@ impl FrPatterns {
         static P: OnceLock<FrPatterns> = OnceLock::new();
         P.get_or_init(|| FrPatterns {
             // NIR (numéro de sécurité sociale) — 15-digit format with embedded sex/year/month/dept.
-            // Optional single spaces between canonical groupings (sex year month dept commune order key)
-            // as printed on French social security cards.
+            // Optional literal spaces between canonical groupings (sex year month dept commune order key)
+            // as printed on French social security cards. Uses ` ?` not `\s?` to avoid matching tabs/newlines.
             nir: Regex::new(
-                r"\b[12]\s?\d{2}\s?(0[1-9]|1[0-2])\s?(2[AB]|\d{2})\s?\d{3}\s?\d{3}\s?\d{2}\b",
+                r"\b[12] ?\d{2} ?(0[1-9]|1[0-2]) ?(2[AB]|\d{2}) ?\d{3} ?\d{3} ?\d{2}\b",
             )
             .expect("nir regex is a literal"),
             // SIRET — 14 digits (Luhn checked in code, not regex).

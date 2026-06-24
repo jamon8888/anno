@@ -231,24 +231,14 @@ impl Store {
 
         // Detect stale index built with a different embedder — surface a clear
         // error rather than returning silent empty results on every search.
-        if let Ok(schema) = tbl.schema().await {
-            let stored_dim = schema.fields().iter().find_map(|f| {
-                if f.name() == "vector" {
-                    if let DataType::FixedSizeList(_, dim) = f.data_type() {
-                        return Some(*dim as usize);
-                    }
-                }
-                None
-            });
-            if let Some(stored) = stored_dim {
-                if stored != cfg.embed_dim {
-                    return Err(Error::Store(format!(
-                        "legal index was built with {stored}-dim embeddings but the current \
-                         embedder produces {}-dim vectors. \
-                         Re-index your documents with `anno-rag index` to fix this.",
-                        cfg.embed_dim
-                    )));
-                }
+        if let Some(stored) = stored_vector_dim(&conn, TABLE_NAME, "vector").await {
+            if stored != cfg.embed_dim {
+                return Err(Error::Store(format!(
+                    "legal index was built with {stored}-dim embeddings but the current \
+                     embedder produces {}-dim vectors. \
+                     Re-index your documents with `anno-rag index` to fix this.",
+                    cfg.embed_dim
+                )));
             }
         }
 
@@ -1405,10 +1395,6 @@ fn is_missing_fts_index_error(e: &Error) -> bool {
 /// Read the FixedSizeList dimension of the named vector column from an existing
 /// LanceDB table. Returns `None` if the table doesn't exist or has no such column.
 async fn stored_vector_dim(conn: &Connection, table_name: &str, field_name: &str) -> Option<usize> {
-    let names = conn.table_names().execute().await.ok()?;
-    if !names.iter().any(|n| n == table_name) {
-        return None;
-    }
     let tbl = conn.open_table(table_name).execute().await.ok()?;
     let schema = tbl.schema().await.ok()?;
     schema.fields().iter().find_map(|f| {
