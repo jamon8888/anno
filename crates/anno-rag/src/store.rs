@@ -2292,15 +2292,16 @@ mod tests {
             let _store = Store::open(&cfg4).await.expect("open at dim=4");
         }
 
-        // Reopen with dim=8 — must succeed; table is dropped and rebuilt.
+        // Reopen with only memory_embedding_dim changed — chunks dim stays at 4
+        // so the chunks validation passes and we reach the memories rebuild path.
         let cfg8 = AnnoRagConfig {
             data_dir: dir.path().to_path_buf(),
-            embed_dim: 8,
+            embed_dim: 4,
             memory_embedding_dim: 8,
             ..Default::default()
         };
         Store::open(&cfg8)
             .await
-            .expect("open at dim=8 must succeed after dim mismatch");
+            .expect("open must succeed after memories dim mismatch");
     }
 }
