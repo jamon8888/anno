@@ -47,8 +47,12 @@ impl FrPatterns {
         static P: OnceLock<FrPatterns> = OnceLock::new();
         P.get_or_init(|| FrPatterns {
             // NIR (numéro de sécurité sociale) — 15-digit format with embedded sex/year/month/dept.
-            nir: Regex::new(r"\b[12]\d{2}(0[1-9]|1[0-2])(2[AB]|\d{2})\d{3}\d{3}\d{2}\b")
-                .expect("nir regex is a literal"),
+            // Optional single spaces between canonical groupings (sex year month dept commune order key)
+            // as printed on French social security cards.
+            nir: Regex::new(
+                r"\b[12]\s?\d{2}\s?(0[1-9]|1[0-2])\s?(2[AB]|\d{2})\s?\d{3}\s?\d{3}\s?\d{2}\b",
+            )
+            .expect("nir regex is a literal"),
             // SIRET — 14 digits (Luhn checked in code, not regex).
             siret: Regex::new(r"\b\d{14}\b").expect("siret regex is a literal"),
             // IBAN-FR — FR + 2 check digits + 23-char BBAN (5×4 + 3).
@@ -1148,6 +1152,35 @@ mod tests {
         assert!(ents
             .iter()
             .any(|e| matches!(e.category, EntityCategory::PhoneNumber)));
+    }
+
+    #[test]
+    fn iban_fr_spaced_format_detected_by_pattern_layer() {
+        // FR14 2004 1010 0505 0001 3M02 606 is the canonical valid French IBAN
+        // used in IBAN documentation. The regex already supports optional spaces.
+        let text = "Mon IBAN : FR14 2004 1010 0505 0001 3M02 606 merci.";
+        let hits = detect_patterns(text);
+        assert!(
+            hits.iter()
+                .any(|e| matches!(&e.category, EntityCategory::Custom(s) if s == "IBAN_FR")
+                    && e.original.contains("FR14")),
+            "spaced IBAN should be detected by pattern layer: {:?}",
+            hits.iter().map(|e| (&e.category, &e.original)).collect::<Vec<_>>()
+        );
+    }
+
+    #[test]
+    fn nir_spaced_format_detected() {
+        // NIR format as printed on French social security cards:
+        // sex(1) year(2) month(2) dept(2) commune(3) order(3) key(2) = 15 digits
+        let text = "NIR : 1 78 03 69 123 456 78 fin du texte";
+        let hits = detect_patterns(text);
+        assert!(
+            hits.iter()
+                .any(|e| matches!(&e.category, EntityCategory::Custom(s) if s == "NIR")),
+            "spaced NIR should be detected: {:?}",
+            hits.iter().map(|e| (&e.category, &e.original)).collect::<Vec<_>>()
+        );
     }
 
     #[test]
