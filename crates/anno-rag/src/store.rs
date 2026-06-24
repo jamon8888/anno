@@ -264,8 +264,7 @@ impl Store {
                         table = %cfg.memory_collection_name,
                         "memory table embedding dim mismatch — dropping and rebuilding (memories are ephemeral)"
                     );
-                    conn.drop_table(&cfg.memory_collection_name, &[])
-                        .await?;
+                    conn.drop_table(&cfg.memory_collection_name, &[]).await?;
                 }
             }
             open_or_create_table(&conn, &cfg.memory_collection_name, &memories_schema).await?

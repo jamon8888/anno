@@ -1161,11 +1161,14 @@ mod tests {
         let text = "Mon IBAN : FR14 2004 1010 0505 0001 3M02 606 merci.";
         let hits = detect_patterns(text);
         assert!(
-            hits.iter()
-                .any(|e| matches!(&e.category, EntityCategory::Custom(s) if s == "IBAN_FR")
-                    && e.original.contains("FR14")),
+            hits.iter().any(
+                |e| matches!(&e.category, EntityCategory::Custom(s) if s == "IBAN_FR")
+                    && e.original.contains("FR14")
+            ),
             "spaced IBAN should be detected by pattern layer: {:?}",
-            hits.iter().map(|e| (&e.category, &e.original)).collect::<Vec<_>>()
+            hits.iter()
+                .map(|e| (&e.category, &e.original))
+                .collect::<Vec<_>>()
         );
     }
 
@@ -1179,7 +1182,9 @@ mod tests {
             hits.iter()
                 .any(|e| matches!(&e.category, EntityCategory::Custom(s) if s == "NIR")),
             "spaced NIR should be detected: {:?}",
-            hits.iter().map(|e| (&e.category, &e.original)).collect::<Vec<_>>()
+            hits.iter()
+                .map(|e| (&e.category, &e.original))
+                .collect::<Vec<_>>()
         );
     }
 
