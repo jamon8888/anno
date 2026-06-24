@@ -113,12 +113,12 @@ pub(crate) fn search_execution_plan(
         },
         (Some("semantic"), "knowledge") => {
             warnings.push(
-                "knowledge scope skipped in semantic mode (knowledge index currently supports fast mode only)"
+                "knowledge index uses FTS only; running fast mode as fallback for semantic query"
                     .to_string(),
             );
             SearchExecutionPlan {
                 mode_used: "semantic",
-                knowledge: SearchBackendMode::Skipped,
+                knowledge: SearchBackendMode::Fast,
                 legal: SearchBackendMode::Skipped,
                 explicit_fast_legal_error: false,
             }
@@ -131,12 +131,12 @@ pub(crate) fn search_execution_plan(
         },
         (Some("semantic"), "all") => {
             warnings.push(
-                "knowledge scope skipped in semantic mode (knowledge index currently supports fast mode only)"
+                "knowledge index uses FTS only; running fast mode as fallback for semantic query"
                     .to_string(),
             );
             SearchExecutionPlan {
                 mode_used: "semantic",
-                knowledge: SearchBackendMode::Skipped,
+                knowledge: SearchBackendMode::Fast,
                 legal: SearchBackendMode::Semantic,
                 explicit_fast_legal_error: false,
             }
