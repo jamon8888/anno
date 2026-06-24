@@ -37,6 +37,9 @@ pub struct CorpusRow {
     pub corpus_id: CorpusId,
     /// Pseudonymous display label.
     pub label_pseudo: String,
+    /// Human-readable alias (user-supplied or auto). Option for rows read
+    /// before the auto-alias backfill runs.
+    pub alias: Option<String>,
     /// Registry health field.
     pub health: String,
 }
@@ -248,14 +251,15 @@ impl CorpusStore {
     pub fn list_corpora(&self) -> Result<Vec<CorpusRow>> {
         let conn = self.conn.lock().expect("corpus sqlite mutex poisoned");
         let mut stmt = conn.prepare(
-            "SELECT corpus_id, label_pseudo, health \
+            "SELECT corpus_id, label_pseudo, alias, health \
              FROM corpora ORDER BY created_at, corpus_id",
         )?;
         let rows = stmt.query_map([], |row| {
             Ok(CorpusRow {
                 corpus_id: CorpusId::new(parse_uuid(row.get::<_, String>(0)?)?),
                 label_pseudo: row.get(1)?,
-                health: row.get(2)?,
+                alias: row.get(2)?,
+                health: row.get(3)?,
             })
         })?;
         rows.collect::<std::result::Result<Vec<_>, _>>()
@@ -667,6 +671,19 @@ mod tests {
             .expect("metadata")
             .expect("exists");
         assert_eq!(metadata["source_path"], "c:/clients/matter");
+    }
+
+    #[test]
+    #[ignore = "alias populated by the auto-alias task (A4)"]
+    fn list_corpora_exposes_alias_field() {
+        let dir = tempfile::tempdir().expect("tempdir");
+        let store = CorpusStore::open(dir.path().join("c.sqlite3")).expect("open");
+        store
+            .register_root(dir.path().join("folderA").to_str().unwrap(), &[CorpusProfile::All])
+            .expect("register");
+        let rows = store.list_corpora().expect("list");
+        assert_eq!(rows.len(), 1);
+        assert!(rows[0].alias.is_some(), "alias field populated");
     }
 
     #[test]
