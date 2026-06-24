@@ -12,7 +12,7 @@ pub enum EffectiveCorpus {
 pub enum CorpusGuardError {
     #[error("index a folder before using this tool")]
     NoCorpus,
-    #[error("corpus_id is required because multiple corpora are indexed")]
+    #[error("corpus_id is required because multiple corpora are indexed — pass allow_cross_corpus=true to search across all corpora")]
     CorpusRequired,
     #[error("unknown corpus_id: {0}")]
     UnknownCorpus(String),
