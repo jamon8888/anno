@@ -13,6 +13,7 @@
 mod allowed_roots;
 pub mod corpus;
 mod corpus_sync;
+mod envelope;
 pub mod health;
 mod indexer;
 pub mod knowledge;
