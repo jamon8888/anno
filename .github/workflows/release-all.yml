@@ -94,10 +94,12 @@ jobs:
       - name: Set version in tauri.conf.json
         working-directory: crates/anno-rag-setup
         shell: bash
+        env:
+          SEMVER: ${{ steps.ver.outputs.semver }}
         run: |
           node -e "
             const c = JSON.parse(require('fs').readFileSync('tauri.conf.json','utf-8'));
-            c.version = '${{ steps.ver.outputs.semver }}';
+            c.version = process.env.SEMVER;
             require('fs').writeFileSync('tauri.conf.json', JSON.stringify(c, null, 2) + '\n');
           "
 

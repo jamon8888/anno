@@ -1314,17 +1314,41 @@ impl AnnoRagServer {
             .to_string();
         }
 
-        let effective = match self
-            .resolve_effective_corpus(p.corpus_id.as_deref(), p.allow_cross_corpus)
-            .await
-        {
-            Ok(effective) => effective,
+        let svc = match self.corpus().await {
+            Ok(svc) => svc,
             Err(e) => {
+                return serde_json::json!({"ok": false, "error": e.to_string()}).to_string();
+            }
+        };
+        let effective = match svc.resolve_effective(p.corpus_id.as_deref(), p.allow_cross_corpus) {
+            Ok(effective) => effective,
+            Err(anno_corpus_core::CorpusGuardError::CorpusRequired) => {
+                let rows = match svc.store().list_corpora() {
+                    Ok(r) => r,
+                    Err(e) => {
+                        return serde_json::json!({"ok": false, "error": e.to_string()})
+                            .to_string();
+                    }
+                };
                 return serde_json::json!({
                     "ok": false,
-                    "error": e,
+                    "status": "corpus_required",
+                    "message": "Plusieurs dossiers indexés. Précisez un dossier ou demandez une recherche transversale.",
+                    "available": rows
+                        .iter()
+                        .map(|c| serde_json::json!({
+                            "corpus_id": c.corpus_id.as_string(),
+                            "alias": c.alias,
+                            "label": c.label_pseudo,
+                            "health": c.health,
+                        }))
+                        .collect::<Vec<_>>(),
+                    "hint": "Relancez avec corpus_id/alias, ou allow_cross_corpus: true pour un contrôle de conflits.",
                 })
                 .to_string();
+            }
+            Err(e) => {
+                return serde_json::json!({"ok": false, "error": e.to_string()}).to_string();
             }
         };
 

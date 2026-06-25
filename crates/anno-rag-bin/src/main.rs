@@ -303,6 +303,13 @@ async fn main() -> anyhow::Result<()> {
             alias,
         } => {
             let out = output.unwrap_or_else(|| cfg.outputs_dir());
+            // The CLI ingest path is legal-scoped; reject other profiles.
+            if profile != "legal" {
+                return Err(anyhow::anyhow!(
+                    "ingest profile must be 'legal', got '{profile}'. \
+                     Use --profile legal for document-scoped ingestion."
+                ));
+            }
             // Register the folder as a corpus so search resolution + document
             // handles work for documents ingested via the CLI.
             let svc = anno_rag_mcp::corpus::CorpusService::open(&cfg)?;

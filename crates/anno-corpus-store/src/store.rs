@@ -115,7 +115,7 @@ impl CorpusStore {
         for id in ids {
             let next: i64 = conn
                 .query_row(
-                    "SELECT COALESCE(MAX(CAST(SUBSTR(alias, 8) AS INTEGER)), 0) FROM corpora",
+                    "SELECT COALESCE(MAX(CAST(SUBSTR(alias, 8) AS INTEGER)), 0) FROM corpora WHERE alias GLOB 'corpus-[0-9]*'",
                     [],
                     |row| row.get(0),
                 )
@@ -186,7 +186,7 @@ impl CorpusStore {
         if existing_alias.is_none() {
             let next: i64 = conn
                 .query_row(
-                    "SELECT COALESCE(MAX(CAST(SUBSTR(alias, 8) AS INTEGER)), 0) FROM corpora",
+                    "SELECT COALESCE(MAX(CAST(SUBSTR(alias, 8) AS INTEGER)), 0) FROM corpora WHERE alias GLOB 'corpus-[0-9]*'",
                     [],
                     |row| row.get(0),
                 )
