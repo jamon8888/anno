@@ -290,7 +290,11 @@ fn label_by_name(name: &str) -> GdprLabel {
         .iter()
         .find(|(l, _, _)| *l == name)
         .unwrap_or_else(|| panic!("unknown GDPR label: {name}"));
-    GdprLabel { name: n, description: d, threshold: *t }
+    GdprLabel {
+        name: n,
+        description: d,
+        threshold: *t,
+    }
 }
 
 /// Focused label groups for the description-based detection pass.
@@ -305,31 +309,52 @@ pub(crate) fn label_groups() -> Vec<LabelGroup> {
 pub(crate) fn label_groups_for(scope: crate::config::MaskingScope) -> Vec<LabelGroup> {
     let pick = |names: &[&str]| names.iter().map(|n| label_by_name(n)).collect::<Vec<_>>();
     let mut identity = pick(&[
-        "person", "address", "date_of_birth", "age", "nationality", "profession",
-        "organization", "location",
+        "person",
+        "address",
+        "date_of_birth",
+        "age",
+        "nationality",
+        "profession",
+        "organization",
+        "location",
     ]);
     if matches!(scope, crate::config::MaskingScope::CabinetConfidential) {
         for l in &mut identity {
             if l.name == "organization" {
-                l.description = "toute organisation, cabinet, societe, administration ou partie nommee";
+                l.description =
+                    "toute organisation, cabinet, societe, administration ou partie nommee";
                 l.threshold = 0.30;
             }
         }
     }
     vec![
-        LabelGroup { key: "identity", labels: identity },
+        LabelGroup {
+            key: "identity",
+            labels: identity,
+        },
         LabelGroup {
             key: "art9",
             labels: pick(&[
-                "racial_ethnic_origin", "political_opinion", "religious_belief",
-                "trade_union_membership", "health_data", "genetic_data", "biometric_data",
-                "sexual_orientation", "criminal_record",
+                "racial_ethnic_origin",
+                "political_opinion",
+                "religious_belief",
+                "trade_union_membership",
+                "health_data",
+                "genetic_data",
+                "biometric_data",
+                "sexual_orientation",
+                "criminal_record",
             ]),
         },
         LabelGroup {
             key: "identifiers_model",
             labels: pick(&[
-                "national_id", "tax_id", "bank_account", "ip_address", "username", "device_id",
+                "national_id",
+                "tax_id",
+                "bank_account",
+                "ip_address",
+                "username",
+                "device_id",
             ]),
         },
     ]
@@ -734,8 +759,11 @@ impl Detector {
             if group.labels.is_empty() {
                 continue;
             }
-            let described: Vec<(&str, &str)> =
-                group.labels.iter().map(|l| (l.name, l.description)).collect();
+            let described: Vec<(&str, &str)> = group
+                .labels
+                .iter()
+                .map(|l| (l.name, l.description))
+                .collect();
             // Floor 0.25 passes everything; per-label thresholds applied below
             // BEFORE converting anno::Entity → DetectedEntity (same approach as
             // detect_inner's existing retain, using entity_type.as_label()).
@@ -747,8 +775,7 @@ impl Detector {
                 group.labels.iter().map(|l| (l.name, l.threshold)).collect();
             entities.retain(|e| {
                 let label = e.entity_type.as_label();
-                f64::from(e.confidence)
-                    >= f64::from(thresholds.get(label).copied().unwrap_or(0.50))
+                f64::from(e.confidence) >= f64::from(thresholds.get(label).copied().unwrap_or(0.50))
             });
             all.extend(anno_entities_to_detected(text, entities)?);
         }
@@ -1617,7 +1644,10 @@ mod tests {
             .flat_map(|g| g.labels.iter().map(|l| l.name))
             .collect();
         for (name, _, _) in GDPR_NER_LABELS {
-            assert!(grouped.contains(name), "label {name} missing from any group");
+            assert!(
+                grouped.contains(name),
+                "label {name} missing from any group"
+            );
         }
     }
 

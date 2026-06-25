@@ -109,9 +109,7 @@ pub fn score_one(gold: &[GoldSpan], pred: &[PredSpan]) -> BTreeMap<String, Categ
     let mut counts: BTreeMap<String, CategoryCounts> = BTreeMap::new();
     let mut matched_pred = vec![false; pred.len()];
     for g in gold {
-        let entry = counts
-            .entry(g.category.to_ascii_lowercase())
-            .or_default();
+        let entry = counts.entry(g.category.to_ascii_lowercase()).or_default();
         match pred
             .iter()
             .enumerate()
@@ -212,12 +210,15 @@ mod tests {
             "trade_union_membership",
             "racial_ethnic_origin",
         ];
-        let det =
-            crate::detect::Detector::new(&crate::config::AnnoRagConfig::default()).expect("detector");
+        let det = crate::detect::Detector::new(&crate::config::AnnoRagConfig::default())
+            .expect("detector");
         let fx = load_fixtures(&pii_eval_dir()).expect("fixtures");
         let mut agg = std::collections::BTreeMap::new();
         for f in &fx {
-            agg = merge(agg, score_one(&f.spans, &detector_pred_spans(&det, &f.text)));
+            agg = merge(
+                agg,
+                score_one(&f.spans, &detector_pred_spans(&det, &f.text)),
+            );
         }
         for cat in art9 {
             if let Some(c) = agg.get(cat) {
@@ -234,7 +235,10 @@ mod tests {
     fn loads_at_least_one_fixture() {
         let fx = load_fixtures(&pii_eval_dir()).expect("load fixtures");
         assert!(!fx.is_empty(), "expected at least one fixture");
-        assert!(fx.iter().any(|f| !f.spans.is_empty()), "fixtures carry spans");
+        assert!(
+            fx.iter().any(|f| !f.spans.is_empty()),
+            "fixtures carry spans"
+        );
     }
 
     #[test]
@@ -283,12 +287,19 @@ mod tests {
         let load = |name: &str| -> Vec<GoldSpan> {
             let raw = std::fs::read_to_string(base.join(name)).expect(name);
             let fx: PiiFixture = serde_json::from_str(&raw).expect(name);
-            fx.spans.into_iter().filter(|s| s.category == "organization").collect()
+            fx.spans
+                .into_iter()
+                .filter(|s| s.category == "organization")
+                .collect()
         };
         let plain_orgs = load("org_01.json");
         let cabinet_orgs = load("org_cabinet_01.json");
         assert_eq!(plain_orgs.len(), 1, "org_01 has 1 org span");
-        assert_eq!(cabinet_orgs.len(), 2, "org_cabinet_01 has 2 org spans (cabinet name included)");
+        assert_eq!(
+            cabinet_orgs.len(),
+            2,
+            "org_cabinet_01 has 2 org spans (cabinet name included)"
+        );
     }
 
     /// Model-backed: cabinet scope catches both org spans; strict scope misses the cabinet name.
@@ -329,8 +340,14 @@ mod tests {
         let strict_agg = score_one(&fx.spans, &spans(&strict_det));
         let cabinet_agg = score_one(&fx.spans, &spans(&cabinet_det));
 
-        let strict_org_recall = strict_agg.get("organization").map(|c| c.recall()).unwrap_or(0.0);
-        let cabinet_org_recall = cabinet_agg.get("organization").map(|c| c.recall()).unwrap_or(0.0);
+        let strict_org_recall = strict_agg
+            .get("organization")
+            .map(|c| c.recall())
+            .unwrap_or(0.0);
+        let cabinet_org_recall = cabinet_agg
+            .get("organization")
+            .map(|c| c.recall())
+            .unwrap_or(0.0);
 
         println!("strict  org recall: {strict_org_recall:.2}");
         println!("cabinet org recall: {cabinet_org_recall:.2}");
