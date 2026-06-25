@@ -25,6 +25,7 @@ rerank = ["anno-rag/rerank"]
 anno-corpus-core  = { workspace = true }
 anno-corpus-store = { workspace = true }
 anno-rag         = { path = "../anno-rag" }
+cloakpipe-core   = { path = "../../vendor/cloakpipe/crates/cloakpipe-core" }
 anno-rag-tabular = { path = "../anno-rag-tabular", features = ["gliner2"] }
 anno-knowledge-core  = { path = "../anno-knowledge-core" }
 anno-knowledge-store = { path = "../anno-knowledge-store" }

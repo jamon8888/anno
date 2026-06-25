@@ -13,6 +13,7 @@
 mod allowed_roots;
 pub mod corpus;
 mod corpus_sync;
+mod detect_label;
 mod envelope;
 pub mod health;
 mod indexer;
@@ -2456,7 +2457,7 @@ impl AnnoRagServer {
                             other => format!("{other:?}"),
                         },
                         confidence: e.confidence,
-                        source: format!("{:?}", e.source),
+                        source: crate::detect_label::source_label(&e.source).to_string(),
                         start: e.start,
                         end: e.end,
                     })
