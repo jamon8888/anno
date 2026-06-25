@@ -1,0 +1,7 @@
+{
+  "text": "Le litige oppose la societe Durand SAS au cabinet Legrand et Associes.",
+  "spans": [
+    { "category": "organization", "start": 27, "end": 37 },
+    { "category": "organization", "start": 41, "end": 69 }
+  ]
+}

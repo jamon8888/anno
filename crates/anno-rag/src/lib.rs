@@ -27,6 +27,7 @@ pub mod config;
 pub mod config_meta_types;
 pub mod conflict;
 pub mod detect;
+pub mod detect_eval;
 pub mod docx_instructions;
 pub mod download_models;
 pub mod embed;

@@ -1,0 +1,7 @@
+{
+  "text": "Le contrat entre la societe Durand et Associes et Mme Claire Fontaine a ete signe le 3 mars 2024.",
+  "spans": [
+    { "category": "organization", "start": 27, "end": 48 },
+    { "category": "person", "start": 53, "end": 68 }
+  ]
+}

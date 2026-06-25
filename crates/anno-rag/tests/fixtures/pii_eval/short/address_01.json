@@ -1,0 +1,7 @@
+{
+  "text": "M. Paul Bernard demeure au 12 rue des Lilas, 75011 Paris.",
+  "spans": [
+    { "category": "person", "start": 3, "end": 15 },
+    { "category": "address", "start": 27, "end": 55 }
+  ]
+}
