@@ -831,20 +831,22 @@ impl AnnoRagServer {
             // structured disambiguation instead of an opaque error.
             Err(anno_corpus_core::CorpusGuardError::CorpusRequired) => {
                 let rows = svc.store().list_corpora().map_err(|e| e.to_string())?;
-                return Ok(serde_json::json!({
-                    "status": "corpus_required",
-                    "message": "Plusieurs dossiers indexés. Précisez un dossier ou demandez une recherche transversale.",
-                    "available": rows
-                        .iter()
-                        .map(|c| serde_json::json!({
-                            "corpus_id": c.corpus_id.as_string(),
-                            "alias": c.alias,
-                            "label": c.label_pseudo,
-                            "health": c.health,
-                        }))
-                        .collect::<Vec<_>>(),
-                    "hint": "Relancez avec corpus_id/alias, ou allow_cross_corpus: true pour un contrôle de conflits.",
-                }));
+                return Ok(crate::envelope::envelope(
+                    crate::envelope::status::CORPUS_REQUIRED,
+                    "Plusieurs dossiers indexés. Précisez un dossier ou demandez une recherche transversale.",
+                    "Relancez avec corpus_id/alias, ou allow_cross_corpus: true pour un contrôle de conflits.",
+                    serde_json::json!({
+                        "available": rows
+                            .iter()
+                            .map(|c| serde_json::json!({
+                                "corpus_id": c.corpus_id.as_string(),
+                                "alias": c.alias,
+                                "label": c.label_pseudo,
+                                "health": c.health,
+                            }))
+                            .collect::<Vec<_>>(),
+                    }),
+                ));
             }
             Err(e) => return Err(e.to_string()),
         };
@@ -1331,21 +1333,22 @@ impl AnnoRagServer {
                             .to_string();
                     }
                 };
-                return serde_json::json!({
-                    "ok": false,
-                    "status": "corpus_required",
-                    "message": "Plusieurs dossiers indexés. Précisez un dossier ou demandez une recherche transversale.",
-                    "available": rows
-                        .iter()
-                        .map(|c| serde_json::json!({
-                            "corpus_id": c.corpus_id.as_string(),
-                            "alias": c.alias,
-                            "label": c.label_pseudo,
-                            "health": c.health,
-                        }))
-                        .collect::<Vec<_>>(),
-                    "hint": "Relancez avec corpus_id/alias, ou allow_cross_corpus: true pour un contrôle de conflits.",
-                })
+                return crate::envelope::envelope(
+                    crate::envelope::status::CORPUS_REQUIRED,
+                    "Plusieurs dossiers indexés. Précisez un dossier ou demandez une recherche transversale.",
+                    "Relancez avec corpus_id/alias, ou allow_cross_corpus: true pour un contrôle de conflits.",
+                    serde_json::json!({
+                        "available": rows
+                            .iter()
+                            .map(|c| serde_json::json!({
+                                "corpus_id": c.corpus_id.as_string(),
+                                "alias": c.alias,
+                                "label": c.label_pseudo,
+                                "health": c.health,
+                            }))
+                            .collect::<Vec<_>>(),
+                    }),
+                )
                 .to_string();
             }
             Err(e) => {
@@ -5628,5 +5631,20 @@ mod warmup_phase_tests {
         let v: serde_json::Value = serde_json::from_str(&json_str).unwrap();
         assert_eq!(v["ok"], false);
         assert_eq!(v["error"], "models_loading");
+    }
+
+    #[test]
+    fn corpus_required_envelope_has_convention_fields() {
+        use crate::envelope::{envelope, status};
+        let v = envelope(
+            status::CORPUS_REQUIRED,
+            "Plusieurs dossiers indexés.",
+            "Relancez avec corpus_id/alias.",
+            serde_json::json!({ "available": [] }),
+        );
+        assert_eq!(v["status"], "corpus_required");
+        assert!(v["available"].is_array());
+        assert!(v["message"].is_string());
+        assert!(v["hint"].is_string());
     }
 }
