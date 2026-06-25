@@ -81,6 +81,21 @@ pub fn migrate(conn: &Connection) -> Result<()> {
              ON corpora(alias) WHERE alias IS NOT NULL;",
         )?;
     }
+    // Additive migration: readable `relative_path` on corpus_documents, enabling
+    // document-handle resolution (alias/relative_path -> doc id). The existing
+    // relative_path_hash column is unchanged.
+    let has_relpath: bool = conn
+        .prepare(
+            "SELECT 1 FROM pragma_table_info('corpus_documents') WHERE name = 'relative_path'",
+        )?
+        .exists([])?;
+    if !has_relpath {
+        conn.execute_batch(
+            "ALTER TABLE corpus_documents ADD COLUMN relative_path TEXT;\n\
+             CREATE INDEX IF NOT EXISTS idx_corpus_documents_relpath \
+             ON corpus_documents(corpus_id, relative_path);",
+        )?;
+    }
     Ok(())
 }
 

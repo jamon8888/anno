@@ -294,6 +294,53 @@ impl CorpusStore {
         Ok(count as usize)
     }
 
+    /// Record (or update) the readable relative path for a document, enabling
+    /// handle resolution. Inserts a minimal row if the document is not present.
+    pub fn record_document_path(
+        &self,
+        corpus_id: CorpusId,
+        document_id: DocumentInstanceId,
+        relative_path: &str,
+    ) -> Result<()> {
+        let conn = self.conn.lock().expect("corpus sqlite mutex poisoned");
+        ensure_corpus_exists(&conn, corpus_id)?;
+        conn.execute(
+            "INSERT INTO corpus_documents \
+                (corpus_id, document_id, backend_kind, source_path_hash, content_id, \
+                 metadata_json, relative_path, created_at) \
+             VALUES (?1, ?2, 'legal', '', '', '{}', ?3, ?4) \
+             ON CONFLICT(corpus_id, document_id, backend_kind) \
+             DO UPDATE SET relative_path = excluded.relative_path",
+            params![
+                corpus_id.as_string(),
+                document_id.as_string(),
+                relative_path,
+                Utc::now().to_rfc3339(),
+            ],
+        )?;
+        Ok(())
+    }
+
+    /// Resolve a document id from its corpus + readable relative path.
+    pub fn document_id_by_relative_path(
+        &self,
+        corpus_id: CorpusId,
+        relative_path: &str,
+    ) -> Result<Option<DocumentInstanceId>> {
+        let conn = self.conn.lock().expect("corpus sqlite mutex poisoned");
+        let mut stmt = conn.prepare(
+            "SELECT document_id FROM corpus_documents \
+             WHERE corpus_id = ?1 AND relative_path = ?2 LIMIT 1",
+        )?;
+        let mut rows = stmt.query(params![corpus_id.as_string(), relative_path])?;
+        match rows.next()? {
+            Some(row) => Ok(Some(DocumentInstanceId::new(parse_uuid(
+                row.get::<_, String>(0)?,
+            )?))),
+            None => Ok(None),
+        }
+    }
+
     /// List registered corpora without raw filesystem paths.
     pub fn list_corpora(&self) -> Result<Vec<CorpusRow>> {
         let conn = self.conn.lock().expect("corpus sqlite mutex poisoned");
@@ -803,6 +850,29 @@ mod tests {
             .expect("register b");
         store.set_alias(a.corpus_id, "dup").expect("first alias ok");
         assert!(store.set_alias(b.corpus_id, "dup").is_err(), "duplicate rejected");
+    }
+
+    #[test]
+    fn document_id_by_relative_path_roundtrip() {
+        let dir = tempfile::tempdir().expect("tempdir");
+        let store = CorpusStore::open(dir.path().join("c.sqlite3")).expect("open");
+        let reg = store
+            .register_root(dir.path().join("a").to_str().unwrap(), &[CorpusProfile::All])
+            .expect("register");
+        let doc = DocumentInstanceId::new(uuid::Uuid::nil());
+        store
+            .record_document_path(reg.corpus_id, doc, "contrats/x.txt")
+            .expect("record");
+        let found = store
+            .document_id_by_relative_path(reg.corpus_id, "contrats/x.txt")
+            .expect("lookup");
+        assert_eq!(found, Some(doc));
+        assert_eq!(
+            store
+                .document_id_by_relative_path(reg.corpus_id, "missing")
+                .expect("miss"),
+            None
+        );
     }
 
     #[test]
