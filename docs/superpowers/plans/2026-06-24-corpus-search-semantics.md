@@ -1,5 +1,7 @@
 # Corpus Search Semantics (Spec A) Implementation Plan
 
+> **STATUS (2026-06-25):** Phases 1–3 (Tasks 1–8) + Phase 4 Tasks 11–12 IMPLEMENTED and committed on `feat/corpus-search-ner-pii` (11 commits, fmt+clippy clean). **Tasks 9, 10, 13 DEFERRED:** they add `corpus_id`/`handle` provenance to search hits (9–10) and a `path_prefix` sub-folder filter (13), but verification showed neither `SearchHit` (store.rs) nor `LegalSearchHit` (legal/types.rs) carries `relative_path` or `corpus_id`. Delivering them requires a `relative_path` column on the LanceDB chunk schema, populated at ingest and threaded through the search read path in the heavy `anno-rag` crate — a separate sub-design. Track as follow-up.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Make anno's local-folder search work per-client (cloisonné) and cross-client (explicit), with human-readable corpus aliases and document handles instead of raw UUIDs.
