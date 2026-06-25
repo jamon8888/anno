@@ -44,7 +44,7 @@ Precedence (lowest → highest): defaults → `~/.anno-rag/config.toml` → env 
 | `rerank_pool_size` | `ANNO_RAG_RERANK_POOL_SIZE` | `--rerank-pool-size` | `30` | 0.12 | RRF candidates to over-fetch before reranking. Default: 30 |
 | `rerank_batch_size` | `ANNO_RAG_RERANK_BATCH_SIZE` | `--rerank-batch-size` | `8` | 0.12 | Max (query,passage) pairs per ONNX reranker batch. Default: 8 |
 | `memory_collection_name` | `ANNO_RAG_MEMORY_COLLECTION_NAME` | `--memory-collection-name` | `"memories"` | 0.8 | LanceDB collection name for memories. Default: memories |
-| `memory_embedding_dim` | `ANNO_RAG_MEMORY_EMBEDDING_DIM` | `--memory-embedding-dim` | `1024` | 0.8 | Embedding dimension for memory vectors. Default: 1024 |
+| `memory_embedding_dim` | `ANNO_RAG_MEMORY_EMBEDDING_DIM` | `--memory-embedding-dim` | `768` | 0.8 | Embedding dimension for memory vectors. Default: 768 (matches multilingual-e5-base) |
 | `memory_ner_mode` | `ANNO_RAG_MEMORY_NER_MODE` | `--memory-ner-mode` | `"async"` | 0.9 | NER mode for memory_save: disabled\|async\|sync. Default: async |
 | `compaction_interval_secs` | `ANNO_RAG_COMPACTION_INTERVAL_SECS` | `--compaction-interval-secs` | `86400` | 0.9 | Seconds between background compactions. Default: 86400 (24h) |
 | `compaction_min_age_secs` | `ANNO_RAG_COMPACTION_MIN_AGE_SECS` | `--compaction-min-age-secs` | `3600` | 0.9 | Minimum tombstone age before compaction (seconds). Default: 3600 |
@@ -58,5 +58,6 @@ Precedence (lowest → highest): defaults → `~/.anno-rag/config.toml` → env 
 | `vlm_confidence_threshold` | `ANNO_RAG_VLM_CONFIDENCE_THRESHOLD` | `--vlm-confidence-threshold` | *(unset)* | 0.15 | VLM confidence threshold [0.0, 1.0]; below this falls back to Tesseract. Default: 0.6 |
 | `vlm_safetensors_model_id` | `ANNO_RAG_VLM_SAFETENSORS_MODEL_ID` | `--vlm-safetensors-model-id` | *(unset)* | 0.15 | HuggingFace repo for vLLM safetensors VLM model. Default: lightonai/LightOnOCR-2-1B |
 | `vlm_gguf_model_id` | `ANNO_RAG_VLM_GGUF_MODEL_ID` | `--vlm-gguf-model-id` | *(unset)* | 0.15 | HuggingFace repo for llama-server GGUF VLM model. Default: Mungert/LightOnOCR-1B-1025-GGUF |
+| `masking_scope` | `ANNO_RAG_MASKING_SCOPE` | `--masking-scope` | `"rgpd_strict"` | 0.17 | PII masking perimeter: rgpd_strict (default) or cabinet_confidential. |
 
 > **Runtime-only env vars** (not in `config.toml`): `ANNO_MODELS_DIR` (model weights override), `ANNO_RAG_VAULT_PASSPHRASE`, `ANNO_RAG_VAULT_KMS_PROVIDER`, `ANNO_RAG_VAULT_KMS_KEY_ID`.

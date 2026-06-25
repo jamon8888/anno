@@ -345,8 +345,8 @@
     "name": "memory_embedding_dim",
     "env_var": "ANNO_RAG_MEMORY_EMBEDDING_DIM",
     "cli_flag": "--memory-embedding-dim",
-    "doc": "Embedding dimension for memory vectors. Default: 1024",
-    "default_value": "1024",
+    "doc": "Embedding dimension for memory vectors. Default: 768 (matches multilingual-e5-base)",
+    "default_value": "768",
     "since": "0.8",
     "type_name": "usize"
   },
@@ -466,5 +466,14 @@
     "default_value": "null",
     "since": "0.15",
     "type_name": "Option<String>"
+  },
+  {
+    "name": "masking_scope",
+    "env_var": "ANNO_RAG_MASKING_SCOPE",
+    "cli_flag": "--masking-scope",
+    "doc": "PII masking perimeter: rgpd_strict (default) or cabinet_confidential.",
+    "default_value": "\"rgpd_strict\"",
+    "since": "0.17",
+    "type_name": "MaskingScope"
   }
 ]

@@ -823,9 +823,30 @@ impl AnnoRagServer {
     }
 
     async fn legal_search_impl(&self, p: LegalSearchParams) -> Result<serde_json::Value, String> {
-        let effective = self
-            .resolve_effective_corpus(p.corpus_id.as_deref(), p.allow_cross_corpus)
-            .await?;
+        let svc = self.corpus().await.map_err(|e| e.to_string())?;
+        let effective = match svc.resolve_effective(p.corpus_id.as_deref(), p.allow_cross_corpus) {
+            Ok(eff) => eff,
+            // Multiple corpora and no explicit choice: return an actionable,
+            // structured disambiguation instead of an opaque error.
+            Err(anno_corpus_core::CorpusGuardError::CorpusRequired) => {
+                let rows = svc.store().list_corpora().map_err(|e| e.to_string())?;
+                return Ok(serde_json::json!({
+                    "status": "corpus_required",
+                    "message": "Plusieurs dossiers indexés. Précisez un dossier ou demandez une recherche transversale.",
+                    "available": rows
+                        .iter()
+                        .map(|c| serde_json::json!({
+                            "corpus_id": c.corpus_id.as_string(),
+                            "alias": c.alias,
+                            "label": c.label_pseudo,
+                            "health": c.health,
+                        }))
+                        .collect::<Vec<_>>(),
+                    "hint": "Relancez avec corpus_id/alias, ou allow_cross_corpus: true pour un contrôle de conflits.",
+                }));
+            }
+            Err(e) => return Err(e.to_string()),
+        };
         self.legal_search_impl_with_effective(p, &effective).await
     }
 
@@ -1293,17 +1314,41 @@ impl AnnoRagServer {
             .to_string();
         }
 
-        let effective = match self
-            .resolve_effective_corpus(p.corpus_id.as_deref(), p.allow_cross_corpus)
-            .await
-        {
-            Ok(effective) => effective,
+        let svc = match self.corpus().await {
+            Ok(svc) => svc,
             Err(e) => {
+                return serde_json::json!({"ok": false, "error": e.to_string()}).to_string();
+            }
+        };
+        let effective = match svc.resolve_effective(p.corpus_id.as_deref(), p.allow_cross_corpus) {
+            Ok(effective) => effective,
+            Err(anno_corpus_core::CorpusGuardError::CorpusRequired) => {
+                let rows = match svc.store().list_corpora() {
+                    Ok(r) => r,
+                    Err(e) => {
+                        return serde_json::json!({"ok": false, "error": e.to_string()})
+                            .to_string();
+                    }
+                };
                 return serde_json::json!({
                     "ok": false,
-                    "error": e,
+                    "status": "corpus_required",
+                    "message": "Plusieurs dossiers indexés. Précisez un dossier ou demandez une recherche transversale.",
+                    "available": rows
+                        .iter()
+                        .map(|c| serde_json::json!({
+                            "corpus_id": c.corpus_id.as_string(),
+                            "alias": c.alias,
+                            "label": c.label_pseudo,
+                            "health": c.health,
+                        }))
+                        .collect::<Vec<_>>(),
+                    "hint": "Relancez avec corpus_id/alias, ou allow_cross_corpus: true pour un contrôle de conflits.",
                 })
                 .to_string();
+            }
+            Err(e) => {
+                return serde_json::json!({"ok": false, "error": e.to_string()}).to_string();
             }
         };
 
@@ -2402,7 +2447,10 @@ impl AnnoRagServer {
                     .into_iter()
                     .map(|e| EntityInfo {
                         original: e.original,
-                        category: format!("{:?}", e.category),
+                        category: match &e.category {
+                            anno_rag::EntityCategory::Custom(s) => s.clone(),
+                            other => format!("{other:?}"),
+                        },
                         confidence: e.confidence,
                         source: format!("{:?}", e.source),
                         start: e.start,
@@ -3100,13 +3148,21 @@ impl AnnoRagServer {
             Ok(p) => p,
             Err(json) => return json,
         };
+        let doc_id = match self.corpus().await {
+            Ok(svc) => match svc.resolve_doc_ref(&p.doc_id) {
+                Ok(id) => id,
+                Err(_) if uuid::Uuid::parse_str(&p.doc_id).is_ok() => p.doc_id.clone(),
+                Err(e) => return format!("Error: {e}"),
+            },
+            Err(_) => p.doc_id.clone(),
+        };
         let start = std::time::Instant::now();
-        match pipeline.legal_extract_contract(&p.doc_id).await {
+        match pipeline.legal_extract_contract(&doc_id).await {
             Ok(review) => {
                 tracing::info!(
                     target: "anno_rag::legal::audit",
                     tool = "legal_extract_contract",
-                    doc_id = p.doc_id,
+                    doc_id = doc_id,
                     rows = review.rows.len(),
                     duration_ms = start.elapsed().as_millis() as u64,
                     ""
@@ -3156,13 +3212,21 @@ impl AnnoRagServer {
             Ok(p) => p,
             Err(json) => return json,
         };
+        let dossier_id = match self.corpus().await {
+            Ok(svc) => match svc.resolve_doc_ref(&p.dossier_id) {
+                Ok(id) => id,
+                Err(_) if uuid::Uuid::parse_str(&p.dossier_id).is_ok() => p.dossier_id.clone(),
+                Err(e) => return format!("Error: {e}"),
+            },
+            Err(_) => p.dossier_id.clone(),
+        };
         let start = std::time::Instant::now();
-        match pipeline.legal_timeline(&p.dossier_id).await {
+        match pipeline.legal_timeline(&dossier_id).await {
             Ok(tl) => {
                 tracing::info!(
                     target: "anno_rag::legal::audit",
                     tool = "legal_timeline",
-                    dossier_id = p.dossier_id,
+                    dossier_id = dossier_id,
                     events = tl.events.len(),
                     duration_ms = start.elapsed().as_millis() as u64,
                     ""
@@ -3185,13 +3249,21 @@ impl AnnoRagServer {
             Ok(p) => p,
             Err(json) => return json,
         };
+        let scope_id = match self.corpus().await {
+            Ok(svc) => match svc.resolve_doc_ref(&p.scope_id) {
+                Ok(id) => id,
+                Err(_) if uuid::Uuid::parse_str(&p.scope_id).is_ok() => p.scope_id.clone(),
+                Err(e) => return format!("Error: {e}"),
+            },
+            Err(_) => p.scope_id.clone(),
+        };
         let start = std::time::Instant::now();
-        match pipeline.legal_risk_review(&p.scope_id, p.is_dossier).await {
+        match pipeline.legal_risk_review(&scope_id, p.is_dossier).await {
             Ok(review) => {
                 tracing::info!(
                     target: "anno_rag::legal::audit",
                     tool = "legal_risk_review",
-                    scope_id = p.scope_id,
+                    scope_id = scope_id,
                     findings = review.findings.len(),
                     duration_ms = start.elapsed().as_millis() as u64,
                     ""

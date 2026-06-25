@@ -69,6 +69,33 @@ pub fn migrate(conn: &Connection) -> Result<()> {
             ON corpus_documents(document_id);
         "#,
     )?;
+    // Additive migration: `alias` column for human-readable corpus references.
+    // execute_batch can't use ALTER ADD COLUMN idempotently, so guard on pragma.
+    let has_alias: bool = conn
+        .prepare("SELECT 1 FROM pragma_table_info('corpora') WHERE name = 'alias'")?
+        .exists([])?;
+    if !has_alias {
+        conn.execute_batch(
+            "ALTER TABLE corpora ADD COLUMN alias TEXT;\n\
+             CREATE UNIQUE INDEX IF NOT EXISTS idx_corpora_alias \
+             ON corpora(alias) WHERE alias IS NOT NULL;",
+        )?;
+    }
+    // Additive migration: readable `relative_path` on corpus_documents, enabling
+    // document-handle resolution (alias/relative_path -> doc id). The existing
+    // relative_path_hash column is unchanged.
+    let has_relpath: bool = conn
+        .prepare(
+            "SELECT 1 FROM pragma_table_info('corpus_documents') WHERE name = 'relative_path'",
+        )?
+        .exists([])?;
+    if !has_relpath {
+        conn.execute_batch(
+            "ALTER TABLE corpus_documents ADD COLUMN relative_path TEXT;\n\
+             CREATE INDEX IF NOT EXISTS idx_corpus_documents_relpath \
+             ON corpus_documents(corpus_id, relative_path);",
+        )?;
+    }
     Ok(())
 }
 
@@ -98,5 +125,23 @@ mod tests {
         assert!(names.contains(&"corpus_index_runs".to_string()));
         assert!(names.contains(&"corpus_sync_state".to_string()));
         assert!(names.contains(&"corpora".to_string()));
+    }
+
+    #[test]
+    fn migrate_adds_alias_column_idempotently() {
+        let conn = Connection::open_in_memory().expect("open sqlite");
+        migrate(&conn).expect("migrate once");
+        // Second run must not error (column already exists).
+        migrate(&conn).expect("migrate twice");
+
+        let mut stmt = conn
+            .prepare("SELECT name FROM pragma_table_info('corpora')")
+            .expect("prepare pragma");
+        let cols = stmt
+            .query_map([], |row| row.get::<_, String>(0))
+            .expect("query cols")
+            .collect::<std::result::Result<Vec<_>, _>>()
+            .expect("collect cols");
+        assert!(cols.contains(&"alias".to_string()), "alias column present");
     }
 }

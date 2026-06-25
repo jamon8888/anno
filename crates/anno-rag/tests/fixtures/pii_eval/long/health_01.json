@@ -1,0 +1,8 @@
+{
+  "text": "Le patient Marc Dubois souffre d'un diabete de type 2 diagnostique en 2019 par le Dr Lefevre.",
+  "spans": [
+    { "category": "person", "start": 11, "end": 22 },
+    { "category": "health_data", "start": 36, "end": 53 },
+    { "category": "person", "start": 82, "end": 92 }
+  ]
+}

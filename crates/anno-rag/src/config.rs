@@ -147,6 +147,45 @@ impl MemoryNerMode {
     }
 }
 
+/// Masking perimeter for PII detection.
+///
+/// Controls which categories the detection core masks by default:
+/// - `RgpdStrict` (default): only personal data per GDPR Art.4(1) — organizations
+///   are only masked when directly tied to an identifiable natural person.
+/// - `CabinetConfidential`: mask ALL named organizations and parties (useful in
+///   a law firm context where opposing counsel names are always confidential).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize, Default)]
+#[serde(rename_all = "snake_case")]
+pub enum MaskingScope {
+    /// GDPR Art.4(1) personal data scope (default).
+    #[default]
+    RgpdStrict,
+    /// Cabinet confidentiality: mask all named organizations and parties.
+    CabinetConfidential,
+}
+
+impl std::str::FromStr for MaskingScope {
+    type Err = String;
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        match s.trim().to_ascii_lowercase().as_str() {
+            "rgpd_strict" => Ok(Self::RgpdStrict),
+            "cabinet_confidential" => Ok(Self::CabinetConfidential),
+            other => Err(format!(
+                "unknown masking-scope '{other}'; valid: rgpd_strict, cabinet_confidential"
+            )),
+        }
+    }
+}
+
+impl std::fmt::Display for MaskingScope {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::RgpdStrict => write!(f, "rgpd_strict"),
+            Self::CabinetConfidential => write!(f, "cabinet_confidential"),
+        }
+    }
+}
+
 impl std::str::FromStr for MemoryNerMode {
     type Err = String;
     fn from_str(s: &str) -> Result<Self, Self::Err> {
@@ -644,7 +683,7 @@ pub struct AnnoRagConfig {
     #[config_meta(
         env = "ANNO_RAG_MEMORY_EMBEDDING_DIM",
         cli = "--memory-embedding-dim",
-        doc = "Embedding dimension for memory vectors. Default: 1024",
+        doc = "Embedding dimension for memory vectors. Default: 768 (matches multilingual-e5-base)",
         since = "0.8"
     )]
     #[serde(default = "default_memory_embedding_dim")]
@@ -809,6 +848,15 @@ pub struct AnnoRagConfig {
     )]
     #[serde(default)]
     pub vlm_gguf_model_id: Option<String>,
+
+    #[config_meta(
+        env = "ANNO_RAG_MASKING_SCOPE",
+        cli = "--masking-scope",
+        doc = "PII masking perimeter: rgpd_strict (default) or cabinet_confidential.",
+        since = "0.17"
+    )]
+    #[serde(default)]
+    pub masking_scope: MaskingScope,
 }
 
 fn default_memory_collection_name() -> String {
@@ -816,7 +864,7 @@ fn default_memory_collection_name() -> String {
 }
 
 fn default_memory_embedding_dim() -> usize {
-    1024
+    768
 }
 
 fn default_compaction_interval_secs() -> u64 {
@@ -936,6 +984,7 @@ impl Default for AnnoRagConfig {
             vlm_confidence_threshold: None,
             vlm_safetensors_model_id: None,
             vlm_gguf_model_id: None,
+            masking_scope: MaskingScope::default(),
         }
     }
 }
@@ -1134,6 +1183,11 @@ impl AnnoRagConfig {
         if let Ok(v) = std::env::var("ANNO_RAG_VLM_GGUF_MODEL_ID") {
             self.vlm_gguf_model_id = Some(v);
         }
+        if let Ok(v) = std::env::var("ANNO_RAG_MASKING_SCOPE") {
+            if let Ok(s) = v.parse::<MaskingScope>() {
+                self.masking_scope = s;
+            }
+        }
     }
 
     fn apply_overrides(&mut self, ov: &ConfigOverrides) {
@@ -1295,6 +1349,9 @@ impl AnnoRagConfig {
         }
         if let Some(v) = ov.vlm_gguf_model_id.clone() {
             self.vlm_gguf_model_id = Some(v);
+        }
+        if let Some(v) = ov.masking_scope {
+            self.masking_scope = v;
         }
     }
 
@@ -1468,8 +1525,7 @@ mod tests {
         assert_eq!(c.ocr_batch_budget_secs, None);
         assert!(c.embedder_dtype.is_none());
         assert_eq!(c.memory_collection_name, "memories");
-        // absent field → legacy default (kept at 1024 for existing memory stores)
-        assert_eq!(c.memory_embedding_dim, 1024);
+        assert_eq!(c.memory_embedding_dim, 768);
         assert!(c.ocr_cache_enabled);
         assert!(c.ocr_backend.is_none());
     }
@@ -1490,7 +1546,7 @@ mod tests {
         assert_eq!(c.ocr_batch_budget_secs, None);
         assert!(c.embedder_dtype.is_none());
         assert_eq!(c.memory_collection_name, "memories");
-        assert_eq!(c.memory_embedding_dim, 1024);
+        assert_eq!(c.memory_embedding_dim, 768);
         assert_eq!(c.memory_ner_mode, MemoryNerMode::Async);
         assert!(c.ocr_cache_enabled);
         assert!(c.ocr_backend.is_none());

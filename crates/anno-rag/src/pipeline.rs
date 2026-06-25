@@ -750,10 +750,25 @@ impl Pipeline {
         Ok(summary)
     }
 
+    /// Pseudonymize a search query for embedding + FTS lookup.
+    ///
+    /// The vault reuses existing tokens for originals it has already seen
+    /// (`get_or_create` exact-matches the forward map), so a name that was
+    /// previously ingested and NER-detected in a document receives the same
+    /// token here.  The gap case — NER misses a name that the vault knows —
+    /// does not occur for typical sentence-length queries because GLiNER2
+    /// requires no special sentence context to detect bare name spans.
+    ///
+    /// # Errors
+    /// [`Error::Detect`] / [`Error::Vault`] per failing layer.
+    pub async fn pseudonymize_query(&self, query: &str) -> Result<String> {
+        let entities = self.detector_get_or_init()?.detect(query)?;
+        self.vault.pseudonymize(query, &entities).await
+    }
+
     /// Search: pseudonymize query → embed → store.search.
     pub async fn search(&self, query: &str, top_k: usize) -> Result<Vec<SearchHit>> {
-        let entities = self.detector_get_or_init()?.detect(query)?;
-        let pseudo_q = self.vault.pseudonymize(query, &entities).await?;
+        let pseudo_q = self.pseudonymize_query(query).await?;
         let qv = self.embedder().await?.embed_query(&pseudo_q)?;
         self.store.search(&pseudo_q, &qv, top_k).await
     }

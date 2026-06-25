@@ -116,8 +116,8 @@
 # LanceDB collection name for memories. Default: memories (env: ANNO_RAG_MEMORY_COLLECTION_NAME)
 # memory_collection_name = "memories"
 
-# Embedding dimension for memory vectors. Default: 1024 (env: ANNO_RAG_MEMORY_EMBEDDING_DIM)
-# memory_embedding_dim = 1024
+# Embedding dimension for memory vectors. Default: 768 (matches multilingual-e5-base) (env: ANNO_RAG_MEMORY_EMBEDDING_DIM)
+# memory_embedding_dim = 768
 
 # NER mode for memory_save: disabled|async|sync. Default: async (env: ANNO_RAG_MEMORY_NER_MODE)
 # memory_ner_mode = "async"
@@ -157,3 +157,6 @@
 
 # HuggingFace repo for llama-server GGUF VLM model. Default: Mungert/LightOnOCR-1B-1025-GGUF (env: ANNO_RAG_VLM_GGUF_MODEL_ID)
 # vlm_gguf_model_id =  # (unset by default)
+
+# PII masking perimeter: rgpd_strict (default) or cabinet_confidential. (env: ANNO_RAG_MASKING_SCOPE)
+# masking_scope = "rgpd_strict"

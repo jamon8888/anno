@@ -27,6 +27,7 @@ pub mod config;
 pub mod config_meta_types;
 pub mod conflict;
 pub mod detect;
+pub mod detect_eval;
 pub mod docx_instructions;
 pub mod download_models;
 pub mod embed;
@@ -55,6 +56,7 @@ pub mod vault_admin;
 #[cfg(feature = "vlm-ocr")]
 pub mod vlm;
 
+pub use cloakpipe_core::{DetectedEntity, EntityCategory};
 pub use config::AnnoRagConfig;
 pub use error::{Error, Result};
-pub use pipeline::{Pipeline, WarmupOutcome};
+pub use pipeline::{LegalIngestScope, Pipeline, WarmupOutcome};

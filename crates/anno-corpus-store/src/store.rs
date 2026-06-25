@@ -7,7 +7,7 @@ use anno_corpus_core::{
 };
 use chrono::Utc;
 use rusqlite::types::Type;
-use rusqlite::{params, Connection};
+use rusqlite::{params, Connection, OptionalExtension};
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use std::path::Path;
@@ -37,6 +37,9 @@ pub struct CorpusRow {
     pub corpus_id: CorpusId,
     /// Pseudonymous display label.
     pub label_pseudo: String,
+    /// Human-readable alias (user-supplied or auto). Option for rows read
+    /// before the auto-alias backfill runs.
+    pub alias: Option<String>,
     /// Registry health field.
     pub health: String,
 }
@@ -93,9 +96,36 @@ impl CorpusStore {
         }
         let conn = Connection::open(path)?;
         migrations::migrate(&conn)?;
+        Self::backfill_aliases(&conn)?;
         Ok(Self {
             conn: Mutex::new(conn),
         })
+    }
+
+    fn backfill_aliases(conn: &Connection) -> Result<()> {
+        let ids: Vec<String> = {
+            let mut stmt = conn.prepare(
+                "SELECT corpus_id FROM corpora WHERE alias IS NULL ORDER BY created_at, corpus_id",
+            )?;
+            let collected = stmt
+                .query_map([], |row| row.get::<_, String>(0))?
+                .collect::<std::result::Result<Vec<_>, _>>()?;
+            collected
+        };
+        for id in ids {
+            let next: i64 = conn
+                .query_row(
+                    "SELECT COALESCE(MAX(CAST(SUBSTR(alias, 8) AS INTEGER)), 0) FROM corpora WHERE alias GLOB 'corpus-[0-9]*'",
+                    [],
+                    |row| row.get(0),
+                )
+                .unwrap_or(0);
+            conn.execute(
+                "UPDATE corpora SET alias = ?2 WHERE corpus_id = ?1",
+                params![id, format!("corpus-{:02}", next + 1)],
+            )?;
+        }
+        Ok(())
     }
 
     /// Register a normalized corpus root.
@@ -142,6 +172,31 @@ impl CorpusStore {
                 &now,
             ],
         )?;
+
+        // Assign an auto-alias `corpus-NN` only if this corpus has none yet.
+        // Re-registration of an existing root keeps any prior (user or auto) alias.
+        let existing_alias: Option<String> = conn
+            .query_row(
+                "SELECT alias FROM corpora WHERE corpus_id = ?1",
+                params![corpus_id.as_string()],
+                |row| row.get(0),
+            )
+            .optional()?
+            .flatten();
+        if existing_alias.is_none() {
+            let next: i64 = conn
+                .query_row(
+                    "SELECT COALESCE(MAX(CAST(SUBSTR(alias, 8) AS INTEGER)), 0) FROM corpora WHERE alias GLOB 'corpus-[0-9]*'",
+                    [],
+                    |row| row.get(0),
+                )
+                .unwrap_or(0);
+            let auto = format!("corpus-{:02}", next + 1);
+            conn.execute(
+                "UPDATE corpora SET alias = ?2 WHERE corpus_id = ?1",
+                params![corpus_id.as_string(), auto],
+            )?;
+        }
 
         Ok(RegisterCorpusResult {
             corpus_id,
@@ -221,14 +276,15 @@ impl CorpusStore {
         let now = Utc::now().to_rfc3339();
         conn.execute(
             "INSERT OR REPLACE INTO corpus_documents \
-             (corpus_id, document_id, backend_kind, source_path_hash, relative_path_hash, content_id, metadata_json, created_at) \
-             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)",
+             (corpus_id, document_id, backend_kind, source_path_hash, relative_path_hash, relative_path, content_id, metadata_json, created_at) \
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)",
             params![
                 corpus_id.as_string(),
                 document_id.as_string(),
                 backend_kind,
                 &source_path_hash,
                 &relative_path_hash,
+                relative_path,
                 content_id.as_str(),
                 &metadata_json,
                 &now,
@@ -244,18 +300,66 @@ impl CorpusStore {
         Ok(count as usize)
     }
 
+    /// Record (or update) the readable relative path for a document, enabling
+    /// handle resolution. Inserts a minimal row if the document is not present.
+    pub fn record_document_path(
+        &self,
+        corpus_id: CorpusId,
+        document_id: DocumentInstanceId,
+        relative_path: &str,
+    ) -> Result<()> {
+        let conn = self.conn.lock().expect("corpus sqlite mutex poisoned");
+        ensure_corpus_exists(&conn, corpus_id)?;
+        conn.execute(
+            "INSERT INTO corpus_documents \
+                (corpus_id, document_id, backend_kind, source_path_hash, content_id, \
+                 metadata_json, relative_path, created_at) \
+             VALUES (?1, ?2, 'legal', '', '', '{}', ?3, ?4) \
+             ON CONFLICT(corpus_id, document_id, backend_kind) \
+             DO UPDATE SET relative_path = excluded.relative_path",
+            params![
+                corpus_id.as_string(),
+                document_id.as_string(),
+                relative_path,
+                Utc::now().to_rfc3339(),
+            ],
+        )?;
+        Ok(())
+    }
+
+    /// Resolve a document id from its corpus + readable relative path.
+    pub fn document_id_by_relative_path(
+        &self,
+        corpus_id: CorpusId,
+        relative_path: &str,
+    ) -> Result<Option<DocumentInstanceId>> {
+        let conn = self.conn.lock().expect("corpus sqlite mutex poisoned");
+        let mut stmt = conn.prepare(
+            "SELECT document_id FROM corpus_documents \
+             WHERE corpus_id = ?1 AND relative_path = ?2 LIMIT 1",
+        )?;
+        let mut rows = stmt.query(params![corpus_id.as_string(), relative_path])?;
+        match rows.next()? {
+            Some(row) => Ok(Some(DocumentInstanceId::new(parse_uuid(
+                row.get::<_, String>(0)?,
+            )?))),
+            None => Ok(None),
+        }
+    }
+
     /// List registered corpora without raw filesystem paths.
     pub fn list_corpora(&self) -> Result<Vec<CorpusRow>> {
         let conn = self.conn.lock().expect("corpus sqlite mutex poisoned");
         let mut stmt = conn.prepare(
-            "SELECT corpus_id, label_pseudo, health \
+            "SELECT corpus_id, label_pseudo, alias, health \
              FROM corpora ORDER BY created_at, corpus_id",
         )?;
         let rows = stmt.query_map([], |row| {
             Ok(CorpusRow {
                 corpus_id: CorpusId::new(parse_uuid(row.get::<_, String>(0)?)?),
                 label_pseudo: row.get(1)?,
-                health: row.get(2)?,
+                alias: row.get(2)?,
+                health: row.get(3)?,
             })
         })?;
         rows.collect::<std::result::Result<Vec<_>, _>>()
@@ -280,6 +384,29 @@ impl CorpusStore {
             _ => Err(Error::UnknownCorpus(
                 "multiple corpora registered".to_string(),
             )),
+        }
+    }
+
+    /// Set (or replace) the human-readable alias for a corpus.
+    /// Errors (via rusqlite UNIQUE violation) if the alias is already taken.
+    pub fn set_alias(&self, corpus_id: CorpusId, alias: &str) -> Result<()> {
+        let conn = self.conn.lock().expect("corpus sqlite mutex poisoned");
+        ensure_corpus_exists(&conn, corpus_id)?;
+        conn.execute(
+            "UPDATE corpora SET alias = ?2, updated_at = ?3 WHERE corpus_id = ?1",
+            params![corpus_id.as_string(), alias, Utc::now().to_rfc3339()],
+        )?;
+        Ok(())
+    }
+
+    /// Resolve a corpus id by its alias. Returns `None` if no corpus has it.
+    pub fn lookup_by_alias(&self, alias: &str) -> Result<Option<CorpusId>> {
+        let conn = self.conn.lock().expect("corpus sqlite mutex poisoned");
+        let mut stmt = conn.prepare("SELECT corpus_id FROM corpora WHERE alias = ?1")?;
+        let mut rows = stmt.query(params![alias])?;
+        match rows.next()? {
+            Some(row) => Ok(Some(CorpusId::new(parse_uuid(row.get::<_, String>(0)?)?))),
+            None => Ok(None),
         }
     }
 
@@ -667,6 +794,136 @@ mod tests {
             .expect("metadata")
             .expect("exists");
         assert_eq!(metadata["source_path"], "c:/clients/matter");
+    }
+
+    #[test]
+    fn list_corpora_exposes_alias_field() {
+        let dir = tempfile::tempdir().expect("tempdir");
+        let store = CorpusStore::open(dir.path().join("c.sqlite3")).expect("open");
+        store
+            .register_root(
+                dir.path().join("folderA").to_str().unwrap(),
+                &[CorpusProfile::All],
+            )
+            .expect("register");
+        let rows = store.list_corpora().expect("list");
+        assert_eq!(rows.len(), 1);
+        assert!(rows[0].alias.is_some(), "alias field populated");
+    }
+
+    #[test]
+    fn register_root_auto_assigns_sequential_alias() {
+        let dir = tempfile::tempdir().expect("tempdir");
+        let store = CorpusStore::open(dir.path().join("c.sqlite3")).expect("open");
+        store
+            .register_root(
+                dir.path().join("a").to_str().unwrap(),
+                &[CorpusProfile::All],
+            )
+            .expect("a");
+        store
+            .register_root(
+                dir.path().join("b").to_str().unwrap(),
+                &[CorpusProfile::All],
+            )
+            .expect("b");
+        let rows = store.list_corpora().expect("list");
+        let aliases: Vec<String> = rows.iter().filter_map(|r| r.alias.clone()).collect();
+        assert!(
+            aliases.contains(&"corpus-01".to_string()),
+            "first auto-alias"
+        );
+        assert!(
+            aliases.contains(&"corpus-02".to_string()),
+            "second auto-alias"
+        );
+    }
+
+    #[test]
+    fn reregister_same_root_keeps_alias() {
+        let dir = tempfile::tempdir().expect("tempdir");
+        let store = CorpusStore::open(dir.path().join("c.sqlite3")).expect("open");
+        let path = dir.path().join("a");
+        let first = store
+            .register_root(path.to_str().unwrap(), &[CorpusProfile::All])
+            .expect("first");
+        store
+            .set_alias(first.corpus_id, "matter-7")
+            .expect("user alias");
+        store
+            .register_root(path.to_str().unwrap(), &[CorpusProfile::All])
+            .expect("second");
+        assert_eq!(
+            store.lookup_by_alias("matter-7").expect("lookup"),
+            Some(first.corpus_id)
+        );
+    }
+
+    #[test]
+    fn set_and_lookup_alias_roundtrip() {
+        let dir = tempfile::tempdir().expect("tempdir");
+        let store = CorpusStore::open(dir.path().join("c.sqlite3")).expect("open");
+        let reg = store
+            .register_root(
+                dir.path().join("folderA").to_str().unwrap(),
+                &[CorpusProfile::All],
+            )
+            .expect("register");
+        store
+            .set_alias(reg.corpus_id, "2026-0042")
+            .expect("set alias");
+        let found = store.lookup_by_alias("2026-0042").expect("lookup");
+        assert_eq!(found, Some(reg.corpus_id));
+        assert_eq!(store.lookup_by_alias("nope").expect("lookup miss"), None);
+    }
+
+    #[test]
+    fn set_alias_rejects_duplicate() {
+        let dir = tempfile::tempdir().expect("tempdir");
+        let store = CorpusStore::open(dir.path().join("c.sqlite3")).expect("open");
+        let a = store
+            .register_root(
+                dir.path().join("a").to_str().unwrap(),
+                &[CorpusProfile::All],
+            )
+            .expect("register a");
+        let b = store
+            .register_root(
+                dir.path().join("b").to_str().unwrap(),
+                &[CorpusProfile::All],
+            )
+            .expect("register b");
+        store.set_alias(a.corpus_id, "dup").expect("first alias ok");
+        assert!(
+            store.set_alias(b.corpus_id, "dup").is_err(),
+            "duplicate rejected"
+        );
+    }
+
+    #[test]
+    fn document_id_by_relative_path_roundtrip() {
+        let dir = tempfile::tempdir().expect("tempdir");
+        let store = CorpusStore::open(dir.path().join("c.sqlite3")).expect("open");
+        let reg = store
+            .register_root(
+                dir.path().join("a").to_str().unwrap(),
+                &[CorpusProfile::All],
+            )
+            .expect("register");
+        let doc = DocumentInstanceId::new(uuid::Uuid::nil());
+        store
+            .record_document_path(reg.corpus_id, doc, "contrats/x.txt")
+            .expect("record");
+        let found = store
+            .document_id_by_relative_path(reg.corpus_id, "contrats/x.txt")
+            .expect("lookup");
+        assert_eq!(found, Some(doc));
+        assert_eq!(
+            store
+                .document_id_by_relative_path(reg.corpus_id, "missing")
+                .expect("miss"),
+            None
+        );
     }
 
     #[test]
