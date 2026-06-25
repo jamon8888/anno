@@ -226,30 +226,40 @@ mod resolve_tests {
     use anno_corpus_core::{CorpusProfile, EffectiveCorpus};
 
     fn svc(dir: &std::path::Path) -> CorpusService {
-        CorpusService::from_store_for_test(
-            CorpusStore::open(dir.join("c.sqlite3")).expect("open"),
-        )
+        CorpusService::from_store_for_test(CorpusStore::open(dir.join("c.sqlite3")).expect("open"))
     }
 
     #[test]
     fn zero_corpus_no_cross_is_error() {
         let dir = tempfile::tempdir().unwrap();
         let s = svc(dir.path());
-        assert!(matches!(s.resolve_effective(None, false), Err(CorpusGuardError::NoCorpus)));
+        assert!(matches!(
+            s.resolve_effective(None, false),
+            Err(CorpusGuardError::NoCorpus)
+        ));
     }
 
     #[test]
     fn zero_corpus_with_cross_is_cross() {
         let dir = tempfile::tempdir().unwrap();
         let s = svc(dir.path());
-        assert_eq!(s.resolve_effective(None, true).unwrap(), EffectiveCorpus::CrossCorpus);
+        assert_eq!(
+            s.resolve_effective(None, true).unwrap(),
+            EffectiveCorpus::CrossCorpus
+        );
     }
 
     #[test]
     fn resolves_by_alias() {
         let dir = tempfile::tempdir().unwrap();
         let s = svc(dir.path());
-        let reg = s.store.register_root(dir.path().join("a").to_str().unwrap(), &[CorpusProfile::All]).unwrap();
+        let reg = s
+            .store
+            .register_root(
+                dir.path().join("a").to_str().unwrap(),
+                &[CorpusProfile::All],
+            )
+            .unwrap();
         s.store.set_alias(reg.corpus_id, "2026-0042").unwrap();
         assert_eq!(
             s.resolve_effective(Some("2026-0042"), false).unwrap(),
@@ -272,7 +282,10 @@ mod resolve_tests {
         let s = svc(dir.path());
         let reg = s
             .store
-            .register_root(dir.path().join("a").to_str().unwrap(), &[CorpusProfile::All])
+            .register_root(
+                dir.path().join("a").to_str().unwrap(),
+                &[CorpusProfile::All],
+            )
             .unwrap();
         s.store.set_alias(reg.corpus_id, "case-1").unwrap();
         let doc = anno_corpus_core::DocumentInstanceId::new(uuid::Uuid::nil());

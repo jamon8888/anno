@@ -107,7 +107,8 @@ impl CorpusStore {
             let mut stmt = conn.prepare(
                 "SELECT corpus_id FROM corpora WHERE alias IS NULL ORDER BY created_at, corpus_id",
             )?;
-            let collected = stmt.query_map([], |row| row.get::<_, String>(0))?
+            let collected = stmt
+                .query_map([], |row| row.get::<_, String>(0))?
                 .collect::<std::result::Result<Vec<_>, _>>()?;
             collected
         };
@@ -795,7 +796,10 @@ mod tests {
         let dir = tempfile::tempdir().expect("tempdir");
         let store = CorpusStore::open(dir.path().join("c.sqlite3")).expect("open");
         store
-            .register_root(dir.path().join("folderA").to_str().unwrap(), &[CorpusProfile::All])
+            .register_root(
+                dir.path().join("folderA").to_str().unwrap(),
+                &[CorpusProfile::All],
+            )
             .expect("register");
         let rows = store.list_corpora().expect("list");
         assert_eq!(rows.len(), 1);
@@ -806,12 +810,28 @@ mod tests {
     fn register_root_auto_assigns_sequential_alias() {
         let dir = tempfile::tempdir().expect("tempdir");
         let store = CorpusStore::open(dir.path().join("c.sqlite3")).expect("open");
-        store.register_root(dir.path().join("a").to_str().unwrap(), &[CorpusProfile::All]).expect("a");
-        store.register_root(dir.path().join("b").to_str().unwrap(), &[CorpusProfile::All]).expect("b");
+        store
+            .register_root(
+                dir.path().join("a").to_str().unwrap(),
+                &[CorpusProfile::All],
+            )
+            .expect("a");
+        store
+            .register_root(
+                dir.path().join("b").to_str().unwrap(),
+                &[CorpusProfile::All],
+            )
+            .expect("b");
         let rows = store.list_corpora().expect("list");
         let aliases: Vec<String> = rows.iter().filter_map(|r| r.alias.clone()).collect();
-        assert!(aliases.contains(&"corpus-01".to_string()), "first auto-alias");
-        assert!(aliases.contains(&"corpus-02".to_string()), "second auto-alias");
+        assert!(
+            aliases.contains(&"corpus-01".to_string()),
+            "first auto-alias"
+        );
+        assert!(
+            aliases.contains(&"corpus-02".to_string()),
+            "second auto-alias"
+        );
     }
 
     #[test]
@@ -819,10 +839,19 @@ mod tests {
         let dir = tempfile::tempdir().expect("tempdir");
         let store = CorpusStore::open(dir.path().join("c.sqlite3")).expect("open");
         let path = dir.path().join("a");
-        let first = store.register_root(path.to_str().unwrap(), &[CorpusProfile::All]).expect("first");
-        store.set_alias(first.corpus_id, "matter-7").expect("user alias");
-        store.register_root(path.to_str().unwrap(), &[CorpusProfile::All]).expect("second");
-        assert_eq!(store.lookup_by_alias("matter-7").expect("lookup"), Some(first.corpus_id));
+        let first = store
+            .register_root(path.to_str().unwrap(), &[CorpusProfile::All])
+            .expect("first");
+        store
+            .set_alias(first.corpus_id, "matter-7")
+            .expect("user alias");
+        store
+            .register_root(path.to_str().unwrap(), &[CorpusProfile::All])
+            .expect("second");
+        assert_eq!(
+            store.lookup_by_alias("matter-7").expect("lookup"),
+            Some(first.corpus_id)
+        );
     }
 
     #[test]
@@ -830,9 +859,14 @@ mod tests {
         let dir = tempfile::tempdir().expect("tempdir");
         let store = CorpusStore::open(dir.path().join("c.sqlite3")).expect("open");
         let reg = store
-            .register_root(dir.path().join("folderA").to_str().unwrap(), &[CorpusProfile::All])
+            .register_root(
+                dir.path().join("folderA").to_str().unwrap(),
+                &[CorpusProfile::All],
+            )
             .expect("register");
-        store.set_alias(reg.corpus_id, "2026-0042").expect("set alias");
+        store
+            .set_alias(reg.corpus_id, "2026-0042")
+            .expect("set alias");
         let found = store.lookup_by_alias("2026-0042").expect("lookup");
         assert_eq!(found, Some(reg.corpus_id));
         assert_eq!(store.lookup_by_alias("nope").expect("lookup miss"), None);
@@ -843,13 +877,22 @@ mod tests {
         let dir = tempfile::tempdir().expect("tempdir");
         let store = CorpusStore::open(dir.path().join("c.sqlite3")).expect("open");
         let a = store
-            .register_root(dir.path().join("a").to_str().unwrap(), &[CorpusProfile::All])
+            .register_root(
+                dir.path().join("a").to_str().unwrap(),
+                &[CorpusProfile::All],
+            )
             .expect("register a");
         let b = store
-            .register_root(dir.path().join("b").to_str().unwrap(), &[CorpusProfile::All])
+            .register_root(
+                dir.path().join("b").to_str().unwrap(),
+                &[CorpusProfile::All],
+            )
             .expect("register b");
         store.set_alias(a.corpus_id, "dup").expect("first alias ok");
-        assert!(store.set_alias(b.corpus_id, "dup").is_err(), "duplicate rejected");
+        assert!(
+            store.set_alias(b.corpus_id, "dup").is_err(),
+            "duplicate rejected"
+        );
     }
 
     #[test]
@@ -857,7 +900,10 @@ mod tests {
         let dir = tempfile::tempdir().expect("tempdir");
         let store = CorpusStore::open(dir.path().join("c.sqlite3")).expect("open");
         let reg = store
-            .register_root(dir.path().join("a").to_str().unwrap(), &[CorpusProfile::All])
+            .register_root(
+                dir.path().join("a").to_str().unwrap(),
+                &[CorpusProfile::All],
+            )
             .expect("register");
         let doc = DocumentInstanceId::new(uuid::Uuid::nil());
         store

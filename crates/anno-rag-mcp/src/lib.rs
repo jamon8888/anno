@@ -3126,7 +3126,9 @@ impl AnnoRagServer {
         };
         // Accept a readable handle (alias/relative_path) or a UUID.
         let doc_id = match self.corpus().await {
-            Ok(svc) => svc.resolve_doc_ref(&p.doc_id).unwrap_or_else(|_| p.doc_id.clone()),
+            Ok(svc) => svc
+                .resolve_doc_ref(&p.doc_id)
+                .unwrap_or_else(|_| p.doc_id.clone()),
             Err(_) => p.doc_id.clone(),
         };
         let start = std::time::Instant::now();
