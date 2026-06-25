@@ -160,6 +160,76 @@ pub fn recall_of(agg: &BTreeMap<String, CategoryCounts>, cat: &str) -> f64 {
 mod tests {
     use super::*;
 
+    fn detector_pred_spans(det: &crate::detect::Detector, text: &str) -> Vec<PredSpan> {
+        det.detect(text)
+            .expect("detect")
+            .into_iter()
+            .map(|e| PredSpan {
+                category: match &e.category {
+                    cloakpipe_core::EntityCategory::Custom(s) => s.to_ascii_lowercase(),
+                    other => format!("{other:?}").to_ascii_lowercase(),
+                },
+                start: e.start,
+                end: e.end,
+            })
+            .collect()
+    }
+
+    #[test]
+    #[ignore = "loads ONNX PII model; run explicitly to (re)measure baseline"]
+    fn pii_eval_report() {
+        let det = crate::detect::Detector::new(&crate::config::AnnoRagConfig::default())
+            .expect("detector");
+        let fx = load_fixtures(&pii_eval_dir()).expect("fixtures");
+        let mut agg = std::collections::BTreeMap::new();
+        for f in &fx {
+            let pred = detector_pred_spans(&det, &f.text);
+            agg = merge(agg, score_one(&f.spans, &pred));
+        }
+        for (cat, c) in &agg {
+            println!(
+                "{cat}: P={:.2} R={:.2} F1={:.2} (tp={} fp={} fn={})",
+                c.precision(),
+                c.recall(),
+                c.f1(),
+                c.true_positive,
+                c.false_positive,
+                c.false_negative
+            );
+        }
+    }
+
+    #[test]
+    #[ignore = "loads ONNX PII model; non-regression gate for Art.9 recall >= 0.90"]
+    fn pii_eval_meets_floors() {
+        let art9 = [
+            "health_data",
+            "genetic_data",
+            "biometric_data",
+            "sexual_orientation",
+            "political_opinion",
+            "religious_belief",
+            "trade_union_membership",
+            "racial_ethnic_origin",
+        ];
+        let det =
+            crate::detect::Detector::new(&crate::config::AnnoRagConfig::default()).expect("detector");
+        let fx = load_fixtures(&pii_eval_dir()).expect("fixtures");
+        let mut agg = std::collections::BTreeMap::new();
+        for f in &fx {
+            agg = merge(agg, score_one(&f.spans, &detector_pred_spans(&det, &f.text)));
+        }
+        for cat in art9 {
+            if let Some(c) = agg.get(cat) {
+                assert!(
+                    c.recall() >= 0.90,
+                    "{cat} recall {:.2} < 0.90 floor",
+                    c.recall()
+                );
+            }
+        }
+    }
+
     #[test]
     fn loads_at_least_one_fixture() {
         let fx = load_fixtures(&pii_eval_dir()).expect("load fixtures");
