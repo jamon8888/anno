@@ -59,3 +59,4 @@ pub mod vlm;
 pub use config::AnnoRagConfig;
 pub use error::{Error, Result};
 pub use pipeline::{Pipeline, WarmupOutcome};
+pub use cloakpipe_core::{DetectedEntity, EntityCategory};

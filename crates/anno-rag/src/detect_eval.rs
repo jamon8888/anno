@@ -273,4 +273,71 @@ mod tests {
         assert_eq!(s.get("person").map(|c| c.false_negative), Some(1));
         assert_eq!(s.get("organization").map(|c| c.false_positive), Some(1));
     }
+
+    // ── B10: cabinet scope fixture validation ───────────────────────────────
+
+    /// Structural: the cabinet fixture has more org spans than the plain org fixture.
+    #[test]
+    fn cabinet_fixture_has_two_org_spans() {
+        let base = pii_eval_dir().join("long");
+        let load = |name: &str| -> Vec<GoldSpan> {
+            let raw = std::fs::read_to_string(base.join(name)).expect(name);
+            let fx: PiiFixture = serde_json::from_str(&raw).expect(name);
+            fx.spans.into_iter().filter(|s| s.category == "organization").collect()
+        };
+        let plain_orgs = load("org_01.json");
+        let cabinet_orgs = load("org_cabinet_01.json");
+        assert_eq!(plain_orgs.len(), 1, "org_01 has 1 org span");
+        assert_eq!(cabinet_orgs.len(), 2, "org_cabinet_01 has 2 org spans (cabinet name included)");
+    }
+
+    /// Model-backed: cabinet scope catches both org spans; strict scope misses the cabinet name.
+    #[test]
+    #[ignore = "loads ONNX PII model; run explicitly to measure cabinet scope recall delta"]
+    fn cabinet_scope_catches_more_orgs() {
+        use crate::config::{AnnoRagConfig, MaskingScope};
+        use crate::detect::{label_groups_for, Detector};
+
+        let base = pii_eval_dir().join("long");
+        let raw = std::fs::read_to_string(base.join("org_cabinet_01.json")).expect("fixture");
+        let fx: PiiFixture = serde_json::from_str(&raw).expect("parse");
+
+        let make_det = |scope| {
+            let mut cfg = AnnoRagConfig::default();
+            cfg.masking_scope = scope;
+            Detector::new(&cfg).expect("detector")
+        };
+
+        let spans = |det: &Detector| -> Vec<PredSpan> {
+            det.detect(&fx.text)
+                .expect("detect")
+                .into_iter()
+                .map(|e| PredSpan {
+                    category: match &e.category {
+                        cloakpipe_core::EntityCategory::Custom(s) => s.to_ascii_lowercase(),
+                        other => format!("{other:?}").to_ascii_lowercase(),
+                    },
+                    start: e.start,
+                    end: e.end,
+                })
+                .collect()
+        };
+
+        let strict_det = make_det(MaskingScope::RgpdStrict);
+        let cabinet_det = make_det(MaskingScope::CabinetConfidential);
+
+        let strict_agg = score_one(&fx.spans, &spans(&strict_det));
+        let cabinet_agg = score_one(&fx.spans, &spans(&cabinet_det));
+
+        let strict_org_recall = strict_agg.get("organization").map(|c| c.recall()).unwrap_or(0.0);
+        let cabinet_org_recall = cabinet_agg.get("organization").map(|c| c.recall()).unwrap_or(0.0);
+
+        println!("strict  org recall: {strict_org_recall:.2}");
+        println!("cabinet org recall: {cabinet_org_recall:.2}");
+
+        assert!(
+            cabinet_org_recall >= strict_org_recall,
+            "cabinet scope must not regress org recall ({cabinet_org_recall:.2} < {strict_org_recall:.2})"
+        );
+    }
 }

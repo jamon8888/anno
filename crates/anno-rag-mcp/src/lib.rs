@@ -2427,7 +2427,7 @@ impl AnnoRagServer {
                     .map(|e| EntityInfo {
                         original: e.original,
                         category: match &e.category {
-                            cloakpipe_core::EntityCategory::Custom(s) => s.clone(),
+                            anno_rag::EntityCategory::Custom(s) => s.clone(),
                             other => format!("{other:?}"),
                         },
                         confidence: e.confidence,

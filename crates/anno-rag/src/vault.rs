@@ -1186,4 +1186,58 @@ mod tests {
             std::env::remove_var(name);
         }
     }
+
+    /// B11: vault reuses the same token for a known original, guaranteeing that
+    /// `pseudonymize_query` produces a consistent pseudonymized form even when
+    /// the entity was first seen in a document.
+    #[tokio::test]
+    async fn pseudonymize_reuses_known_token_for_query() {
+        let vault = Vault::ephemeral_for_test();
+        let name = "Marc Dubois";
+
+        // Simulate prior ingestion: pseudonymize a document containing the name.
+        let doc_entities = vec![cloakpipe_core::DetectedEntity {
+            original: name.to_string(),
+            start: 11,
+            end: 22,
+            category: cloakpipe_core::EntityCategory::Person,
+            confidence: 0.95,
+            source: cloakpipe_core::DetectionSource::Ner,
+        }];
+        let doc_pseudo = vault
+            .pseudonymize("Le patient Marc Dubois souffre.", &doc_entities)
+            .await
+            .unwrap();
+        // Extract the token assigned during ingestion.
+        let token: String = doc_pseudo
+            .split_whitespace()
+            .find(|w| w.starts_with("PERSON_"))
+            .expect("person token in doc")
+            .to_string();
+
+        // Now pseudonymize a query containing the same name.
+        let query_entities = vec![cloakpipe_core::DetectedEntity {
+            original: name.to_string(),
+            start: 9,
+            end: 20,
+            category: cloakpipe_core::EntityCategory::Person,
+            confidence: 0.90,
+            source: cloakpipe_core::DetectionSource::Ner,
+        }];
+        let query_pseudo = vault
+            .pseudonymize(&format!("Who is {name}?"), &query_entities)
+            .await
+            .unwrap();
+
+        // The vault must reuse the same token — otherwise the query embedding
+        // won't match the document embedding.
+        assert!(
+            !query_pseudo.contains(name),
+            "cleartext name must not appear in pseudonymized query"
+        );
+        assert!(
+            query_pseudo.contains(&token),
+            "query must reuse the same token '{token}' as the document"
+        );
+    }
 }
