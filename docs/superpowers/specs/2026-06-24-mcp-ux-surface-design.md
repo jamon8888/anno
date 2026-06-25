@@ -2,7 +2,7 @@
 
 **Date** : 2026-06-24
 **Statut** : ✅ **Design validé** — prêt pour plan d'implémentation.
-**Portée** : les 6 items du backlog UX (U2, U3, U4, U5, U7, U8) + le quick-win U6, conçus comme **6 unités indépendantes derrière une seule convention d'enveloppe de réponse**.
+**Portée** : les 6 items du backlog UX (U2, U3, U4, U5, U7, U8) + le quick-win U6 + les 4 items auparavant différés en §8 désormais promus (D1 simplification `search`, D2 noms canoniques, D3 ETA warmup, U1 résolution de handle dans la recherche), conçus comme **unités indépendantes derrière une seule convention d'enveloppe de réponse**.
 **Source** : revue UX du surface MCP (~50 outils) du point de vue d'un avocat pilotant anno via Claude Desktop. Backlog : `2026-06-24-mcp-ux-surface-backlog.md`.
 **Pré-requis** : Spec A (recherche corpus, handles document, `corpus_documents`) et Spec B (confiance NER) mergées (PR #81).
 
@@ -121,20 +121,66 @@ L'état `warmup_phase` (Idle/Downloading/Loading/Ready/Failed) existe déjà et 
 
 ---
 
-## § 7. Risques d'implémentation à lever en planification
+## § 9. D1 — simplification sémantique de `search` (non-breaking)
 
-1. **U2** : le KG juridique doit répondre « des nœuds pour le doc X ? » à bas coût — vérifier que le store graphe le supporte ; sinon, U2 retombe sur une vérification de présence corpus plus grossière (`corpus_documents`).
-2. **U4** : confirmer que rmcp permet de filtrer la sortie de `list_tools` (probablement via une surcharge `ServerHandler::list_tools`) sans casser le dispatch `#[tool_router]`.
-3. **U8(a)** : le warmup proactif consomme des ressources avidement au boot — confirmer que c'est acceptable pour le modèle de lancement stdio de Claude Desktop.
+**Constat** : les paramètres `mode`/`scope` sont déjà optionnels et `auto` auto-sélectionne déjà selon le scope ([lib.rs:2258](../../../crates/anno-rag-mcp/src/lib.rs#L2258)). Le vrai foot-gun n'est pas le défaut — c'est que **certaines combinaisons renvoient une erreur** (`mode=fast` + `scope=legal` → erreur).
+
+**Design** : rendre la matrice `mode × scope` **totale — aucune combinaison ne renvoie d'erreur**. Les paires aujourd'hui invalides dégradent proprement au lieu d'échouer :
+- `mode=fast` + `scope=legal` → passe lexicale rapide sur le scope légal, avec `status: degraded` + `hint` (« recherche rapide ; relancez en mode=semantic pour le ranking légal complet »).
+
+Aucun changement de signature de paramètre → non-breaking. Combiné à la réécriture par exemples de §3, l'agent ne peut plus composer un appel cassé. C'est la « simplification sémantique » de U3 sans rupture : chaque appel est valide.
 
 ---
 
-## § 8. Hors périmètre (différé)
+## § 10. U1 — résolution de handle dans les résultats de recherche
 
-- Simplification **sémantique** de `search` (U3 plus profond) — changement de comportement séparé.
-- Renommage / namespacing d'outils (U5 plus profond) — version majeure future.
-- ETA de warmup précises (au-delà de l'estimation par phase).
-- **U1** (handles document lisibles) — déjà dans Spec A.
+**Constat** : Spec A a livré les handles lisibles (`corpus/relative_path`), mais les chunks LanceDB ne portent que `source_path`/`folder_path` absolus ([store.rs:110-111](../../../crates/anno-rag/src/store.rs#L110)) ; la table de handles (`corpus_documents`) vit ailleurs. A9-A10/A13 (schéma chunk `relative_path`) ont été différés. **Objectif** : permettre à l'agent de piper un hit de recherche directement dans `legal_extract_contract` sans recopier d'UUID.
+
+**Design (recommandé : résolution au moment de la requête)** : à la construction des résultats, joindre `chunk.doc_id → corpus_documents.relative_path` et bâtir le handle `corpus_alias/relative_path`. **Pas de migration de schéma LanceDB ni de réindexation** (alternative écartée : ajouter une colonne `relative_path` aux chunks). Dégradation : si aucune ligne `corpus_documents` ne correspond, renvoyer l'UUID nu comme aujourd'hui.
+
+**Dépendance** : `doc_id` doit être enregistré dans `corpus_documents` — vrai pour l'ingest légal après PR #81 ; le plan vérifie le chemin knowledge (voir §7, risque 4).
+
+---
+
+## § 11. D2 — noms canoniques + alias dépréciés (non-breaking)
+
+**Constat** : les trois `forget` sont **réellement distincts** (`forget`=source indexée [lib.rs:2362], `memory_forget`=mémoire [2698], `knowledge_forget`=dossier knowledge) ; idem `status`/`rehydrate` vs leurs voisins. Le problème est le **nom nu non descriptif**, pas une redondance.
+
+**Design** : donner aux outils nus ambigus un **nom canonique auto-descriptif**, et enregistrer **l'ancien nom comme alias déprécié routé par la machinerie de §4 (U4)** : le handler reste, l'alias disparaît de `list_tools`, un appel journalise un avertissement.
+
+| Nom nu actuel | Nom canonique | Mécanisme |
+|---------------|---------------|-----------|
+| `forget` | `forget_source` | alias `forget` déprécié (caché via U4) |
+| `rehydrate` | `detokenize` | alias `rehydrate` déprécié |
+| `status` | `service_status` | alias `status` déprécié |
+
+Non-breaking (les anciens noms restent appelables) et **réutilise §4** plutôt qu'un second mécanisme. Complète §5 (descriptions croisées) : §5 clarifie, §11 renomme proprement.
+
+---
+
+## § 12. D3 — ETA de warmup précise
+
+**Design** : persister `download_ms` et `load_ms` à chaque transition `Ready` (petit JSON sous le répertoire des modèles — les durées ne sont pas sensibles). Au warmup suivant, `eta_seconds = max(0, durée_précédente_de_la_phase − elapsed_dans_la_phase)`. Premier lancement (aucun historique) → repli sur les chaînes par phase de §6/U8(b).
+
+L'enveloppe `warmup` gagne `eta_seconds` (numérique, nullable) à côté de `eta_human`. Affine §6/U8 sans le remplacer.
+
+---
+
+## § 7. Risques d'implémentation à lever en planification
+
+1. **U2** : le KG juridique doit répondre « des nœuds pour le doc X ? » à bas coût — vérifier que le store graphe le supporte ; sinon, U2 retombe sur une vérification de présence corpus plus grossière (`corpus_documents`).
+2. **U4** : confirmer que rmcp permet de filtrer la sortie de `list_tools` (probablement via une surcharge `ServerHandler::list_tools`) sans casser le dispatch `#[tool_router]`. **§11 (D2) en dépend** (alias dépréciés cachés via le même mécanisme).
+3. **U8(a)** : le warmup proactif consomme des ressources avidement au boot — confirmer que c'est acceptable pour le modèle de lancement stdio de Claude Desktop.
+4. **U1 (§10)** : confirmer que `doc_id` des chunks est enregistré dans `corpus_documents` pour **tous** les chemins d'ingest (légal OK post-PR #81 ; vérifier knowledge) ; sinon la résolution de handle retombe sur l'UUID nu.
+
+---
+
+## § 8. Hors périmètre (vraiment différé)
+
+Toutes les déferrals antérieures ont été promues en périmètre (§9–§12). Ne reste hors périmètre que :
+
+- Renommage **majeur sans alias** (suppression définitive des anciens noms nus) — version majeure future, après la période de grâce de §11.
+- Refonte de la sémantique `mode × scope` en un paramètre `intent` unique — au-delà de la totalisation non-breaking de §9.
 
 ---
 
@@ -142,6 +188,8 @@ L'état `warmup_phase` (Idle/Downloading/Loading/Ready/Failed) existe déjà et 
 
 1. **§0 + §2 (U6)** — convention documentée + quick-win labels (fondation, faible risque).
 2. **§1 (U2)** — trois statuts honnêtes sur les outils légaux (plus haute sévérité).
-3. **§6 (U7+U8)** — guidage cycle de vie.
-4. **§4 (U4)** + **§5 (U5)** — hygiène du registre.
-5. **§3 (U3)** — réécriture de la description `search`.
+3. **§10 (U1)** — résolution de handle dans les résultats de recherche (débloque le pipage hit → outil légal).
+4. **§6 (U7+U8)** + **§12 (D3)** — guidage cycle de vie + ETA précise.
+5. **§4 (U4)** + **§11 (D2)** — hygiène du registre + noms canoniques (D2 dépend de U4).
+6. **§5 (U5)** — descriptions croisées.
+7. **§3 (U3)** + **§9 (D1)** — réécriture description `search` + totalisation de la matrice.
