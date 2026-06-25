@@ -47,6 +47,12 @@ enum Cmd {
         /// Config overrides — any AnnoRagConfig field settable here (e.g. --ocr-mode, --gdpr-layers).
         #[command(flatten)]
         config: anno_rag::config::ConfigOverrides,
+        /// Index profile for the registered corpus: all (default), legal, or general.
+        #[arg(long, default_value = "all")]
+        profile: String,
+        /// Optional human-readable corpus alias (e.g. a matter number like 2026-0042).
+        #[arg(long)]
+        alias: Option<String>,
     },
     /// Search the indexed corpus and return ranked pseudonymized chunks.
     Search {
@@ -293,10 +299,23 @@ async fn main() -> anyhow::Result<()> {
             recursive,
             output,
             config: _,
+            profile,
+            alias,
         } => {
             let out = output.unwrap_or_else(|| cfg.outputs_dir());
+            // Register the folder as a corpus so search resolution + document
+            // handles work for documents ingested via the CLI.
+            let svc = anno_rag_mcp::corpus::CorpusService::open(&cfg)?;
+            let reg = svc.register_index_root(&folder.to_string_lossy(), &profile)?;
+            if let Some(alias) = alias.as_deref() {
+                svc.store().set_alias(reg.corpus_id, alias)?;
+            }
             let n = pipeline.ingest_folder(&folder, recursive, &out).await?;
-            println!("ingested {n} documents → {}", out.display());
+            println!(
+                "ingested {n} documents → {} (corpus {})",
+                out.display(),
+                reg.corpus_id.as_string()
+            );
         }
         Cmd::Search {
             query,
