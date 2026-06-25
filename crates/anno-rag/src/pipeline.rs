@@ -2355,6 +2355,14 @@ impl Pipeline {
         crate::legal::extract::risk_review(self.legal_kg.as_ref(), scope_id, is_dossier).await
     }
 
+    /// True if the knowledge graph holds at least one node for `document_id`. Spec C U2.
+    ///
+    /// # Errors
+    /// Propagates KG store errors.
+    pub async fn legal_document_has_kg_nodes(&self, doc_id: Uuid) -> Result<bool> {
+        self.legal_kg.document_has_kg_nodes(doc_id).await
+    }
+
     // ── D3: mandatory-clause audit ────────────────────────────────────────
 
     /// Run the mandatory-clause checklist for all chunks of `doc_id`.

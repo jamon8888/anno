@@ -2241,6 +2241,17 @@ fn source_folder_for_legal_binding(
         }))
 }
 
+/// Classify the response status for a legal tool with no findings,
+/// from three cheap facts. Spec C §1 (U2).
+pub(crate) fn legal_empty_status(resolved: bool, has_kg: bool, is_empty: bool) -> &'static str {
+    match (resolved, has_kg, is_empty) {
+        (false, _, _) => crate::envelope::status::UNKNOWN_DOCUMENT,
+        (true, false, _) => crate::envelope::status::NOT_ENRICHED,
+        (true, true, true) => crate::envelope::status::EMPTY,
+        (true, true, false) => crate::envelope::status::OK,
+    }
+}
+
 // ---- Tool router ----
 
 #[tool_router]
@@ -3254,13 +3265,13 @@ impl AnnoRagServer {
             Ok(p) => p,
             Err(json) => return json,
         };
-        let scope_id = match self.corpus().await {
+        let (scope_id, resolved) = match self.corpus().await {
             Ok(svc) => match svc.resolve_doc_ref(&p.scope_id) {
-                Ok(id) => id,
-                Err(_) if uuid::Uuid::parse_str(&p.scope_id).is_ok() => p.scope_id.clone(),
+                Ok(id) => (id, true),
+                Err(_) if uuid::Uuid::parse_str(&p.scope_id).is_ok() => (p.scope_id.clone(), false),
                 Err(e) => return format!("Error: {e}"),
             },
-            Err(_) => p.scope_id.clone(),
+            Err(_) => (p.scope_id.clone(), false),
         };
         let start = std::time::Instant::now();
         match pipeline.legal_risk_review(&scope_id, p.is_dossier).await {
@@ -3273,6 +3284,42 @@ impl AnnoRagServer {
                     duration_ms = start.elapsed().as_millis() as u64,
                     ""
                 );
+                let is_empty = review.findings.is_empty();
+                let has_kg = if resolved && !p.is_dossier {
+                    match uuid::Uuid::parse_str(&scope_id) {
+                        Ok(doc_uuid) => pipeline
+                            .legal_document_has_kg_nodes(doc_uuid)
+                            .await
+                            .unwrap_or(false),
+                        Err(_) => false,
+                    }
+                } else {
+                    resolved
+                };
+                let st = crate::legal_empty_status(resolved, has_kg, is_empty);
+                if st != crate::envelope::status::OK {
+                    let (msg, hint) = match st {
+                        s if s == crate::envelope::status::UNKNOWN_DOCUMENT => (
+                            "Document introuvable.",
+                            "Vérifiez le doc_id ou listez via sources().",
+                        ),
+                        s if s == crate::envelope::status::NOT_ENRICHED => (
+                            "Document non enrichi dans le graphe juridique.",
+                            "Réindexez via index(path, profile=\"legal\").",
+                        ),
+                        _ => (
+                            "Aucun risque identifié dans ce document.",
+                            "Le document est enrichi ; aucun risque ne correspond aux filtres.",
+                        ),
+                    };
+                    return serde_json::to_string_pretty(&crate::envelope::envelope(
+                        st,
+                        msg,
+                        hint,
+                        serde_json::json!({ "findings": [] }),
+                    ))
+                    .unwrap_or_else(|e| format!("Error: {e}"));
+                }
                 serde_json::to_string_pretty(&review).unwrap_or_else(|e| format!("Error: {e}"))
             }
             Err(e) => format!("Error: {e}"),
@@ -5647,5 +5694,20 @@ mod warmup_phase_tests {
         assert!(v["available"].is_array());
         assert!(v["message"].is_string());
         assert!(v["hint"].is_string());
+    }
+
+    #[test]
+    fn empty_status_classifier_picks_the_right_status() {
+        use crate::envelope::status;
+        assert_eq!(
+            crate::legal_empty_status(false, false, true),
+            status::UNKNOWN_DOCUMENT
+        );
+        assert_eq!(
+            crate::legal_empty_status(true, false, true),
+            status::NOT_ENRICHED
+        );
+        assert_eq!(crate::legal_empty_status(true, true, true), status::EMPTY);
+        assert_eq!(crate::legal_empty_status(true, true, false), status::OK);
     }
 }

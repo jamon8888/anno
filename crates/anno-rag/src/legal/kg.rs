@@ -273,6 +273,12 @@ pub trait LegalKnowledgeGraph: Send + Sync {
     /// Returns backend-specific graph errors.
     async fn compact(&self) -> Result<()>;
 
+    /// True if the knowledge graph holds at least one node for `doc_id`.
+    ///
+    /// # Errors
+    /// Returns backend-specific graph errors.
+    async fn document_has_kg_nodes(&self, doc_id: Uuid) -> Result<bool>;
+
     /// Execute a constrained graph query.
     ///
     /// # Errors
@@ -947,6 +953,21 @@ impl LegalKnowledgeGraph for SqliteLegalGraphStore {
         self.with_conn(|conn| conn.execute_batch("VACUUM").map_err(sql_err))
     }
 
+    async fn document_has_kg_nodes(&self, doc_id: Uuid) -> Result<bool> {
+        self.with_conn(|conn| {
+            let mut stmt = conn
+                .prepare("SELECT 1 FROM legal_nodes WHERE doc_id = ?1 LIMIT 1")
+                .map_err(sql_err)?;
+            let exists = stmt
+                .query(rusqlite::params![doc_id.to_string()])
+                .map_err(sql_err)?
+                .next()
+                .map_err(sql_err)?
+                .is_some();
+            Ok(exists)
+        })
+    }
+
     async fn cypher(
         &self,
         query: &str,
@@ -1392,6 +1413,10 @@ pub(crate) mod tests {
 
         async fn compact(&self) -> crate::Result<()> {
             Ok(())
+        }
+
+        async fn document_has_kg_nodes(&self, _doc_id: Uuid) -> crate::Result<bool> {
+            Ok(false)
         }
 
         async fn cypher(
