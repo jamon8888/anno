@@ -220,15 +220,24 @@ mod tests {
                 score_one(&f.spans, &detector_pred_spans(&det, &f.text)),
             );
         }
+        let mut missing = Vec::new();
         for cat in art9 {
-            if let Some(c) = agg.get(cat) {
-                assert!(
-                    c.recall() >= 0.90,
-                    "{cat} recall {:.2} < 0.90 floor",
-                    c.recall()
-                );
+            match agg.get(cat) {
+                Some(c) => {
+                    assert!(
+                        c.recall() >= 0.90,
+                        "{cat} recall {:.2} < 0.90 floor",
+                        c.recall()
+                    );
+                }
+                None => missing.push(cat),
             }
         }
+        assert!(
+            missing.is_empty(),
+            "Art.9 categories missing from fixture coverage: {:?}",
+            missing
+        );
     }
 
     #[test]

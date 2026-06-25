@@ -2,6 +2,6 @@
   "text": "Contactez Sophie Martin à l'adresse sophie.martin@cabinet-legrand.fr pour toute question.",
   "spans": [
     { "category": "person", "start": 10, "end": 23 },
-    { "category": "email", "start": 25, "end": 65 }
+    { "category": "email", "start": 37, "end": 69 }
   ]
 }

@@ -310,9 +310,28 @@ async fn main() -> anyhow::Result<()> {
             if let Some(alias) = alias.as_deref() {
                 svc.store().set_alias(reg.corpus_id, alias)?;
             }
-            let n = pipeline.ingest_folder(&folder, recursive, &out).await?;
+            let scope = anno_rag::LegalIngestScope {
+                corpus_id: reg.corpus_id,
+                root: folder.clone(),
+            };
+            let summary = pipeline
+                .ingest_folder_scoped_summary(&folder, recursive, &out, scope)
+                .await?;
+            let corpus_id = reg.corpus_id;
+            for doc in &summary.documents {
+                svc.store().add_document(
+                    corpus_id,
+                    doc.document_id,
+                    "legal",
+                    &doc.source_path,
+                    doc.relative_path.as_deref(),
+                    &doc.content_id,
+                    &serde_json::json!({}),
+                )?;
+            }
             println!(
-                "ingested {n} documents → {} (corpus {})",
+                "ingested {} documents → {} (corpus {})",
+                summary.ingested,
                 out.display(),
                 reg.corpus_id.as_string()
             );

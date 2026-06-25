@@ -91,6 +91,16 @@ jobs:
           echo "tag=${RAW}" >> $GITHUB_OUTPUT
           echo "semver=${RAW#v}" >> $GITHUB_OUTPUT
 
+      - name: Set version in tauri.conf.json
+        working-directory: crates/anno-rag-setup
+        shell: bash
+        run: |
+          node -e "
+            const c = JSON.parse(require('fs').readFileSync('tauri.conf.json','utf-8'));
+            c.version = '${{ steps.ver.outputs.semver }}';
+            require('fs').writeFileSync('tauri.conf.json', JSON.stringify(c, null, 2) + '\n');
+          "
+
       - name: Build Tauri installer
         working-directory: crates/anno-rag-setup
         shell: bash
@@ -98,7 +108,6 @@ jobs:
           tauri build
           --target ${{ matrix.target }}
           ${{ matrix.features != '' && format('--features {0}', matrix.features) || '' }}
-          --config '{"version":"${{ steps.ver.outputs.semver }}"}'
 
       - name: Rename artifact
         shell: bash

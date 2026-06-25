@@ -1183,6 +1183,11 @@ impl AnnoRagConfig {
         if let Ok(v) = std::env::var("ANNO_RAG_VLM_GGUF_MODEL_ID") {
             self.vlm_gguf_model_id = Some(v);
         }
+        if let Ok(v) = std::env::var("ANNO_RAG_MASKING_SCOPE") {
+            if let Ok(s) = v.parse::<MaskingScope>() {
+                self.masking_scope = s;
+            }
+        }
     }
 
     fn apply_overrides(&mut self, ov: &ConfigOverrides) {
@@ -1344,6 +1349,9 @@ impl AnnoRagConfig {
         }
         if let Some(v) = ov.vlm_gguf_model_id.clone() {
             self.vlm_gguf_model_id = Some(v);
+        }
+        if let Some(v) = ov.masking_scope {
+            self.masking_scope = v;
         }
     }
 

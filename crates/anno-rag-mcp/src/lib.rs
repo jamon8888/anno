@@ -823,15 +823,13 @@ impl AnnoRagServer {
     }
 
     async fn legal_search_impl(&self, p: LegalSearchParams) -> Result<serde_json::Value, String> {
-        let effective = match self
-            .resolve_effective_corpus(p.corpus_id.as_deref(), p.allow_cross_corpus)
-            .await
+        let svc = self.corpus().await.map_err(|e| e.to_string())?;
+        let effective = match svc.resolve_effective(p.corpus_id.as_deref(), p.allow_cross_corpus)
         {
             Ok(eff) => eff,
             // Multiple corpora and no explicit choice: return an actionable,
             // structured disambiguation instead of an opaque error.
-            Err(e) if e.contains("multiple corpora") => {
-                let svc = self.corpus().await.map_err(|e| e.to_string())?;
+            Err(anno_corpus_core::CorpusGuardError::CorpusRequired) => {
                 let rows = svc.store().list_corpora().map_err(|e| e.to_string())?;
                 return Ok(serde_json::json!({
                     "status": "corpus_required",
@@ -848,7 +846,7 @@ impl AnnoRagServer {
                     "hint": "Relancez avec corpus_id/alias, ou allow_cross_corpus: true pour un contrôle de conflits.",
                 }));
             }
-            Err(e) => return Err(e),
+            Err(e) => return Err(e.to_string()),
         };
         self.legal_search_impl_with_effective(p, &effective).await
     }
@@ -3127,11 +3125,12 @@ impl AnnoRagServer {
             Ok(p) => p,
             Err(json) => return json,
         };
-        // Accept a readable handle (alias/relative_path) or a UUID.
         let doc_id = match self.corpus().await {
-            Ok(svc) => svc
-                .resolve_doc_ref(&p.doc_id)
-                .unwrap_or_else(|_| p.doc_id.clone()),
+            Ok(svc) => match svc.resolve_doc_ref(&p.doc_id) {
+                Ok(id) => id,
+                Err(_) if uuid::Uuid::parse_str(&p.doc_id).is_ok() => p.doc_id.clone(),
+                Err(e) => return format!("Error: {e}"),
+            },
             Err(_) => p.doc_id.clone(),
         };
         let start = std::time::Instant::now();
@@ -3190,11 +3189,12 @@ impl AnnoRagServer {
             Ok(p) => p,
             Err(json) => return json,
         };
-        // Accept a readable handle (alias/relative_path) or a UUID.
         let dossier_id = match self.corpus().await {
-            Ok(svc) => svc
-                .resolve_doc_ref(&p.dossier_id)
-                .unwrap_or_else(|_| p.dossier_id.clone()),
+            Ok(svc) => match svc.resolve_doc_ref(&p.dossier_id) {
+                Ok(id) => id,
+                Err(_) if uuid::Uuid::parse_str(&p.dossier_id).is_ok() => p.dossier_id.clone(),
+                Err(e) => return format!("Error: {e}"),
+            },
             Err(_) => p.dossier_id.clone(),
         };
         let start = std::time::Instant::now();
@@ -3226,11 +3226,12 @@ impl AnnoRagServer {
             Ok(p) => p,
             Err(json) => return json,
         };
-        // Accept a readable handle (alias/relative_path) or a UUID.
         let scope_id = match self.corpus().await {
-            Ok(svc) => svc
-                .resolve_doc_ref(&p.scope_id)
-                .unwrap_or_else(|_| p.scope_id.clone()),
+            Ok(svc) => match svc.resolve_doc_ref(&p.scope_id) {
+                Ok(id) => id,
+                Err(_) if uuid::Uuid::parse_str(&p.scope_id).is_ok() => p.scope_id.clone(),
+                Err(e) => return format!("Error: {e}"),
+            },
             Err(_) => p.scope_id.clone(),
         };
         let start = std::time::Instant::now();

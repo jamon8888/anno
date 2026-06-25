@@ -113,11 +113,13 @@ impl CorpusStore {
             collected
         };
         for id in ids {
-            let next: i64 = conn.query_row(
-                "SELECT COUNT(*) FROM corpora WHERE alias IS NOT NULL",
-                [],
-                |row| row.get(0),
-            )?;
+            let next: i64 = conn
+                .query_row(
+                    "SELECT COALESCE(MAX(CAST(SUBSTR(alias, 8) AS INTEGER)), 0) FROM corpora",
+                    [],
+                    |row| row.get(0),
+                )
+                .unwrap_or(0);
             conn.execute(
                 "UPDATE corpora SET alias = ?2 WHERE corpus_id = ?1",
                 params![id, format!("corpus-{:02}", next + 1)],
@@ -182,11 +184,13 @@ impl CorpusStore {
             .optional()?
             .flatten();
         if existing_alias.is_none() {
-            let next: i64 = conn.query_row(
-                "SELECT COUNT(*) FROM corpora WHERE alias IS NOT NULL",
-                [],
-                |row| row.get(0),
-            )?;
+            let next: i64 = conn
+                .query_row(
+                    "SELECT COALESCE(MAX(CAST(SUBSTR(alias, 8) AS INTEGER)), 0) FROM corpora",
+                    [],
+                    |row| row.get(0),
+                )
+                .unwrap_or(0);
             let auto = format!("corpus-{:02}", next + 1);
             conn.execute(
                 "UPDATE corpora SET alias = ?2 WHERE corpus_id = ?1",
@@ -272,14 +276,15 @@ impl CorpusStore {
         let now = Utc::now().to_rfc3339();
         conn.execute(
             "INSERT OR REPLACE INTO corpus_documents \
-             (corpus_id, document_id, backend_kind, source_path_hash, relative_path_hash, content_id, metadata_json, created_at) \
-             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)",
+             (corpus_id, document_id, backend_kind, source_path_hash, relative_path_hash, relative_path, content_id, metadata_json, created_at) \
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)",
             params![
                 corpus_id.as_string(),
                 document_id.as_string(),
                 backend_kind,
                 &source_path_hash,
                 &relative_path_hash,
+                relative_path,
                 content_id.as_str(),
                 &metadata_json,
                 &now,
