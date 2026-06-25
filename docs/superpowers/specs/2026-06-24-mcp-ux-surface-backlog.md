@@ -16,7 +16,7 @@
 ## Items du périmètre Spec C (à brainstormer)
 
 ### U2 — Résultats vides silencieux 🔴
-**Problème** : [`legal_extract_contract`](../../../crates/anno-rag-mcp/src/legal/extract.rs#L111) → `rows: []`, `legal_risk_review` → `findings: []`, `legal_timeline` → vide, **sans explication**, quand le KG n'est pas peuplé (gap CLI-ingest vs `legal_ingest`/`index profile=legal`). « Rien trouvé » est indistinguable de « outil non branché ».
+**Problème** : [`legal_extract_contract`](../../../crates/anno-rag-mcp/src/legal.rs) → `rows: []`, `legal_risk_review` → `findings: []`, `legal_timeline` → vide, **sans explication**, quand le KG n'est pas peuplé (gap CLI-ingest vs `legal_ingest`/`index profile=legal`). « Rien trouvé » est indistinguable de « outil non branché ».
 **Piste** : enveloppe de réponse avec `status` + `reason` actionnable, ex. `{"rows": [], "status": "no_kg_data", "reason": "Document non enrichi. Réindexez via index(profile=legal)."}`. À généraliser à tous les outils légaux D2/D3.
 **À décider en brainstorm** : enveloppe commune à tous les outils ? Ou champ `status` par outil ? Comment distinguer « vide légitime » de « non enrichi » de façon fiable (présence du doc dans le KG vs absence) ?
 

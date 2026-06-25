@@ -824,8 +824,7 @@ impl AnnoRagServer {
 
     async fn legal_search_impl(&self, p: LegalSearchParams) -> Result<serde_json::Value, String> {
         let svc = self.corpus().await.map_err(|e| e.to_string())?;
-        let effective = match svc.resolve_effective(p.corpus_id.as_deref(), p.allow_cross_corpus)
-        {
+        let effective = match svc.resolve_effective(p.corpus_id.as_deref(), p.allow_cross_corpus) {
             Ok(eff) => eff,
             // Multiple corpora and no explicit choice: return an actionable,
             // structured disambiguation instead of an opaque error.
