@@ -271,6 +271,70 @@ fn gdpr_label_thresholds() -> HashMap<&'static str, f32> {
     GDPR_NER_LABELS.iter().map(|(l, _, t)| (*l, *t)).collect()
 }
 
+/// One GDPR label with its model description and retain threshold.
+#[derive(Debug, Clone, Copy)]
+pub(crate) struct GdprLabel {
+    pub name: &'static str,
+    pub description: &'static str,
+    pub threshold: f32,
+}
+
+/// A focused detection pass: a narrow set of labels sent together to the model.
+pub(crate) struct LabelGroup {
+    pub key: &'static str,
+    pub labels: Vec<GdprLabel>,
+}
+
+fn label_by_name(name: &str) -> GdprLabel {
+    let (n, d, t) = GDPR_NER_LABELS
+        .iter()
+        .find(|(l, _, _)| *l == name)
+        .unwrap_or_else(|| panic!("unknown GDPR label: {name}"));
+    GdprLabel { name: n, description: d, threshold: *t }
+}
+
+/// Focused label groups for the description-based detection pass.
+/// Three groups keep the per-group schema narrow, improving span recall on
+/// Art.9 categories that get diluted in a 23-label single pass.
+pub(crate) fn label_groups() -> Vec<LabelGroup> {
+    label_groups_for(crate::config::MaskingScope::RgpdStrict)
+}
+
+/// Scope-aware label groups. `CabinetConfidential` broadens the organization
+/// description and lowers its threshold to catch all named parties/firms.
+pub(crate) fn label_groups_for(scope: crate::config::MaskingScope) -> Vec<LabelGroup> {
+    let pick = |names: &[&str]| names.iter().map(|n| label_by_name(n)).collect::<Vec<_>>();
+    let mut identity = pick(&[
+        "person", "address", "date_of_birth", "age", "nationality", "profession",
+        "organization", "location",
+    ]);
+    if matches!(scope, crate::config::MaskingScope::CabinetConfidential) {
+        for l in &mut identity {
+            if l.name == "organization" {
+                l.description = "toute organisation, cabinet, societe, administration ou partie nommee";
+                l.threshold = 0.30;
+            }
+        }
+    }
+    vec![
+        LabelGroup { key: "identity", labels: identity },
+        LabelGroup {
+            key: "art9",
+            labels: pick(&[
+                "racial_ethnic_origin", "political_opinion", "religious_belief",
+                "trade_union_membership", "health_data", "genetic_data", "biometric_data",
+                "sexual_orientation", "criminal_record",
+            ]),
+        },
+        LabelGroup {
+            key: "identifiers_model",
+            labels: pick(&[
+                "national_id", "tax_id", "bank_account", "ip_address", "username", "device_id",
+            ]),
+        },
+    ]
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 struct DetectorOnnxProviderConfig {
     use_cpu_provider: bool,
@@ -427,6 +491,9 @@ pub struct Detector {
     ner_model_id: String,
     /// PII model ID surfaced in audit events.
     pii_ner_model_id: String,
+    /// Masking perimeter — controls which categories the focused-group PII
+    /// core masks. Threaded from `AnnoRagConfig::masking_scope` at construction.
+    masking_scope: crate::config::MaskingScope,
 }
 
 impl Detector {
@@ -498,6 +565,7 @@ impl Detector {
                 gdpr_layers: cfg.gdpr_layers,
                 ner_model_id: cfg.ner_model_id.clone(),
                 pii_ner_model_id: cfg.ner_pii_model_id.clone(),
+                masking_scope: cfg.masking_scope,
             });
         }
         // ─────────────────────────────────────────────────────────────────────
@@ -511,6 +579,7 @@ impl Detector {
             gdpr_layers: cfg.gdpr_layers,
             ner_model_id: cfg.ner_model_id.clone(),
             pii_ner_model_id: cfg.ner_pii_model_id.clone(),
+            masking_scope: cfg.masking_scope,
         })
     }
 
@@ -559,6 +628,7 @@ impl Detector {
             gdpr_layers: _cfg.gdpr_layers,
             ner_model_id: _cfg.ner_candle_model_id.clone(),
             pii_ner_model_id: _cfg.ner_pii_model_id.clone(),
+            masking_scope: _cfg.masking_scope,
         })
     }
 
@@ -610,6 +680,7 @@ impl Detector {
             gdpr_layers: cfg.gdpr_layers,
             ner_model_id: cfg.ner_candle_model_id.clone(),
             pii_ner_model_id: cfg.ner_pii_model_id.clone(),
+            masking_scope: cfg.masking_scope,
         })
     }
 
@@ -650,6 +721,40 @@ impl Detector {
         Ok(out)
     }
 
+    /// Run the PII model over each label group (description-based) and retain
+    /// spans meeting their per-label threshold. Shared by the query path
+    /// (`detect_inner`) and the ingest path (`detect_for_ingest`).
+    pub(crate) fn pii_ner_spans(
+        &self,
+        text: &str,
+        groups: &[LabelGroup],
+    ) -> Result<Vec<DetectedEntity>> {
+        let mut all: Vec<DetectedEntity> = Vec::new();
+        for group in groups {
+            if group.labels.is_empty() {
+                continue;
+            }
+            let described: Vec<(&str, &str)> =
+                group.labels.iter().map(|l| (l.name, l.description)).collect();
+            // Floor 0.25 passes everything; per-label thresholds applied below
+            // BEFORE converting anno::Entity → DetectedEntity (same approach as
+            // detect_inner's existing retain, using entity_type.as_label()).
+            let mut entities = self
+                .pii_ner
+                .extract_with_label_descriptions(text, &described, 0.25)
+                .map_err(|e| Error::Detect(e.to_string()))?;
+            let thresholds: HashMap<&str, f32> =
+                group.labels.iter().map(|l| (l.name, l.threshold)).collect();
+            entities.retain(|e| {
+                let label = e.entity_type.as_label();
+                f64::from(e.confidence)
+                    >= f64::from(thresholds.get(label).copied().unwrap_or(0.50))
+            });
+            all.extend(anno_entities_to_detected(text, entities)?);
+        }
+        Ok(all)
+    }
+
     fn detect_inner(&self, text: &str) -> Result<Vec<DetectedEntity>> {
         // 1. FR regex layer (model-free).
         let mut all = detect_patterns(text);
@@ -665,21 +770,8 @@ impl Detector {
             }
         }
 
-        // 2. NER with GDPR label descriptions — use the PII-specialized model.
-        //    Floor threshold 0.25 passes everything through; per-label thresholds
-        //    from GDPR_NER_LABELS are applied as a post-filter so Art. 9 labels
-        //    (0.30) and basic identifiers (0.35) use different bounds.
-        let described = gdpr_described();
-        let thresholds = gdpr_label_thresholds();
-        let mut anno_entities = self
-            .pii_ner
-            .extract_with_label_descriptions(text, &described, 0.25)
-            .map_err(|e| Error::Detect(e.to_string()))?;
-        anno_entities.retain(|e| {
-            let label = e.entity_type.as_label();
-            f64::from(e.confidence) >= f64::from(thresholds.get(label).copied().unwrap_or(0.50))
-        });
-        all.extend(anno_entities_to_detected(text, anno_entities)?);
+        // 2. NER over focused label groups (shared core; scope-aware).
+        all.extend(self.pii_ner_spans(text, &label_groups_for(self.masking_scope))?);
 
         // 3. Sort + dedup overlaps.
         all.sort_by(|a, b| {
@@ -749,27 +841,9 @@ impl Detector {
         let started = std::time::Instant::now();
         let input_chars = text.chars().count();
 
+        // PII spans via the shared focused-group core (pii_ner model, scope-aware).
         let mut pii = detect_patterns(text);
-        let mut label_thresholds: Vec<(&str, f32)> =
-            GDPR_NER_LABELS.iter().map(|(l, _, t)| (*l, *t)).collect();
-        for label in legal_labels {
-            let threshold = legal_thresholds.get(label.name).copied().unwrap_or(0.5);
-            if !label_thresholds.iter().any(|(name, _)| *name == label.name) {
-                label_thresholds.push((label.name, threshold));
-            }
-        }
-
-        let anno_entities = self
-            .ner
-            .extract_with_label_thresholds(text, &label_thresholds)
-            .map_err(|e| Error::Detect(e.to_string()))?;
-        let raw_model_spans = anno_entities_to_detected(text, anno_entities)?;
-
-        for entity in &raw_model_spans {
-            if is_pii_entity(entity) {
-                pii.push(entity.clone());
-            }
-        }
+        pii.extend(self.pii_ner_spans(text, &label_groups_for(self.masking_scope))?);
         pii.sort_by(|a, b| {
             a.start
                 .cmp(&b.start)
@@ -777,6 +851,17 @@ impl Detector {
                 .then_with(|| pattern_priority(&a.source).cmp(&pattern_priority(&b.source)))
         });
         dedup_overlaps(&mut pii, text);
+
+        // Legal spans via the generalist ner model with legal-only labels.
+        let legal_label_thresholds: Vec<(&str, f32)> = legal_labels
+            .iter()
+            .map(|l| (l.name, legal_thresholds.get(l.name).copied().unwrap_or(0.5)))
+            .collect();
+        let anno_entities = self
+            .ner
+            .extract_with_label_thresholds(text, &legal_label_thresholds)
+            .map_err(|e| Error::Detect(e.to_string()))?;
+        let raw_model_spans = anno_entities_to_detected(text, anno_entities)?;
 
         let mut legal: Vec<LegalEntity> = raw_model_spans
             .iter()
@@ -1520,6 +1605,51 @@ mod tests {
             entities.len(),
             2,
             "adjacent (non-overlapping) spans must stay separate"
+        );
+    }
+
+    // ── B4: label groups ────────────────────────────────────────────────────
+
+    #[test]
+    fn label_groups_cover_all_gdpr_labels() {
+        let grouped: std::collections::HashSet<&str> = label_groups()
+            .iter()
+            .flat_map(|g| g.labels.iter().map(|l| l.name))
+            .collect();
+        for (name, _, _) in GDPR_NER_LABELS {
+            assert!(grouped.contains(name), "label {name} missing from any group");
+        }
+    }
+
+    // ── B8: MaskingScope default ────────────────────────────────────────────
+
+    #[test]
+    fn masking_scope_defaults_to_rgpd_strict() {
+        let cfg = crate::config::AnnoRagConfig::default();
+        assert_eq!(cfg.masking_scope, crate::config::MaskingScope::RgpdStrict);
+    }
+
+    // ── B9: scope-aware identity group ─────────────────────────────────────
+
+    #[test]
+    fn cabinet_scope_lowers_org_threshold() {
+        let strict = label_groups_for(crate::config::MaskingScope::RgpdStrict);
+        let cabinet = label_groups_for(crate::config::MaskingScope::CabinetConfidential);
+        let org_strict = strict
+            .iter()
+            .flat_map(|g| &g.labels)
+            .find(|l| l.name == "organization")
+            .unwrap()
+            .threshold;
+        let org_cabinet = cabinet
+            .iter()
+            .flat_map(|g| &g.labels)
+            .find(|l| l.name == "organization")
+            .unwrap()
+            .threshold;
+        assert!(
+            org_cabinet < org_strict,
+            "cabinet scope must lower org threshold ({org_cabinet} < {org_strict})"
         );
     }
 }

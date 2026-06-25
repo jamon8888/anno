@@ -147,6 +147,45 @@ impl MemoryNerMode {
     }
 }
 
+/// Masking perimeter for PII detection.
+///
+/// Controls which categories the detection core masks by default:
+/// - `RgpdStrict` (default): only personal data per GDPR Art.4(1) — organizations
+///   are only masked when directly tied to an identifiable natural person.
+/// - `CabinetConfidential`: mask ALL named organizations and parties (useful in
+///   a law firm context where opposing counsel names are always confidential).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize, Default)]
+#[serde(rename_all = "snake_case")]
+pub enum MaskingScope {
+    /// GDPR Art.4(1) personal data scope (default).
+    #[default]
+    RgpdStrict,
+    /// Cabinet confidentiality: mask all named organizations and parties.
+    CabinetConfidential,
+}
+
+impl std::str::FromStr for MaskingScope {
+    type Err = String;
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        match s.trim().to_ascii_lowercase().as_str() {
+            "rgpd_strict" => Ok(Self::RgpdStrict),
+            "cabinet_confidential" => Ok(Self::CabinetConfidential),
+            other => Err(format!(
+                "unknown masking-scope '{other}'; valid: rgpd_strict, cabinet_confidential"
+            )),
+        }
+    }
+}
+
+impl std::fmt::Display for MaskingScope {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::RgpdStrict => write!(f, "rgpd_strict"),
+            Self::CabinetConfidential => write!(f, "cabinet_confidential"),
+        }
+    }
+}
+
 impl std::str::FromStr for MemoryNerMode {
     type Err = String;
     fn from_str(s: &str) -> Result<Self, Self::Err> {
@@ -809,6 +848,15 @@ pub struct AnnoRagConfig {
     )]
     #[serde(default)]
     pub vlm_gguf_model_id: Option<String>,
+
+    #[config_meta(
+        env = "ANNO_RAG_MASKING_SCOPE",
+        cli = "--masking-scope",
+        doc = "PII masking perimeter: rgpd_strict (default) or cabinet_confidential.",
+        since = "0.17"
+    )]
+    #[serde(default)]
+    pub masking_scope: MaskingScope,
 }
 
 fn default_memory_collection_name() -> String {
@@ -936,6 +984,7 @@ impl Default for AnnoRagConfig {
             vlm_confidence_threshold: None,
             vlm_safetensors_model_id: None,
             vlm_gguf_model_id: None,
+            masking_scope: MaskingScope::default(),
         }
     }
 }
