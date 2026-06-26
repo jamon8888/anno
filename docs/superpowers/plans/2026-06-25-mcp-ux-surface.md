@@ -769,14 +769,13 @@ mod tests {
 
     #[test]
     fn roundtrip_and_eta() {
-        let dir = std::env::temp_dir().join("anno_warmup_hist_test");
-        std::fs::create_dir_all(&dir).unwrap();
+        let tmp = tempfile::tempdir().unwrap(); // unique per-test, auto-cleaned
+        let dir = tmp.path();
         let h = WarmupHistory { download_ms: Some(600_000), load_ms: Some(90_000) };
-        save(&dir, &h);
-        assert_eq!(load(&dir), h);
+        save(dir, &h);
+        assert_eq!(load(dir), h);
         assert_eq!(eta_seconds(Some(600_000), 60_000), Some(540));
         assert_eq!(eta_seconds(None, 1_000), None);
-        let _ = std::fs::remove_dir_all(&dir);
     }
 }
 ```
@@ -882,7 +881,7 @@ let warmup_server = server.clone();
 tokio::spawn(async move { warmup_server.run_warmup().await; });
 ```
 
-> Reuse the existing warmup entrypoint (the fn that drives `Downloading→Loading→Ready`, ~4132-4205). Do NOT block `serve_stdio` on it. Verify the existing `serve_stdio_lazy_warmup_phase_starts_idle` test — update it (or add a `serve_stdio_proactive_warmup_starts` variant) to reflect the new boot behavior.
+> Reuse the existing warmup entrypoint (the fn that drives `Downloading→Loading→Ready`, ~4132-4205). Do NOT block `serve_stdio` on it. **Use a single-flight guard** (e.g., an `AtomicBool` or `OnceLock`) so that if a tool's lazy trigger fires concurrently with the boot-time spawn, only one warmup runs. Verify the existing `serve_stdio_lazy_warmup_phase_starts_idle` test — update it (or add a `serve_stdio_proactive_warmup_starts` variant) to reflect the new boot behavior.
 
 - [ ] **Step 6: Run + commit**
 
@@ -963,7 +962,7 @@ Expected: PASS.
 
 - [ ] **Step 4: Filter `list_tools`**
 
-Per Step 1's finding, override `list_tools` in the `ServerHandler` impl to call the generated listing then drop `deprecated::DEPRECATED_TOOLS` (unless `expose_deprecated()`):
+Override `list_tools` in the `ServerHandler` impl. Call through `self.tool_router` (the `IntoService`-generated router that backs the macro), then filter:
 
 ```rust
 async fn list_tools(
@@ -971,14 +970,14 @@ async fn list_tools(
     req: Option<rmcp::model::PaginatedRequestParam>,
     ctx: rmcp::service::RequestContext<rmcp::RoleServer>,
 ) -> Result<rmcp::model::ListToolsResult, rmcp::ErrorData> {
-    let mut result = self.list_tools_generated(req, ctx).await?; // name per macro expansion
+    let mut result = self.tool_router.list_tools(req, ctx).await?;
     let expose = crate::deprecated::expose_deprecated();
     result.tools.retain(|t| expose || !crate::deprecated::DEPRECATED_TOOLS.contains(&t.name.as_ref()));
     Ok(result)
 }
 ```
 
-> The generated method name and exact signature come from Step 1. If `#[tool_handler]` doesn't expose an overridable inner, implement `list_tools` fully from `self.tool_router` and apply the same `retain`.
+> Use `self.tool_router.list_tools(req, ctx).await?` — this is the public path exposed by rmcp's `ToolRouter`. Do NOT prune from the registration side (e.g., unregistering entries from the router); that would affect dispatch and break calls to deprecated tools that still need to work.
 
 - [ ] **Step 5: Add a log line on deprecated-tool calls**
 

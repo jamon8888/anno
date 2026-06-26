@@ -27,7 +27,8 @@ Toute réponse structurée d'outil porte un champ `status` de haut niveau (chaî
 | `unknown_document` | doc_id/handle ne résout pas | — |
 | `corpus_required` | désambiguïsation existante (inchangée) | `available[]` |
 | `setup_required` | vault/modèles non configurés (cold start) | `next_step` |
-| `not_ready` | modèles encore en warmup | `warmup{phase, elapsed_ms, eta}` |
+| `not_ready` | modèles encore en warmup | `warmup{phase, elapsed_ms, eta_seconds, eta_human}` |
+| `degraded` | service partiel — un sous-système est en erreur non-fatale | `failing_component` |
 
 **Règle de cohérence** : `status` toujours présent ; `message` = prose humaine ; `hint` = action suivante ; le reste est charge utile. L'enveloppe `corpus_required` actuelle (`status`/`message`/`available`/`hint`) est déjà conforme — aucun churn dessus.
 
