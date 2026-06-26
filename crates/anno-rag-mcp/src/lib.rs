@@ -13,6 +13,9 @@
 mod allowed_roots;
 pub mod corpus;
 mod corpus_sync;
+mod deprecated;
+mod detect_label;
+mod envelope;
 pub mod health;
 mod indexer;
 pub mod knowledge;
@@ -23,6 +26,7 @@ mod params;
 mod review;
 mod search;
 pub mod tabular;
+mod warmup_history;
 mod wire;
 
 use crate::allowed_roots::AllowedRoots;
@@ -153,42 +157,38 @@ impl AnnoRagServer {
         match phase {
             WarmupPhase::Downloading {
                 started_ms,
-                progress_pct,
+                progress_pct: _,
             } => {
-                let elapsed_s = std::time::SystemTime::now()
+                let now_ms = std::time::SystemTime::now()
                     .duration_since(std::time::UNIX_EPOCH)
                     .unwrap_or_default()
-                    .as_secs()
-                    .saturating_sub(started_ms / 1000);
-                return Err(serde_json::json!({
-                    "ok": false,
-                    "error": "models_downloading",
-                    "download_progress_pct": progress_pct,
-                    "message": format!(
-                        "anno-rag is downloading ML models ({progress_pct}% complete, \
-                         {elapsed_s}s elapsed). Please retry in a moment."
-                    ),
-                    "hint": "Run `anno-rag status` to check download progress."
-                })
-                .to_string());
+                    .as_millis() as u64;
+                let elapsed_ms = now_ms.saturating_sub(started_ms);
+                let models_dir =
+                    crate::model_inventory::effective_models_dir(self.cfg.as_ref()).path;
+                let hist = crate::warmup_history::load(&models_dir);
+                let eta = crate::warmup_history::eta_seconds(hist.download_ms, elapsed_ms);
+                return Err(serde_json::to_string_pretty(&crate::not_ready_envelope(
+                    "downloading",
+                    elapsed_ms,
+                    eta,
+                ))
+                .unwrap_or_default());
             }
             WarmupPhase::Loading { started_ms } => {
-                let elapsed_s = std::time::SystemTime::now()
+                let now_ms = std::time::SystemTime::now()
                     .duration_since(std::time::UNIX_EPOCH)
                     .unwrap_or_default()
-                    .as_secs()
-                    .saturating_sub(started_ms / 1000);
-                return Err(serde_json::json!({
-                    "ok": false,
-                    "error": "models_loading",
-                    "message": format!(
-                        "anno-rag is loading ML models in the background \
-                         ({elapsed_s}s elapsed). This typically takes 60–120 s on \
-                         first startup. Please retry in a moment."
-                    ),
-                    "hint": "Run `anno-rag status` to check progress."
-                })
-                .to_string());
+                    .as_millis() as u64;
+                let elapsed_ms = now_ms.saturating_sub(started_ms);
+                let models_dir =
+                    crate::model_inventory::effective_models_dir(self.cfg.as_ref()).path;
+                let hist = crate::warmup_history::load(&models_dir);
+                let eta = crate::warmup_history::eta_seconds(hist.load_ms, elapsed_ms);
+                return Err(serde_json::to_string_pretty(&crate::not_ready_envelope(
+                    "loading", elapsed_ms, eta,
+                ))
+                .unwrap_or_default());
             }
             WarmupPhase::Failed { ref error } => {
                 return Err(serde_json::json!({
@@ -568,6 +568,7 @@ impl AnnoRagServer {
                     chunk_id: h.chunk_id.to_string(),
                     corpus_id: None,
                     document_label: Some(h.doc_id.to_string()),
+                    document_handle: None,
                     chunk_idx: h.chunk_idx,
                     text_pseudo: h.text_pseudo,
                     page: h.page,
@@ -830,20 +831,22 @@ impl AnnoRagServer {
             // structured disambiguation instead of an opaque error.
             Err(anno_corpus_core::CorpusGuardError::CorpusRequired) => {
                 let rows = svc.store().list_corpora().map_err(|e| e.to_string())?;
-                return Ok(serde_json::json!({
-                    "status": "corpus_required",
-                    "message": "Plusieurs dossiers indexés. Précisez un dossier ou demandez une recherche transversale.",
-                    "available": rows
-                        .iter()
-                        .map(|c| serde_json::json!({
-                            "corpus_id": c.corpus_id.as_string(),
-                            "alias": c.alias,
-                            "label": c.label_pseudo,
-                            "health": c.health,
-                        }))
-                        .collect::<Vec<_>>(),
-                    "hint": "Relancez avec corpus_id/alias, ou allow_cross_corpus: true pour un contrôle de conflits.",
-                }));
+                return Ok(crate::envelope::envelope(
+                    crate::envelope::status::CORPUS_REQUIRED,
+                    "Plusieurs dossiers indexés. Précisez un dossier ou demandez une recherche transversale.",
+                    "Relancez avec corpus_id/alias, ou allow_cross_corpus: true pour un contrôle de conflits.",
+                    serde_json::json!({
+                        "available": rows
+                            .iter()
+                            .map(|c| serde_json::json!({
+                                "corpus_id": c.corpus_id.as_string(),
+                                "alias": c.alias,
+                                "label": c.label_pseudo,
+                                "health": c.health,
+                            }))
+                            .collect::<Vec<_>>(),
+                    }),
+                ));
             }
             Err(e) => return Err(e.to_string()),
         };
@@ -1065,6 +1068,12 @@ impl AnnoRagServer {
             crate::model_inventory::ModelInventoryService::new(self.cfg.as_ref()).inspect();
         let loaded = self.pipeline_arc();
         let warmup_info = {
+            let models_dir = crate::model_inventory::effective_models_dir(self.cfg.as_ref()).path;
+            let hist = crate::warmup_history::load(&models_dir);
+            let now_ms = std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap_or_default()
+                .as_millis() as u64;
             let phase = self.warmup_phase.read().await;
             match &*phase {
                 WarmupPhase::Idle => serde_json::json!({ "phase": "idle" }),
@@ -1072,20 +1081,17 @@ impl AnnoRagServer {
                     started_ms,
                     progress_pct,
                 } => {
-                    let elapsed_s = std::time::SystemTime::now()
-                        .duration_since(std::time::UNIX_EPOCH)
-                        .unwrap_or_default()
-                        .as_secs()
-                        .saturating_sub(started_ms / 1000);
-                    serde_json::json!({ "phase": "downloading", "elapsed_s": elapsed_s, "download_progress_pct": progress_pct })
+                    let elapsed_ms = now_ms.saturating_sub(*started_ms);
+                    let elapsed_s = elapsed_ms / 1000;
+                    let eta_seconds =
+                        crate::warmup_history::eta_seconds(hist.download_ms, elapsed_ms);
+                    serde_json::json!({ "phase": "downloading", "elapsed_s": elapsed_s, "download_progress_pct": progress_pct, "eta_seconds": eta_seconds })
                 }
                 WarmupPhase::Loading { started_ms } => {
-                    let elapsed_s = std::time::SystemTime::now()
-                        .duration_since(std::time::UNIX_EPOCH)
-                        .unwrap_or_default()
-                        .as_secs()
-                        .saturating_sub(started_ms / 1000);
-                    serde_json::json!({ "phase": "loading", "elapsed_s": elapsed_s })
+                    let elapsed_ms = now_ms.saturating_sub(*started_ms);
+                    let elapsed_s = elapsed_ms / 1000;
+                    let eta_seconds = crate::warmup_history::eta_seconds(hist.load_ms, elapsed_ms);
+                    serde_json::json!({ "phase": "loading", "elapsed_s": elapsed_s, "eta_seconds": eta_seconds })
                 }
                 WarmupPhase::Ready { elapsed_ms } => {
                     serde_json::json!({ "phase": "ready", "elapsed_ms": elapsed_ms })
@@ -1299,21 +1305,6 @@ impl AnnoRagServer {
         let mut warnings = Vec::<String>::new();
         let scope = normalize_search_scope(p.scope.clone(), &mut warnings);
         let plan = search_execution_plan(p.mode.clone(), &scope, &mut warnings);
-        if plan.explicit_fast_legal_error {
-            return serde_json::json!({
-                "ok": false,
-                "error": "legal scope requires semantic mode",
-                "mode_used": plan.mode_used,
-                "scope_used": scope,
-                "scope_modes": {
-                    "knowledge": plan.knowledge.as_str(),
-                    "legal": plan.legal.as_str(),
-                },
-                "warnings": warnings,
-            })
-            .to_string();
-        }
-
         let svc = match self.corpus().await {
             Ok(svc) => svc,
             Err(e) => {
@@ -1330,21 +1321,22 @@ impl AnnoRagServer {
                             .to_string();
                     }
                 };
-                return serde_json::json!({
-                    "ok": false,
-                    "status": "corpus_required",
-                    "message": "Plusieurs dossiers indexés. Précisez un dossier ou demandez une recherche transversale.",
-                    "available": rows
-                        .iter()
-                        .map(|c| serde_json::json!({
-                            "corpus_id": c.corpus_id.as_string(),
-                            "alias": c.alias,
-                            "label": c.label_pseudo,
-                            "health": c.health,
-                        }))
-                        .collect::<Vec<_>>(),
-                    "hint": "Relancez avec corpus_id/alias, ou allow_cross_corpus: true pour un contrôle de conflits.",
-                })
+                return crate::envelope::envelope(
+                    crate::envelope::status::CORPUS_REQUIRED,
+                    "Plusieurs dossiers indexés. Précisez un dossier ou demandez une recherche transversale.",
+                    "Relancez avec corpus_id/alias, ou allow_cross_corpus: true pour un contrôle de conflits.",
+                    serde_json::json!({
+                        "available": rows
+                            .iter()
+                            .map(|c| serde_json::json!({
+                                "corpus_id": c.corpus_id.as_string(),
+                                "alias": c.alias,
+                                "label": c.label_pseudo,
+                                "health": c.health,
+                            }))
+                            .collect::<Vec<_>>(),
+                    }),
+                )
                 .to_string();
             }
             Err(e) => {
@@ -1429,8 +1421,14 @@ impl AnnoRagServer {
             }
         }
 
+        let status = if warnings.is_empty() {
+            crate::envelope::status::OK
+        } else {
+            crate::envelope::status::DEGRADED
+        };
         serde_json::json!({
             "ok": true,
+            "status": status,
             "mode_used": plan.mode_used,
             "scope_used": scope,
             "scope_modes": {
@@ -2236,6 +2234,17 @@ fn source_folder_for_legal_binding(
         }))
 }
 
+/// Classify the response status for a legal tool with no findings,
+/// from three cheap facts. Spec C §1 (U2).
+pub(crate) fn legal_empty_status(resolved: bool, has_kg: bool, is_empty: bool) -> &'static str {
+    match (resolved, has_kg, is_empty) {
+        (false, _, _) => crate::envelope::status::UNKNOWN_DOCUMENT,
+        (true, false, _) => crate::envelope::status::NOT_ENRICHED,
+        (true, true, true) => crate::envelope::status::EMPTY,
+        (true, true, false) => crate::envelope::status::OK,
+    }
+}
+
 // ---- Tool router ----
 
 #[tool_router]
@@ -2245,6 +2254,10 @@ impl AnnoRagServer {
         description = "Deprecated - use 'search(scope=\"legal\", mode=\"semantic\")' for equivalent behavior. Continues to work."
     )]
     async fn legacy_search(&self, Parameters(params): Parameters<SearchParams>) -> String {
+        tracing::warn!(
+            tool = "legacy_search",
+            "deprecated tool called; use canonical replacement"
+        );
         match self.legacy_search_impl(params).await {
             Ok(value) => {
                 serde_json::to_string_pretty(&value).unwrap_or_else(|e| format!("Error: {e}"))
@@ -2255,7 +2268,11 @@ impl AnnoRagServer {
 
     /// Unified search tool across local indexes.
     #[tool(
-        description = "Search Anno's local indexes. Omit mode for scope-dependent auto mode: scope='knowledge' uses fast search, scope='legal' uses semantic legal search, and scope='all' reports per-backend scope_modes. Explicit mode='fast' avoids model loading; with scope='all' it skips legal scope, and with scope='legal' it returns an error. mode='semantic' loads models for legal search. scope='all' (default), 'knowledge', or 'legal'. filters forwarded to legal scope."
+        description = "Search Anno's local indexes. Default: just pass a query — scope='all', auto mode. \
+Set scope to narrow: scope='legal' (contracts/case files), scope='knowledge' (notes/folders). \
+Set mode only to tune cost: mode='fast' skips model loading (lexical only; legal results are skipped with a 'degraded' status), mode='semantic' forces model-backed ranking. \
+Examples: search(query='clause de résiliation', scope='legal'); search(query='réunion Q3', scope='knowledge', mode='fast'); search(query='pénalités'). \
+Returns hits with a document_handle (alias/relative_path) you can pass to legal tools. Pseudonymous labels; no raw paths."
     )]
     async fn search(&self, Parameters(p): Parameters<SearchUnifiedParams>) -> String {
         self.search_impl_routing(p).await
@@ -2338,7 +2355,9 @@ impl AnnoRagServer {
     }
 
     /// Return one corpus health summary by corpus_id.
-    #[tool(description = "Return one corpus health summary by corpus_id.")]
+    #[tool(
+        description = "Return one corpus health summary by corpus_id. For anno-wide health use service_status; for knowledge use knowledge_status; for privacy workflow use privacy_status."
+    )]
     async fn corpus_health(&self, Parameters(p): Parameters<CorpusGetParams>) -> String {
         let parsed = match crate::corpus::parse_corpus_id(&p.corpus_id) {
             Ok(id) => id,
@@ -2357,16 +2376,24 @@ impl AnnoRagServer {
     }
 
     #[tool(
-        description = "Remove an indexed source. Accepts a source_id (UUID), a legal corpus id from sources(), or an explicit folder path. Does not load models."
+        description = "Deprecated — use forget_source. Continues to work. Remove an indexed source. Accepts a source_id (UUID), a legal corpus id from sources(), or an explicit folder path. Does not load models."
     )]
     async fn forget(&self, Parameters(p): Parameters<ForgetParams>) -> String {
+        tracing::warn!(
+            tool = "forget",
+            "deprecated tool called; use canonical replacement"
+        );
         self.forget_impl_routing(p).await
     }
 
     #[tool(
-        description = "Anno-wide index health: source counts, chunks, vault stats, model load state. Does not load models."
+        description = "Deprecated — use service_status. Continues to work. Anno-wide index health: source counts, chunks, vault stats, model load state. Does not load models."
     )]
     async fn status(&self) -> String {
+        tracing::warn!(
+            tool = "status",
+            "deprecated tool called; use canonical replacement"
+        );
         self.status_impl_routing().await
     }
 
@@ -2404,7 +2431,7 @@ impl AnnoRagServer {
 
     /// Report privacy workflow capabilities without loading models.
     #[tool(
-        description = "Privacy workflow status and capabilities. Does not return document content."
+        description = "Privacy workflow status and capabilities. Does not return document content. For anno-wide health use service_status."
     )]
     async fn privacy_status(&self) -> String {
         serde_json::to_string_pretty(&self.privacy_status_impl().await)
@@ -2413,9 +2440,18 @@ impl AnnoRagServer {
 
     /// Replace pseudo-tokens in text back with original PII from the vault.
     #[tool(
-        description = "Replace pseudo-tokens (PERSON_1, EMAIL_2, NIR_3, etc.) in text back with original PII from the local vault."
+        description = "Deprecated — use detokenize. Continues to work. Replace pseudo-tokens (PERSON_1, EMAIL_2, NIR_3, etc.) in text back with original PII from the local vault."
     )]
     async fn rehydrate(&self, Parameters(params): Parameters<RehydrateParams>) -> String {
+        tracing::warn!(
+            tool = "rehydrate",
+            "deprecated tool called; use canonical replacement"
+        );
+        self.rehydrate_impl(params).await
+    }
+
+    /// Inner implementation shared by `rehydrate` (deprecated) and `detokenize` (canonical).
+    pub(crate) async fn rehydrate_impl(&self, params: RehydrateParams) -> String {
         let p = match self.require_models().await {
             Ok(p) => p,
             Err(json) => return json,
@@ -2430,6 +2466,33 @@ impl AnnoRagServer {
             }
             Err(e) => format!("Error: {e}"),
         }
+    }
+
+    /// Canonical: replace pseudo-tokens with original PII from the vault.
+    #[tool(
+        description = "Replace pseudo-tokens (PERSON_1, EMAIL_2, NIR_3, …) with original PII from \
+            the local vault. Canonical name for the former 'rehydrate'."
+    )]
+    async fn detokenize(&self, Parameters(params): Parameters<RehydrateParams>) -> String {
+        self.rehydrate_impl(params).await
+    }
+
+    /// Canonical: remove an indexed source.
+    #[tool(
+        description = "Remove an indexed source (UUID, legal corpus id, or folder path). \
+            Canonical name for the former 'forget'. Does not load models."
+    )]
+    async fn forget_source(&self, Parameters(p): Parameters<ForgetParams>) -> String {
+        self.forget_impl_routing(p).await
+    }
+
+    /// Canonical: anno-wide index health.
+    #[tool(
+        description = "Anno-wide index health: source counts, chunks, vault, model state. \
+            Canonical name for the former 'status'. Does not load models."
+    )]
+    async fn service_status(&self) -> String {
+        self.status_impl_routing().await
     }
 
     /// Dry-run PII detection without replacement.
@@ -2452,7 +2515,7 @@ impl AnnoRagServer {
                             other => format!("{other:?}"),
                         },
                         confidence: e.confidence,
-                        source: format!("{:?}", e.source),
+                        source: crate::detect_label::source_label(&e.source).to_string(),
                         start: e.start,
                         end: e.end,
                     })
@@ -2495,7 +2558,7 @@ impl AnnoRagServer {
 
     /// Engine health — version, build target, available tools, vault status.
     #[tool(
-        description = "Engine health: version, build target, available tools, vault initialization status. Side-effect-free. Call once per session before other anno tools to verify compatibility."
+        description = "Engine health: version, build target, available tools, vault initialization status. Side-effect-free. Call once per session before other anno tools to verify compatibility. For index/source counts use service_status."
     )]
     async fn anno_health(&self) -> String {
         // Check vault independently of whether the pipeline has been lazy-
@@ -2509,6 +2572,8 @@ impl AnnoRagServer {
             // takes priority over keyring so Docker/CI always reports correctly).
             anno_rag::vault::is_vault_key_usable()
         };
+        let models_present = crate::model_inventory::ModelInventoryService::new(&self.cfg).ready();
+        let (st, next_step) = crate::health_next_step(vault_initialized, models_present);
         let h = crate::health::EngineHealth {
             engine_version: env!("CARGO_PKG_VERSION").to_string(),
             build_target: format!("{}-{}", std::env::consts::ARCH, std::env::consts::OS),
@@ -2517,7 +2582,18 @@ impl AnnoRagServer {
             vault_initialized,
             available_tools: crate::health::all_tool_names(),
         };
-        serde_json::to_string_pretty(&h).unwrap_or_else(|e| format!("Error: {e}"))
+        let mut v = serde_json::to_value(&h).unwrap_or_else(|_| serde_json::json!({}));
+        if let Some(obj) = v.as_object_mut() {
+            obj.insert("status".into(), serde_json::Value::String(st.to_string()));
+            obj.insert(
+                "next_step".into(),
+                match next_step {
+                    Some(t) => serde_json::Value::String(t.to_string()),
+                    None => serde_json::Value::Null,
+                },
+            );
+        }
+        serde_json::to_string_pretty(&v).unwrap_or_else(|e| format!("Error: {e}"))
     }
 
     /// Save a memory. Default mode stores raw text immediately and enriches NER refs asynchronously.
@@ -2693,7 +2769,7 @@ impl AnnoRagServer {
 
     /// Forget memories by id or by query. Cascades vault tokens.
     #[tool(
-        description = "Forget memories by id or by query. Cascades to vault tokens no longer referenced. Returns the SLO note that physical erasure may take up to 24h."
+        description = "Forget memories by id or by query. Cascades to vault tokens no longer referenced. Returns the SLO note that physical erasure may take up to 24h. For an indexed source, use forget_source; for knowledge folders, use knowledge_forget."
     )]
     async fn memory_forget(&self, Parameters(p): Parameters<MemoryForgetParams>) -> String {
         let pipeline = match self.require_models().await {
@@ -2987,6 +3063,10 @@ impl AnnoRagServer {
         description = "Deprecated - use 'index(path, profile=\"legal\")' instead. Continues to work."
     )]
     async fn legal_ingest(&self, Parameters(p): Parameters<LegalIngestParams>) -> String {
+        tracing::warn!(
+            tool = "legal_ingest",
+            "deprecated tool called; use canonical replacement"
+        );
         match self.legal_ingest_impl(p, None).await {
             Ok(value) => {
                 serde_json::to_string_pretty(&value).unwrap_or_else(|e| format!("Error: {e}"))
@@ -3001,6 +3081,10 @@ impl AnnoRagServer {
         description = "Deprecated - use 'search(query, scope=\"legal\", filters={...})' instead. Continues to work."
     )]
     async fn legal_search(&self, Parameters(p): Parameters<LegalSearchParams>) -> String {
+        tracing::warn!(
+            tool = "legal_search",
+            "deprecated tool called; use canonical replacement"
+        );
         match self.legal_search_impl(p).await {
             Ok(value) => {
                 serde_json::to_string_pretty(&value).unwrap_or_else(|e| format!("Error: {e}"))
@@ -3087,7 +3171,8 @@ impl AnnoRagServer {
     #[tool(
         description = "Rehydrate a citation span (byte_start..byte_end) from a stored \
                        pseudonymized chunk. Returns the original plaintext for the span. \
-                       Use chunk_id + offsets from legal_search results."
+                       Use chunk_id + offsets from legal_search results. \
+                       For free-text token replacement in any context, use detokenize."
     )]
     async fn legal_rehydrate_citation(
         &self,
@@ -3148,13 +3233,13 @@ impl AnnoRagServer {
             Ok(p) => p,
             Err(json) => return json,
         };
-        let doc_id = match self.corpus().await {
+        let (doc_id, resolved) = match self.corpus().await {
             Ok(svc) => match svc.resolve_doc_ref(&p.doc_id) {
-                Ok(id) => id,
-                Err(_) if uuid::Uuid::parse_str(&p.doc_id).is_ok() => p.doc_id.clone(),
+                Ok(id) => (id, true),
+                Err(_) if uuid::Uuid::parse_str(&p.doc_id).is_ok() => (p.doc_id.clone(), false),
                 Err(e) => return format!("Error: {e}"),
             },
-            Err(_) => p.doc_id.clone(),
+            Err(_) => (p.doc_id.clone(), false),
         };
         let start = std::time::Instant::now();
         match pipeline.legal_extract_contract(&doc_id).await {
@@ -3167,6 +3252,38 @@ impl AnnoRagServer {
                     duration_ms = start.elapsed().as_millis() as u64,
                     ""
                 );
+                let is_empty = review.rows.is_empty();
+                let has_kg = match uuid::Uuid::parse_str(&doc_id) {
+                    Ok(uuid) => pipeline
+                        .legal_document_has_kg_nodes(uuid)
+                        .await
+                        .unwrap_or(false),
+                    Err(_) => false,
+                };
+                let st = crate::legal_empty_status(resolved, has_kg, is_empty);
+                if st != crate::envelope::status::OK {
+                    let (msg, hint) = match st {
+                        s if s == crate::envelope::status::UNKNOWN_DOCUMENT => (
+                            "Document introuvable.",
+                            "Vérifiez le doc_id ou listez via sources().",
+                        ),
+                        s if s == crate::envelope::status::NOT_ENRICHED => (
+                            "Document non enrichi dans le graphe juridique.",
+                            "Réindexez via index(path, profile=\"legal\").",
+                        ),
+                        _ => (
+                            "Aucune donnée extraite pour ce document.",
+                            "Le document est enrichi ; aucun champ n'a été extrait.",
+                        ),
+                    };
+                    return serde_json::to_string_pretty(&crate::envelope::envelope(
+                        st,
+                        msg,
+                        hint,
+                        serde_json::json!({ "rows": [] }),
+                    ))
+                    .unwrap_or_else(|e| format!("Error: {e}"));
+                }
                 serde_json::to_string_pretty(&review).unwrap_or_else(|e| format!("Error: {e}"))
             }
             Err(e) => format!("Error: {e}"),
@@ -3197,6 +3314,15 @@ impl AnnoRagServer {
                     duration_ms = start.elapsed().as_millis() as u64,
                     ""
                 );
+                if review.rows.is_empty() {
+                    return serde_json::to_string_pretty(&crate::envelope::envelope(
+                        crate::envelope::status::EMPTY,
+                        "Aucune donnée extraite pour ce dossier.",
+                        "Vérifiez le dossier_id ou réindexez via index(path, profile=\"legal\").",
+                        serde_json::json!({ "rows": [] }),
+                    ))
+                    .unwrap_or_else(|e| format!("Error: {e}"));
+                }
                 serde_json::to_string_pretty(&review).unwrap_or_else(|e| format!("Error: {e}"))
             }
             Err(e) => format!("Error: {e}"),
@@ -3212,13 +3338,15 @@ impl AnnoRagServer {
             Ok(p) => p,
             Err(json) => return json,
         };
-        let dossier_id = match self.corpus().await {
+        let (dossier_id, resolved) = match self.corpus().await {
             Ok(svc) => match svc.resolve_doc_ref(&p.dossier_id) {
-                Ok(id) => id,
-                Err(_) if uuid::Uuid::parse_str(&p.dossier_id).is_ok() => p.dossier_id.clone(),
+                Ok(id) => (id, true),
+                Err(_) if uuid::Uuid::parse_str(&p.dossier_id).is_ok() => {
+                    (p.dossier_id.clone(), false)
+                }
                 Err(e) => return format!("Error: {e}"),
             },
-            Err(_) => p.dossier_id.clone(),
+            Err(_) => (p.dossier_id.clone(), false),
         };
         let start = std::time::Instant::now();
         match pipeline.legal_timeline(&dossier_id).await {
@@ -3231,6 +3359,26 @@ impl AnnoRagServer {
                     duration_ms = start.elapsed().as_millis() as u64,
                     ""
                 );
+                let st = crate::legal_empty_status(resolved, resolved, tl.events.is_empty());
+                if st != crate::envelope::status::OK {
+                    let (msg, hint) = match st {
+                        s if s == crate::envelope::status::UNKNOWN_DOCUMENT => (
+                            "Dossier introuvable.",
+                            "Vérifiez le dossier_id ou listez via sources().",
+                        ),
+                        _ => (
+                            "Aucun événement trouvé pour ce dossier.",
+                            "Réindexez via index(path, profile=\"legal\") pour enrichir la timeline.",
+                        ),
+                    };
+                    return serde_json::to_string_pretty(&crate::envelope::envelope(
+                        st,
+                        msg,
+                        hint,
+                        serde_json::json!({ "events": [] }),
+                    ))
+                    .unwrap_or_else(|e| format!("Error: {e}"));
+                }
                 serde_json::to_string_pretty(&tl).unwrap_or_else(|e| format!("Error: {e}"))
             }
             Err(e) => format!("Error: {e}"),
@@ -3249,13 +3397,13 @@ impl AnnoRagServer {
             Ok(p) => p,
             Err(json) => return json,
         };
-        let scope_id = match self.corpus().await {
+        let (scope_id, resolved) = match self.corpus().await {
             Ok(svc) => match svc.resolve_doc_ref(&p.scope_id) {
-                Ok(id) => id,
-                Err(_) if uuid::Uuid::parse_str(&p.scope_id).is_ok() => p.scope_id.clone(),
+                Ok(id) => (id, true),
+                Err(_) if uuid::Uuid::parse_str(&p.scope_id).is_ok() => (p.scope_id.clone(), false),
                 Err(e) => return format!("Error: {e}"),
             },
-            Err(_) => p.scope_id.clone(),
+            Err(_) => (p.scope_id.clone(), false),
         };
         let start = std::time::Instant::now();
         match pipeline.legal_risk_review(&scope_id, p.is_dossier).await {
@@ -3268,6 +3416,42 @@ impl AnnoRagServer {
                     duration_ms = start.elapsed().as_millis() as u64,
                     ""
                 );
+                let is_empty = review.findings.is_empty();
+                let has_kg = if resolved && !p.is_dossier {
+                    match uuid::Uuid::parse_str(&scope_id) {
+                        Ok(doc_uuid) => pipeline
+                            .legal_document_has_kg_nodes(doc_uuid)
+                            .await
+                            .unwrap_or(false),
+                        Err(_) => false,
+                    }
+                } else {
+                    resolved
+                };
+                let st = crate::legal_empty_status(resolved, has_kg, is_empty);
+                if st != crate::envelope::status::OK {
+                    let (msg, hint) = match st {
+                        s if s == crate::envelope::status::UNKNOWN_DOCUMENT => (
+                            "Document introuvable.",
+                            "Vérifiez le doc_id ou listez via sources().",
+                        ),
+                        s if s == crate::envelope::status::NOT_ENRICHED => (
+                            "Document non enrichi dans le graphe juridique.",
+                            "Réindexez via index(path, profile=\"legal\").",
+                        ),
+                        _ => (
+                            "Aucun risque identifié dans ce document.",
+                            "Le document est enrichi ; aucun risque ne correspond aux filtres.",
+                        ),
+                    };
+                    return serde_json::to_string_pretty(&crate::envelope::envelope(
+                        st,
+                        msg,
+                        hint,
+                        serde_json::json!({ "findings": [] }),
+                    ))
+                    .unwrap_or_else(|e| format!("Error: {e}"));
+                }
                 serde_json::to_string_pretty(&review).unwrap_or_else(|e| format!("Error: {e}"))
             }
             Err(e) => format!("Error: {e}"),
@@ -3312,6 +3496,31 @@ impl AnnoRagServer {
                     duration_ms = start.elapsed().as_millis() as u64,
                     ""
                 );
+                let is_empty = result.checks.is_empty();
+                let has_kg = pipeline
+                    .legal_document_has_kg_nodes(doc_id)
+                    .await
+                    .unwrap_or(false);
+                let st = crate::legal_empty_status(true, has_kg, is_empty);
+                if st != crate::envelope::status::OK {
+                    let (msg, hint) = match st {
+                        s if s == crate::envelope::status::NOT_ENRICHED => (
+                            "Document non enrichi dans le graphe juridique.",
+                            "Réindexez via index(path, profile=\"legal\").",
+                        ),
+                        _ => (
+                            "Aucune clause vérifiée pour ce document.",
+                            "Vérifiez le doc_type ou réindexez le document.",
+                        ),
+                    };
+                    return serde_json::to_string_pretty(&crate::envelope::envelope(
+                        st,
+                        msg,
+                        hint,
+                        serde_json::json!({ "checks": [] }),
+                    ))
+                    .unwrap_or_else(|e| format!("Error: {e}"));
+                }
                 serde_json::to_string_pretty(&result).unwrap_or_else(|e| format!("Error: {e}"))
             }
             Err(e) => format!("Error: {e}"),
@@ -3918,6 +4127,10 @@ impl AnnoRagServer {
         &self,
         Parameters(p): Parameters<crate::knowledge::KnowledgeSearchParams>,
     ) -> String {
+        tracing::warn!(
+            tool = "knowledge_search",
+            "deprecated tool called; use canonical replacement"
+        );
         match self.knowledge_search_impl(p).await {
             Ok(result) => {
                 serde_json::to_string_pretty(&result).unwrap_or_else(|e| format!("Error: {e}"))
@@ -3940,6 +4153,10 @@ impl AnnoRagServer {
         &self,
         Parameters(p): Parameters<KnowledgeAddFolderParams>,
     ) -> String {
+        tracing::warn!(
+            tool = "knowledge_add_local_folder",
+            "deprecated tool called; use canonical replacement"
+        );
         match self.knowledge_add_local_folder_impl(&p.path).await {
             Ok(source_id) => serde_json::to_string_pretty(
                 &serde_json::json!({"ok": true, "source_id": source_id}),
@@ -3954,6 +4171,10 @@ impl AnnoRagServer {
         description = "Deprecated - use 'index(path)' (re-indexes idempotently). Continues to work."
     )]
     async fn knowledge_sync(&self, Parameters(p): Parameters<KnowledgeSyncParams>) -> String {
+        tracing::warn!(
+            tool = "knowledge_sync",
+            "deprecated tool called; use canonical replacement"
+        );
         if let Err(e) = self.knowledge().await {
             return format!("Error: {e}");
         }
@@ -3972,6 +4193,10 @@ impl AnnoRagServer {
     /// Remove an Anno knowledge source and all its indexed content.
     #[tool(description = "Deprecated - use 'forget(target)' instead. Continues to work.")]
     async fn knowledge_forget(&self, Parameters(p): Parameters<KnowledgeForgetParams>) -> String {
+        tracing::warn!(
+            tool = "knowledge_forget",
+            "deprecated tool called; use canonical replacement"
+        );
         match self.knowledge_forget_impl(p).await {
             Ok(removed) => serde_json::to_string_pretty(
                 &serde_json::json!({"ok": true, "removed_objects": removed}),
@@ -3979,6 +4204,48 @@ impl AnnoRagServer {
             .unwrap_or_else(|e| format!("Error: {e}")),
             Err(e) => format!("Error: {e}"),
         }
+    }
+}
+
+/// Structured `not_ready` envelope returned by model-requiring tools while warmup
+/// is in progress. Spec C U8.
+///
+/// Unlike bare `Err("Models not ready")` strings, this returns a machine-parsable
+/// envelope with `status = "not_ready"`, warmup phase metadata, and a human ETA.
+pub(crate) fn not_ready_envelope(
+    phase: &str,
+    elapsed_ms: u64,
+    eta_seconds: Option<u64>,
+) -> serde_json::Value {
+    let eta_human: Option<&str> = match phase {
+        "downloading" => Some("~10–15 min (premier lancement)"),
+        "loading" => Some("~1–2 min"),
+        _ => None,
+    };
+    let msg = match phase {
+        "downloading" => "Téléchargement des modèles en cours (~10–15 min au premier lancement).",
+        "loading" => "Chargement des modèles en cours (~1–2 min).",
+        _ => "Initialisation des modèles en cours.",
+    };
+    crate::envelope::envelope(
+        crate::envelope::status::NOT_READY,
+        msg,
+        "Réessayez dans un instant ; suivez la progression via service_status().",
+        serde_json::json!({ "warmup": { "phase": phase, "elapsed_ms": elapsed_ms, "eta_seconds": eta_seconds, "eta_human": eta_human } }),
+    )
+}
+
+/// Single next setup action for the agent, derived from vault + model state.
+/// Returns the machine-stable `(status, next_step_tool_name)` pair. Spec C U7.
+pub(crate) fn health_next_step(
+    vault_ok: bool,
+    models_present: bool,
+) -> (&'static str, Option<&'static str>) {
+    use crate::envelope::status;
+    match (vault_ok, models_present) {
+        (false, _) => (status::SETUP_REQUIRED, Some("anno_init_vault")),
+        (true, false) => (status::SETUP_REQUIRED, Some("download_models")),
+        (true, true) => (status::OK, None),
     }
 }
 
@@ -4006,6 +4273,26 @@ impl ServerHandler for AnnoRagServer {
                 self.cfg.mcp_server_name.clone(),
                 env!("CARGO_PKG_VERSION"),
             ))
+    }
+
+    /// List available tools, hiding deprecated tools unless `ANNO_EXPOSE_DEPRECATED=1`.
+    ///
+    /// Deprecated tools remain callable via `call_tool` — they are only hidden
+    /// from discovery. Spec C §4 (U4) + §11 (D2).
+    async fn list_tools(
+        &self,
+        _request: Option<rmcp::model::PaginatedRequestParams>,
+        _context: rmcp::service::RequestContext<rmcp::RoleServer>,
+    ) -> Result<rmcp::model::ListToolsResult, rmcp::ErrorData> {
+        let mut tools = self.tool_router.list_all();
+        if !crate::deprecated::expose_deprecated() {
+            tools.retain(|t| !crate::deprecated::DEPRECATED_TOOLS.contains(&t.name.as_ref()));
+        }
+        Ok(rmcp::model::ListToolsResult {
+            tools,
+            meta: None,
+            next_cursor: None,
+        })
     }
 }
 
@@ -4155,7 +4442,14 @@ pub async fn serve_stdio_lazy(cfg: AnnoRagConfig, key: [u8; 32]) -> anno_rag::er
                 tracing::info!("anno-rag: model download complete");
             }
         }
-        *warmup_server.warmup_phase.write().await = WarmupPhase::Loading { started_ms };
+        let load_started_ms = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap_or_default()
+            .as_millis() as u64;
+        let download_ms = load_started_ms.saturating_sub(started_ms);
+        *warmup_server.warmup_phase.write().await = WarmupPhase::Loading {
+            started_ms: load_started_ms,
+        };
 
         // Step 1: init Pipeline struct (opens LanceDB + vault, ~2 s).
         let pipeline_arc = match warmup_server.pipeline().await {
@@ -4180,14 +4474,24 @@ pub async fn serve_stdio_lazy(cfg: AnnoRagConfig, key: [u8; 32]) -> anno_rag::er
         // Step 2: load embedder + detector in parallel (detector in spawn_blocking).
         let outcome = arc.warmup().await;
 
-        let elapsed_ms = (std::time::SystemTime::now()
+        let load_ms = (std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)
             .unwrap_or_default()
             .as_millis() as u64)
-            .saturating_sub(started_ms);
+            .saturating_sub(load_started_ms);
+        let elapsed_ms = download_ms + load_ms;
 
         if outcome.all_ok() {
             tracing::info!(elapsed_ms, "anno-rag: background model warmup complete");
+            let models_dir =
+                crate::model_inventory::effective_models_dir(warmup_server.cfg.as_ref()).path;
+            crate::warmup_history::save(
+                &models_dir,
+                &crate::warmup_history::WarmupHistory {
+                    download_ms: Some(download_ms),
+                    load_ms: Some(load_ms),
+                },
+            );
             *warmup_server.warmup_phase.write().await = WarmupPhase::Ready { elapsed_ms };
         } else {
             let error = [
@@ -4945,8 +5249,8 @@ mod lazy_tests {
             })
             .await;
         let parsed: serde_json::Value = serde_json::from_str(&out).expect("json");
-        assert_eq!(parsed["ok"], false);
-        assert!(parsed["error"].as_str().unwrap().contains("corpus"));
+        assert_eq!(parsed["status"], "corpus_required", "got: {parsed}");
+        assert!(parsed["available"].is_array(), "got: {parsed}");
     }
 
     #[tokio::test]
@@ -4970,7 +5274,7 @@ mod lazy_tests {
     }
 
     #[tokio::test]
-    async fn search_fast_legal_returns_error() {
+    async fn search_fast_legal_degrades() {
         let dir = tempfile::tempdir().expect("temp dir");
         let cfg = AnnoRagConfig {
             data_dir: dir.path().to_path_buf(),
@@ -4990,11 +5294,23 @@ mod lazy_tests {
             .await;
         let v: serde_json::Value = serde_json::from_str(&out).expect("json");
 
-        assert_eq!(v["ok"], false);
-        assert!(v["error"]
-            .as_str()
-            .unwrap_or("")
-            .contains("legal scope requires semantic mode"));
+        // Must not return an error — should degrade gracefully.
+        assert_eq!(v["ok"], true, "fast+legal must not error; got: {v}");
+        assert_eq!(
+            v["status"], "degraded",
+            "fast+legal must set status=degraded; got: {v}"
+        );
+        assert!(
+            v["warnings"]
+                .as_array()
+                .map(|w| !w.is_empty())
+                .unwrap_or(false),
+            "fast+legal must emit at least one warning; got: {v}"
+        );
+        assert_eq!(
+            v["scope_modes"]["legal"], "skipped",
+            "legal backend must be skipped; got: {v}"
+        );
     }
 
     #[tokio::test]
@@ -5026,11 +5342,8 @@ mod lazy_tests {
             .await;
         let v: serde_json::Value = serde_json::from_str(&out).expect("json");
 
-        assert_eq!(v["ok"], false);
-        assert!(v["error"]
-            .as_str()
-            .unwrap_or("")
-            .contains("corpus_id is required"));
+        assert_eq!(v["status"], "corpus_required", "got: {v}");
+        assert!(v["available"].is_array(), "got: {v}");
         assert!(!out.contains("c:/clients/a"));
         assert!(!out.contains("c:/clients/b"));
     }
@@ -5606,7 +5919,8 @@ mod warmup_phase_tests {
     }
 
     #[tokio::test(flavor = "current_thread")]
-    async fn require_models_returns_loading_when_warmup_in_progress() {
+    async fn require_models_returns_not_ready_envelope_when_loading() {
+        use crate::envelope::status;
         let dir = tempfile::tempdir().unwrap();
         let cfg = AnnoRagConfig {
             data_dir: dir.path().to_path_buf(),
@@ -5625,7 +5939,202 @@ mod warmup_phase_tests {
             Ok(_) => panic!("expected Err but got Ok"),
         };
         let v: serde_json::Value = serde_json::from_str(&json_str).unwrap();
-        assert_eq!(v["ok"], false);
-        assert_eq!(v["error"], "models_loading");
+        // Spec C U8: model-requiring tools must return the structured not_ready envelope.
+        assert_eq!(v["status"], status::NOT_READY, "status must be not_ready");
+        assert_eq!(
+            v["warmup"]["phase"], "loading",
+            "warmup.phase must be loading"
+        );
+        assert!(v["message"].is_string(), "message field required");
+        assert!(v["hint"].is_string(), "hint field required");
+    }
+
+    #[tokio::test(flavor = "current_thread")]
+    async fn require_models_returns_not_ready_envelope_when_downloading() {
+        use crate::envelope::status;
+        let dir = tempfile::tempdir().unwrap();
+        let cfg = AnnoRagConfig {
+            data_dir: dir.path().to_path_buf(),
+            ..Default::default()
+        };
+        let _models_env = crate::model_inventory::test_env::ScopedAnnoModelsDir::unset();
+        let server = AnnoRagServer::new_lazy(cfg, [0u8; 32]);
+
+        // Force phase to Downloading.
+        *server.warmup_phase.write().await = WarmupPhase::Downloading {
+            started_ms: 0,
+            progress_pct: 42,
+        };
+
+        let result = server.require_models().await;
+        assert!(result.is_err(), "must return Err during downloading");
+        let json_str = match result {
+            Err(s) => s,
+            Ok(_) => panic!("expected Err but got Ok"),
+        };
+        let v: serde_json::Value = serde_json::from_str(&json_str).unwrap();
+        assert_eq!(v["status"], status::NOT_READY, "status must be not_ready");
+        assert_eq!(
+            v["warmup"]["phase"], "downloading",
+            "warmup.phase must be downloading"
+        );
+    }
+
+    #[test]
+    fn corpus_required_envelope_has_convention_fields() {
+        use crate::envelope::{envelope, status};
+        let v = envelope(
+            status::CORPUS_REQUIRED,
+            "Plusieurs dossiers indexés.",
+            "Relancez avec corpus_id/alias.",
+            serde_json::json!({ "available": [] }),
+        );
+        assert_eq!(v["status"], "corpus_required");
+        assert!(v["available"].is_array());
+        assert!(v["message"].is_string());
+        assert!(v["hint"].is_string());
+    }
+
+    #[test]
+    fn empty_status_classifier_picks_the_right_status() {
+        use crate::envelope::status;
+        assert_eq!(
+            crate::legal_empty_status(false, false, true),
+            status::UNKNOWN_DOCUMENT
+        );
+        assert_eq!(
+            crate::legal_empty_status(true, false, true),
+            status::NOT_ENRICHED
+        );
+        assert_eq!(crate::legal_empty_status(true, true, true), status::EMPTY);
+        assert_eq!(crate::legal_empty_status(true, true, false), status::OK);
+    }
+}
+
+#[cfg(test)]
+mod health_next_step_tests {
+    #[test]
+    fn next_step_walks_setup_states() {
+        use crate::envelope::status;
+        assert_eq!(
+            crate::health_next_step(false, false),
+            (status::SETUP_REQUIRED, Some("anno_init_vault"))
+        );
+        assert_eq!(
+            crate::health_next_step(true, false),
+            (status::SETUP_REQUIRED, Some("download_models"))
+        );
+        assert_eq!(crate::health_next_step(true, true), (status::OK, None));
+    }
+}
+
+#[cfg(test)]
+mod not_ready_envelope_tests {
+    /// Spec C U8: not_ready_envelope must carry structured warmup metadata.
+    #[test]
+    fn not_ready_envelope_carries_warmup() {
+        use crate::envelope::status;
+        let v = crate::not_ready_envelope("downloading", 60_000, Some(540));
+        assert_eq!(v["status"], status::NOT_READY);
+        assert_eq!(v["warmup"]["phase"], "downloading");
+        assert_eq!(v["warmup"]["elapsed_ms"], 60_000u64);
+        assert_eq!(v["warmup"]["eta_seconds"], 540u64);
+        assert!(v["message"].is_string());
+        assert!(v["hint"].is_string());
+    }
+
+    #[test]
+    fn not_ready_envelope_loading_phase() {
+        use crate::envelope::status;
+        let v = crate::not_ready_envelope("loading", 30_000, None);
+        assert_eq!(v["status"], status::NOT_READY);
+        assert_eq!(v["warmup"]["phase"], "loading");
+        assert!(v["warmup"]["eta_seconds"].is_null());
+    }
+
+    #[test]
+    fn not_ready_envelope_idle_phase_fallback() {
+        use crate::envelope::status;
+        let v = crate::not_ready_envelope("idle", 0, None);
+        assert_eq!(v["status"], status::NOT_READY);
+        assert_eq!(v["warmup"]["phase"], "idle");
+    }
+
+    /// Spec C D2/§11 — canonical `service_status` must return the same JSON as
+    /// the deprecated `status` when both delegate to `status_impl_routing`.
+    #[tokio::test(flavor = "current_thread")]
+    async fn canonical_service_status_matches_legacy() {
+        use crate::AnnoRagServer;
+        use anno_rag::config::AnnoRagConfig;
+        let dir = tempfile::tempdir().unwrap();
+        let cfg = AnnoRagConfig {
+            data_dir: dir.path().to_path_buf(),
+            ..Default::default()
+        };
+        let server = AnnoRagServer::new_lazy(cfg, [0u8; 32]);
+        assert_eq!(server.service_status().await, server.status().await);
+    }
+
+    /// Spec C D2/§11 — canonical `forget_source` must return the same JSON as
+    /// the deprecated `forget` for an unknown target (no models needed).
+    #[tokio::test(flavor = "current_thread")]
+    async fn canonical_forget_source_matches_legacy() {
+        use crate::{AnnoRagServer, ForgetParams};
+        use anno_rag::config::AnnoRagConfig;
+        use rmcp::handler::server::wrapper::Parameters;
+        let dir = tempfile::tempdir().unwrap();
+        let cfg = AnnoRagConfig {
+            data_dir: dir.path().to_path_buf(),
+            ..Default::default()
+        };
+        let server = AnnoRagServer::new_lazy(cfg, [0u8; 32]);
+        let target = "00000000-0000-0000-0000-000000000000".to_string();
+        let canonical = server
+            .forget_source(Parameters(ForgetParams {
+                target: target.clone(),
+            }))
+            .await;
+        let legacy = server.forget(Parameters(ForgetParams { target })).await;
+        assert_eq!(canonical, legacy);
+    }
+
+    /// Spec C U5/§5 — overlapping tools must cross-reference siblings in their descriptions.
+    #[test]
+    fn status_family_descriptions_cross_reference() {
+        let lib_src = include_str!(concat!(env!("CARGO_MANIFEST_DIR"), "/src/lib.rs"));
+        // corpus_health must reference service_status
+        assert!(
+            lib_src.contains("service_status"),
+            "corpus_health description must cross-reference service_status"
+        );
+        // memory_forget must reference forget_source
+        assert!(
+            lib_src.contains("forget_source"),
+            "memory_forget description must cross-reference forget_source"
+        );
+        // legal_rehydrate_citation must reference detokenize
+        assert!(
+            lib_src.contains("detokenize"),
+            "legal_rehydrate_citation description must cross-reference detokenize"
+        );
+    }
+
+    /// Spec C U3/§3 — search description must be example-driven with key concepts.
+    #[test]
+    fn search_description_has_examples_and_handle() {
+        let src = include_str!(concat!(env!("CARGO_MANIFEST_DIR"), "/src/lib.rs"));
+        // Find the search tool description text
+        assert!(
+            src.contains("document_handle"),
+            "search description must mention document_handle"
+        );
+        assert!(
+            src.contains("Examples:"),
+            "search description must have Examples:"
+        );
+        assert!(
+            src.contains("degraded"),
+            "search description must mention degraded status"
+        );
     }
 }

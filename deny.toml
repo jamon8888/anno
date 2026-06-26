@@ -21,6 +21,10 @@ ignore = [
     # the current Tauri 2 release. These are Linux-only build-time deps.
     { id = "RUSTSEC-2024-0370", reason = "proc-macro-error is unmaintained; transitive via Tauri 2 macros. No safe upgrade available yet." },
     { id = "RUSTSEC-2024-0371", reason = "unic-* crates are unmaintained; transitive via Tauri 2 WebKit deps. No safe upgrade available." },
+    # Stack-overflow in lopdf via adversarial deeply-nested PDF objects.
+    # lopdf is used for PDF text extraction; anno processes trusted local files only
+    # (no untrusted network input path). No patched release available yet.
+    { id = "RUSTSEC-2026-0187", reason = "lopdf stack-overflow advisory; anno processes local trusted PDFs only, no untrusted-input path. No patched release available yet." },
 ]
 
 [licenses]

@@ -273,6 +273,12 @@ pub trait LegalKnowledgeGraph: Send + Sync {
     /// Returns backend-specific graph errors.
     async fn compact(&self) -> Result<()>;
 
+    /// True if the knowledge graph holds at least one node for `doc_id`.
+    ///
+    /// # Errors
+    /// Returns backend-specific graph errors.
+    async fn document_has_kg_nodes(&self, doc_id: Uuid) -> Result<bool>;
+
     /// Execute a constrained graph query.
     ///
     /// # Errors
@@ -848,6 +854,24 @@ impl SqliteLegalGraphStore {
             collect_rows(&mut stmt, params![scope_id])
         })
     }
+
+    /// True if the knowledge graph holds at least one node associated with
+    /// `document_id`. Cheap existence probe — `LIMIT 1`, no row materialisation.
+    ///
+    /// # Errors
+    /// Returns [`crate::error::Error::Graph`] on SQLite failure.
+    pub fn document_has_kg_nodes(&self, document_id: uuid::Uuid) -> crate::error::Result<bool> {
+        self.with_conn(|conn| {
+            let mut stmt = conn
+                .prepare("SELECT 1 FROM legal_nodes WHERE doc_id = ?1 LIMIT 1")
+                .map_err(sql_err)?;
+            let mut rows = stmt
+                .query(rusqlite::params![document_id.to_string()])
+                .map_err(sql_err)?;
+            let exists = rows.next().map_err(sql_err)?.is_some();
+            Ok(exists)
+        })
+    }
 }
 
 #[async_trait]
@@ -927,6 +951,21 @@ impl LegalKnowledgeGraph for SqliteLegalGraphStore {
 
     async fn compact(&self) -> Result<()> {
         self.with_conn(|conn| conn.execute_batch("VACUUM").map_err(sql_err))
+    }
+
+    async fn document_has_kg_nodes(&self, doc_id: Uuid) -> Result<bool> {
+        self.with_conn(|conn| {
+            let mut stmt = conn
+                .prepare("SELECT 1 FROM legal_nodes WHERE doc_id = ?1 LIMIT 1")
+                .map_err(sql_err)?;
+            let exists = stmt
+                .query(rusqlite::params![doc_id.to_string()])
+                .map_err(sql_err)?
+                .next()
+                .map_err(sql_err)?
+                .is_some();
+            Ok(exists)
+        })
     }
 
     async fn cypher(
@@ -1376,6 +1415,15 @@ pub(crate) mod tests {
             Ok(())
         }
 
+        async fn document_has_kg_nodes(&self, doc_id: Uuid) -> crate::Result<bool> {
+            let nodes = self.nodes.lock().unwrap();
+            Ok(nodes.iter().any(|n| match n {
+                NodeWrite::Document { doc_id: d, .. } => *d == doc_id,
+                NodeWrite::Chunk { doc_id: d, .. } => *d == doc_id,
+                _ => false,
+            }))
+        }
+
         async fn cypher(
             &self,
             _query: &str,
@@ -1395,5 +1443,33 @@ pub(crate) mod tests {
         kg.upsert_batch(&nodes, &edges).await.unwrap();
 
         assert_eq!(kg.nodes.lock().unwrap().len(), 1);
+    }
+
+    #[tokio::test]
+    async fn document_has_kg_nodes_reports_presence() {
+        let dir = tempfile::tempdir().unwrap();
+        let cfg = crate::config::AnnoRagConfig {
+            data_dir: dir.path().to_path_buf(),
+            ..Default::default()
+        };
+        let store = SqliteLegalGraphStore::open(&cfg).await.expect("open store");
+        let doc = Uuid::new_v4();
+
+        assert!(
+            !store.document_has_kg_nodes(doc).unwrap(),
+            "empty graph should return false"
+        );
+
+        let mut nodes = NodeBatch::new();
+        nodes.add_document(doc, Some("contract".into()), None, None, None, None);
+        store
+            .upsert_batch(&nodes, &EdgeBatch::default())
+            .await
+            .expect("upsert");
+
+        assert!(
+            store.document_has_kg_nodes(doc).unwrap(),
+            "after insert should return true"
+        );
     }
 }

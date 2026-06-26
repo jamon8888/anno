@@ -426,6 +426,7 @@ dependencies = [
  "anno-source-local",
  "async-trait",
  "chrono",
+ "cloakpipe-core",
  "filetime",
  "keyring",
  "lancedb",

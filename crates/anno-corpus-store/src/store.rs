@@ -347,6 +347,29 @@ impl CorpusStore {
         }
     }
 
+    /// Resolve a document's corpus-relative path from its id. Inverse of
+    /// `document_id_by_relative_path`. Returns `None` if the document is absent
+    /// or was stored without a plaintext path. Spec C §10 (U1).
+    pub fn relative_path_by_document_id(
+        &self,
+        corpus_id: CorpusId,
+        document_id: DocumentInstanceId,
+    ) -> Result<Option<String>> {
+        let conn = self.conn.lock().expect("corpus sqlite mutex poisoned");
+        let mut stmt = conn.prepare(
+            "SELECT relative_path FROM corpus_documents \
+             WHERE corpus_id = ?1 AND document_id = ?2 \
+               AND relative_path IS NOT NULL \
+             ORDER BY CASE WHEN backend_kind = 'legal' THEN 0 ELSE 1 END \
+             LIMIT 1",
+        )?;
+        let mut rows = stmt.query(params![corpus_id.as_string(), document_id.as_string()])?;
+        match rows.next()? {
+            Some(row) => Ok(row.get::<_, Option<String>>(0)?),
+            None => Ok(None),
+        }
+    }
+
     /// List registered corpora without raw filesystem paths.
     pub fn list_corpora(&self) -> Result<Vec<CorpusRow>> {
         let conn = self.conn.lock().expect("corpus sqlite mutex poisoned");
@@ -924,6 +947,33 @@ mod tests {
                 .expect("miss"),
             None
         );
+    }
+
+    #[test]
+    fn relative_path_by_document_id_roundtrip() {
+        let dir = tempfile::tempdir().expect("tempdir");
+        let store = CorpusStore::open(dir.path().join("c.sqlite3")).expect("open");
+        let reg = store
+            .register_root(
+                dir.path().join("a").to_str().unwrap(),
+                &[CorpusProfile::All],
+            )
+            .expect("register");
+        let doc = DocumentInstanceId::new(uuid::Uuid::nil());
+        store
+            .record_document_path(reg.corpus_id, doc, "contrats/x.txt")
+            .expect("record");
+        let got = store
+            .relative_path_by_document_id(reg.corpus_id, doc)
+            .expect("lookup");
+        assert_eq!(got.as_deref(), Some("contrats/x.txt"));
+        let missing = store
+            .relative_path_by_document_id(
+                reg.corpus_id,
+                DocumentInstanceId::new(uuid::Uuid::now_v7()),
+            )
+            .expect("lookup missing");
+        assert_eq!(missing, None);
     }
 
     #[test]
