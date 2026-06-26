@@ -2360,7 +2360,9 @@ impl AnnoRagServer {
     }
 
     /// Return one corpus health summary by corpus_id.
-    #[tool(description = "Return one corpus health summary by corpus_id.")]
+    #[tool(
+        description = "Return one corpus health summary by corpus_id. For anno-wide health use service_status; for knowledge use knowledge_status; for privacy workflow use privacy_status."
+    )]
     async fn corpus_health(&self, Parameters(p): Parameters<CorpusGetParams>) -> String {
         let parsed = match crate::corpus::parse_corpus_id(&p.corpus_id) {
             Ok(id) => id,
@@ -2434,7 +2436,7 @@ impl AnnoRagServer {
 
     /// Report privacy workflow capabilities without loading models.
     #[tool(
-        description = "Privacy workflow status and capabilities. Does not return document content."
+        description = "Privacy workflow status and capabilities. Does not return document content. For anno-wide health use service_status."
     )]
     async fn privacy_status(&self) -> String {
         serde_json::to_string_pretty(&self.privacy_status_impl().await)
@@ -2561,7 +2563,7 @@ impl AnnoRagServer {
 
     /// Engine health — version, build target, available tools, vault status.
     #[tool(
-        description = "Engine health: version, build target, available tools, vault initialization status. Side-effect-free. Call once per session before other anno tools to verify compatibility."
+        description = "Engine health: version, build target, available tools, vault initialization status. Side-effect-free. Call once per session before other anno tools to verify compatibility. For index/source counts use service_status."
     )]
     async fn anno_health(&self) -> String {
         // Check vault independently of whether the pipeline has been lazy-
@@ -2772,7 +2774,7 @@ impl AnnoRagServer {
 
     /// Forget memories by id or by query. Cascades vault tokens.
     #[tool(
-        description = "Forget memories by id or by query. Cascades to vault tokens no longer referenced. Returns the SLO note that physical erasure may take up to 24h."
+        description = "Forget memories by id or by query. Cascades to vault tokens no longer referenced. Returns the SLO note that physical erasure may take up to 24h. For an indexed source, use forget_source; for knowledge folders, use knowledge_forget."
     )]
     async fn memory_forget(&self, Parameters(p): Parameters<MemoryForgetParams>) -> String {
         let pipeline = match self.require_models().await {
@@ -3174,7 +3176,8 @@ impl AnnoRagServer {
     #[tool(
         description = "Rehydrate a citation span (byte_start..byte_end) from a stored \
                        pseudonymized chunk. Returns the original plaintext for the span. \
-                       Use chunk_id + offsets from legal_search results."
+                       Use chunk_id + offsets from legal_search results. \
+                       For free-text token replacement in any context, use detokenize."
     )]
     async fn legal_rehydrate_citation(
         &self,
@@ -6089,5 +6092,26 @@ mod not_ready_envelope_tests {
             .await;
         let legacy = server.forget(Parameters(ForgetParams { target })).await;
         assert_eq!(canonical, legacy);
+    }
+
+    /// Spec C U5/§5 — overlapping tools must cross-reference siblings in their descriptions.
+    #[test]
+    fn status_family_descriptions_cross_reference() {
+        let lib_src = include_str!(concat!(env!("CARGO_MANIFEST_DIR"), "/src/lib.rs"));
+        // corpus_health must reference service_status
+        assert!(
+            lib_src.contains("service_status"),
+            "corpus_health description must cross-reference service_status"
+        );
+        // memory_forget must reference forget_source
+        assert!(
+            lib_src.contains("forget_source"),
+            "memory_forget description must cross-reference forget_source"
+        );
+        // legal_rehydrate_citation must reference detokenize
+        assert!(
+            lib_src.contains("detokenize"),
+            "legal_rehydrate_citation description must cross-reference detokenize"
+        );
     }
 }
