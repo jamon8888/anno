@@ -9,6 +9,9 @@ pub(crate) const DEPRECATED_TOOLS: &[&str] = &[
     "knowledge_search",
     "legal_ingest",
     "legal_search",
+    // U4 — legacy knowledge status/sources superseded by unified `service_status`
+    "knowledge_sources",
+    "knowledge_status",
     // U4 — legacy knowledge management superseded by `index` / `forget`
     "knowledge_add_local_folder",
     "knowledge_sync",
@@ -55,6 +58,8 @@ mod tests {
         assert!(DEPRECATED_TOOLS.contains(&"status"));
         assert!(DEPRECATED_TOOLS.contains(&"rehydrate"));
         assert!(DEPRECATED_TOOLS.contains(&"knowledge_search"));
+        assert!(DEPRECATED_TOOLS.contains(&"knowledge_sources"));
+        assert!(DEPRECATED_TOOLS.contains(&"knowledge_status"));
         assert!(DEPRECATED_TOOLS.contains(&"legal_ingest"));
         assert!(DEPRECATED_TOOLS.contains(&"legal_search"));
     }
@@ -63,7 +68,8 @@ mod tests {
     fn expose_deprecated_defaults_to_false() {
         // Can only assert the function is callable; env may vary in CI.
         // If ANNO_EXPOSE_DEPRECATED is not set, it must return false.
-        std::env::remove_var("ANNO_EXPOSE_DEPRECATED");
+        // SAFETY: single-threaded test; no other thread reads ANNO_EXPOSE_DEPRECATED.
+        unsafe { std::env::remove_var("ANNO_EXPOSE_DEPRECATED") };
         assert!(!expose_deprecated());
     }
 }

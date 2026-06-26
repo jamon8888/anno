@@ -4230,7 +4230,7 @@ pub(crate) fn not_ready_envelope(
     crate::envelope::envelope(
         crate::envelope::status::NOT_READY,
         msg,
-        "Réessayez dans un instant ; suivez la progression via status().",
+        "Réessayez dans un instant ; suivez la progression via service_status().",
         serde_json::json!({ "warmup": { "phase": phase, "elapsed_ms": elapsed_ms, "eta_seconds": eta_seconds, "eta_human": eta_human } }),
     )
 }

@@ -25,7 +25,9 @@ pub(crate) fn envelope(status: &str, message: &str, hint: &str, payload: Value) 
     let mut base = json!({ "status": status, "message": message, "hint": hint });
     if let (Some(obj), Some(extra)) = (base.as_object_mut(), payload.as_object()) {
         for (k, v) in extra {
-            obj.insert(k.clone(), v.clone());
+            if !matches!(k.as_str(), "status" | "message" | "hint") {
+                obj.insert(k.clone(), v.clone());
+            }
         }
     }
     base

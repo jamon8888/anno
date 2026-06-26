@@ -1415,8 +1415,13 @@ pub(crate) mod tests {
             Ok(())
         }
 
-        async fn document_has_kg_nodes(&self, _doc_id: Uuid) -> crate::Result<bool> {
-            Ok(false)
+        async fn document_has_kg_nodes(&self, doc_id: Uuid) -> crate::Result<bool> {
+            let nodes = self.nodes.lock().unwrap();
+            Ok(nodes.iter().any(|n| match n {
+                NodeWrite::Document { doc_id: d, .. } => *d == doc_id,
+                NodeWrite::Chunk { doc_id: d, .. } => *d == doc_id,
+                _ => false,
+            }))
         }
 
         async fn cypher(

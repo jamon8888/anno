@@ -358,7 +358,10 @@ impl CorpusStore {
         let conn = self.conn.lock().expect("corpus sqlite mutex poisoned");
         let mut stmt = conn.prepare(
             "SELECT relative_path FROM corpus_documents \
-             WHERE corpus_id = ?1 AND document_id = ?2 LIMIT 1",
+             WHERE corpus_id = ?1 AND document_id = ?2 \
+               AND relative_path IS NOT NULL \
+             ORDER BY CASE WHEN backend_kind = 'legal' THEN 0 ELSE 1 END \
+             LIMIT 1",
         )?;
         let mut rows = stmt.query(params![corpus_id.as_string(), document_id.as_string()])?;
         match rows.next()? {
