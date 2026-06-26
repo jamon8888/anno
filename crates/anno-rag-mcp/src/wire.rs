@@ -9,6 +9,9 @@ pub(crate) struct SearchHitWire {
     pub(crate) chunk_id: String,
     pub(crate) corpus_id: Option<String>,
     pub(crate) document_label: Option<String>,
+    /// Stable `alias/relative_path` handle for piping into legal tools.
+    /// `None` when the doc isn't registered in corpus_documents.
+    pub(crate) document_handle: Option<String>,
     pub(crate) chunk_idx: u32,
     pub(crate) text_pseudo: String,
     pub(crate) page: Option<u32>,

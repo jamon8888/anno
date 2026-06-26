@@ -570,6 +570,7 @@ impl AnnoRagServer {
                     chunk_id: h.chunk_id.to_string(),
                     corpus_id: None,
                     document_label: Some(h.doc_id.to_string()),
+                    document_handle: None,
                     chunk_idx: h.chunk_idx,
                     text_pseudo: h.text_pseudo,
                     page: h.page,

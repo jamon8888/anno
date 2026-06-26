@@ -208,3 +208,25 @@ pub(crate) fn filter_f32(
         .and_then(serde_json::Value::as_f64)
         .map(|value| value as f32)
 }
+
+/// Build a `alias/relative_path` document handle, or `None` if either part
+/// is missing. Spec C §10 (U1).
+pub(crate) fn build_handle(alias: Option<&str>, relative_path: Option<&str>) -> Option<String> {
+    match (alias, relative_path) {
+        (Some(a), Some(p)) => Some(format!("{a}/{p}")),
+        _ => None,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    #[test]
+    fn handle_built_from_alias_and_relative_path() {
+        assert_eq!(
+            crate::search::build_handle(Some("corpus-01"), Some("contrats/x.txt")),
+            Some("corpus-01/contrats/x.txt".to_string())
+        );
+        assert_eq!(crate::search::build_handle(None, Some("x.txt")), None);
+        assert_eq!(crate::search::build_handle(Some("corpus-01"), None), None);
+    }
+}
