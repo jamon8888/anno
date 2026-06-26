@@ -3164,13 +3164,13 @@ impl AnnoRagServer {
             Ok(p) => p,
             Err(json) => return json,
         };
-        let doc_id = match self.corpus().await {
+        let (doc_id, resolved) = match self.corpus().await {
             Ok(svc) => match svc.resolve_doc_ref(&p.doc_id) {
-                Ok(id) => id,
-                Err(_) if uuid::Uuid::parse_str(&p.doc_id).is_ok() => p.doc_id.clone(),
+                Ok(id) => (id, true),
+                Err(_) if uuid::Uuid::parse_str(&p.doc_id).is_ok() => (p.doc_id.clone(), false),
                 Err(e) => return format!("Error: {e}"),
             },
-            Err(_) => p.doc_id.clone(),
+            Err(_) => (p.doc_id.clone(), false),
         };
         let start = std::time::Instant::now();
         match pipeline.legal_extract_contract(&doc_id).await {
@@ -3183,6 +3183,38 @@ impl AnnoRagServer {
                     duration_ms = start.elapsed().as_millis() as u64,
                     ""
                 );
+                let is_empty = review.rows.is_empty();
+                let has_kg = match uuid::Uuid::parse_str(&doc_id) {
+                    Ok(uuid) => pipeline
+                        .legal_document_has_kg_nodes(uuid)
+                        .await
+                        .unwrap_or(false),
+                    Err(_) => false,
+                };
+                let st = crate::legal_empty_status(resolved, has_kg, is_empty);
+                if st != crate::envelope::status::OK {
+                    let (msg, hint) = match st {
+                        s if s == crate::envelope::status::UNKNOWN_DOCUMENT => (
+                            "Document introuvable.",
+                            "Vérifiez le doc_id ou listez via sources().",
+                        ),
+                        s if s == crate::envelope::status::NOT_ENRICHED => (
+                            "Document non enrichi dans le graphe juridique.",
+                            "Réindexez via index(path, profile=\"legal\").",
+                        ),
+                        _ => (
+                            "Aucune donnée extraite pour ce document.",
+                            "Le document est enrichi ; aucun champ n'a été extrait.",
+                        ),
+                    };
+                    return serde_json::to_string_pretty(&crate::envelope::envelope(
+                        st,
+                        msg,
+                        hint,
+                        serde_json::json!({ "rows": [] }),
+                    ))
+                    .unwrap_or_else(|e| format!("Error: {e}"));
+                }
                 serde_json::to_string_pretty(&review).unwrap_or_else(|e| format!("Error: {e}"))
             }
             Err(e) => format!("Error: {e}"),
@@ -3213,6 +3245,15 @@ impl AnnoRagServer {
                     duration_ms = start.elapsed().as_millis() as u64,
                     ""
                 );
+                if review.rows.is_empty() {
+                    return serde_json::to_string_pretty(&crate::envelope::envelope(
+                        crate::envelope::status::EMPTY,
+                        "Aucune donnée extraite pour ce dossier.",
+                        "Vérifiez le dossier_id ou réindexez via index(path, profile=\"legal\").",
+                        serde_json::json!({ "rows": [] }),
+                    ))
+                    .unwrap_or_else(|e| format!("Error: {e}"));
+                }
                 serde_json::to_string_pretty(&review).unwrap_or_else(|e| format!("Error: {e}"))
             }
             Err(e) => format!("Error: {e}"),
@@ -3228,13 +3269,15 @@ impl AnnoRagServer {
             Ok(p) => p,
             Err(json) => return json,
         };
-        let dossier_id = match self.corpus().await {
+        let (dossier_id, resolved) = match self.corpus().await {
             Ok(svc) => match svc.resolve_doc_ref(&p.dossier_id) {
-                Ok(id) => id,
-                Err(_) if uuid::Uuid::parse_str(&p.dossier_id).is_ok() => p.dossier_id.clone(),
+                Ok(id) => (id, true),
+                Err(_) if uuid::Uuid::parse_str(&p.dossier_id).is_ok() => {
+                    (p.dossier_id.clone(), false)
+                }
                 Err(e) => return format!("Error: {e}"),
             },
-            Err(_) => p.dossier_id.clone(),
+            Err(_) => (p.dossier_id.clone(), false),
         };
         let start = std::time::Instant::now();
         match pipeline.legal_timeline(&dossier_id).await {
@@ -3247,6 +3290,26 @@ impl AnnoRagServer {
                     duration_ms = start.elapsed().as_millis() as u64,
                     ""
                 );
+                let st = crate::legal_empty_status(resolved, resolved, tl.events.is_empty());
+                if st != crate::envelope::status::OK {
+                    let (msg, hint) = match st {
+                        s if s == crate::envelope::status::UNKNOWN_DOCUMENT => (
+                            "Dossier introuvable.",
+                            "Vérifiez le dossier_id ou listez via sources().",
+                        ),
+                        _ => (
+                            "Aucun événement trouvé pour ce dossier.",
+                            "Réindexez via index(path, profile=\"legal\") pour enrichir la timeline.",
+                        ),
+                    };
+                    return serde_json::to_string_pretty(&crate::envelope::envelope(
+                        st,
+                        msg,
+                        hint,
+                        serde_json::json!({ "events": [] }),
+                    ))
+                    .unwrap_or_else(|e| format!("Error: {e}"));
+                }
                 serde_json::to_string_pretty(&tl).unwrap_or_else(|e| format!("Error: {e}"))
             }
             Err(e) => format!("Error: {e}"),
@@ -3364,6 +3427,31 @@ impl AnnoRagServer {
                     duration_ms = start.elapsed().as_millis() as u64,
                     ""
                 );
+                let is_empty = result.checks.is_empty();
+                let has_kg = pipeline
+                    .legal_document_has_kg_nodes(doc_id)
+                    .await
+                    .unwrap_or(false);
+                let st = crate::legal_empty_status(true, has_kg, is_empty);
+                if st != crate::envelope::status::OK {
+                    let (msg, hint) = match st {
+                        s if s == crate::envelope::status::NOT_ENRICHED => (
+                            "Document non enrichi dans le graphe juridique.",
+                            "Réindexez via index(path, profile=\"legal\").",
+                        ),
+                        _ => (
+                            "Aucune clause vérifiée pour ce document.",
+                            "Vérifiez le doc_type ou réindexez le document.",
+                        ),
+                    };
+                    return serde_json::to_string_pretty(&crate::envelope::envelope(
+                        st,
+                        msg,
+                        hint,
+                        serde_json::json!({ "checks": [] }),
+                    ))
+                    .unwrap_or_else(|e| format!("Error: {e}"));
+                }
                 serde_json::to_string_pretty(&result).unwrap_or_else(|e| format!("Error: {e}"))
             }
             Err(e) => format!("Error: {e}"),
