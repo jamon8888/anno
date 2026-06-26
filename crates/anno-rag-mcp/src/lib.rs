@@ -2526,6 +2526,8 @@ impl AnnoRagServer {
             // takes priority over keyring so Docker/CI always reports correctly).
             anno_rag::vault::is_vault_key_usable()
         };
+        let models_present = crate::model_inventory::ModelInventoryService::new(&self.cfg).ready();
+        let (st, next_step) = crate::health_next_step(vault_initialized, models_present);
         let h = crate::health::EngineHealth {
             engine_version: env!("CARGO_PKG_VERSION").to_string(),
             build_target: format!("{}-{}", std::env::consts::ARCH, std::env::consts::OS),
@@ -2534,7 +2536,18 @@ impl AnnoRagServer {
             vault_initialized,
             available_tools: crate::health::all_tool_names(),
         };
-        serde_json::to_string_pretty(&h).unwrap_or_else(|e| format!("Error: {e}"))
+        let mut v = serde_json::to_value(&h).unwrap_or_else(|_| serde_json::json!({}));
+        if let Some(obj) = v.as_object_mut() {
+            obj.insert("status".into(), serde_json::Value::String(st.to_string()));
+            obj.insert(
+                "next_step".into(),
+                match next_step {
+                    Some(t) => serde_json::Value::String(t.to_string()),
+                    None => serde_json::Value::Null,
+                },
+            );
+        }
+        serde_json::to_string_pretty(&v).unwrap_or_else(|e| format!("Error: {e}"))
     }
 
     /// Save a memory. Default mode stores raw text immediately and enriches NER refs asynchronously.
@@ -4120,6 +4133,20 @@ impl AnnoRagServer {
             .unwrap_or_else(|e| format!("Error: {e}")),
             Err(e) => format!("Error: {e}"),
         }
+    }
+}
+
+/// Single next setup action for the agent, derived from vault + model state.
+/// Returns the machine-stable `(status, next_step_tool_name)` pair. Spec C U7.
+pub(crate) fn health_next_step(
+    vault_ok: bool,
+    models_present: bool,
+) -> (&'static str, Option<&'static str>) {
+    use crate::envelope::status;
+    match (vault_ok, models_present) {
+        (false, _) => (status::SETUP_REQUIRED, Some("anno_init_vault")),
+        (true, false) => (status::SETUP_REQUIRED, Some("download_models")),
+        (true, true) => (status::OK, None),
     }
 }
 
@@ -5798,5 +5825,22 @@ mod warmup_phase_tests {
         );
         assert_eq!(crate::legal_empty_status(true, true, true), status::EMPTY);
         assert_eq!(crate::legal_empty_status(true, true, false), status::OK);
+    }
+}
+
+#[cfg(test)]
+mod health_next_step_tests {
+    #[test]
+    fn next_step_walks_setup_states() {
+        use crate::envelope::status;
+        assert_eq!(
+            crate::health_next_step(false, false),
+            (status::SETUP_REQUIRED, Some("anno_init_vault"))
+        );
+        assert_eq!(
+            crate::health_next_step(true, false),
+            (status::SETUP_REQUIRED, Some("download_models"))
+        );
+        assert_eq!(crate::health_next_step(true, true), (status::OK, None));
     }
 }
