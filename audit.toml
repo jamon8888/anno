@@ -1,0 +1,17 @@
+## cargo-audit configuration
+#
+# Unmaintained crate policy lives in deny.toml (cargo-deny).
+# This file covers vulnerability-level advisories that cargo-audit catches
+# but cannot yet be remediated (no patched release or no upgrade path).
+#
+# Run: cargo audit
+
+[advisories]
+ignore = [
+    # Stack-overflow in lopdf via deeply-nested PDF objects (CVSS 7.5 DoS).
+    # lopdf is a pre-existing transitive dep. anno processes local trusted PDFs
+    # only — no untrusted-network-input path exists. Fixed in lopdf 0.42.0;
+    # bump blocked on upstream kreuzberg/pdfium dependency chain.
+    # Re-check on every lopdf bump.
+    "RUSTSEC-2026-0187",
+]
