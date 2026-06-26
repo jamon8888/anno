@@ -156,42 +156,38 @@ impl AnnoRagServer {
         match phase {
             WarmupPhase::Downloading {
                 started_ms,
-                progress_pct,
+                progress_pct: _,
             } => {
-                let elapsed_s = std::time::SystemTime::now()
+                let now_ms = std::time::SystemTime::now()
                     .duration_since(std::time::UNIX_EPOCH)
                     .unwrap_or_default()
-                    .as_secs()
-                    .saturating_sub(started_ms / 1000);
-                return Err(serde_json::json!({
-                    "ok": false,
-                    "error": "models_downloading",
-                    "download_progress_pct": progress_pct,
-                    "message": format!(
-                        "anno-rag is downloading ML models ({progress_pct}% complete, \
-                         {elapsed_s}s elapsed). Please retry in a moment."
-                    ),
-                    "hint": "Run `anno-rag status` to check download progress."
-                })
-                .to_string());
+                    .as_millis() as u64;
+                let elapsed_ms = now_ms.saturating_sub(started_ms);
+                let models_dir =
+                    crate::model_inventory::effective_models_dir(self.cfg.as_ref()).path;
+                let hist = crate::warmup_history::load(&models_dir);
+                let eta = crate::warmup_history::eta_seconds(hist.download_ms, elapsed_ms);
+                return Err(serde_json::to_string_pretty(&crate::not_ready_envelope(
+                    "downloading",
+                    elapsed_ms,
+                    eta,
+                ))
+                .unwrap_or_default());
             }
             WarmupPhase::Loading { started_ms } => {
-                let elapsed_s = std::time::SystemTime::now()
+                let now_ms = std::time::SystemTime::now()
                     .duration_since(std::time::UNIX_EPOCH)
                     .unwrap_or_default()
-                    .as_secs()
-                    .saturating_sub(started_ms / 1000);
-                return Err(serde_json::json!({
-                    "ok": false,
-                    "error": "models_loading",
-                    "message": format!(
-                        "anno-rag is loading ML models in the background \
-                         ({elapsed_s}s elapsed). This typically takes 60–120 s on \
-                         first startup. Please retry in a moment."
-                    ),
-                    "hint": "Run `anno-rag status` to check progress."
-                })
-                .to_string());
+                    .as_millis() as u64;
+                let elapsed_ms = now_ms.saturating_sub(started_ms);
+                let models_dir =
+                    crate::model_inventory::effective_models_dir(self.cfg.as_ref()).path;
+                let hist = crate::warmup_history::load(&models_dir);
+                let eta = crate::warmup_history::eta_seconds(hist.load_ms, elapsed_ms);
+                return Err(serde_json::to_string_pretty(&crate::not_ready_envelope(
+                    "loading", elapsed_ms, eta,
+                ))
+                .unwrap_or_default());
             }
             WarmupPhase::Failed { ref error } => {
                 return Err(serde_json::json!({
@@ -4140,6 +4136,34 @@ impl AnnoRagServer {
     }
 }
 
+/// Structured `not_ready` envelope returned by model-requiring tools while warmup
+/// is in progress. Spec C U8.
+///
+/// Unlike bare `Err("Models not ready")` strings, this returns a machine-parsable
+/// envelope with `status = "not_ready"`, warmup phase metadata, and a human ETA.
+pub(crate) fn not_ready_envelope(
+    phase: &str,
+    elapsed_ms: u64,
+    eta_seconds: Option<u64>,
+) -> serde_json::Value {
+    let eta_human: Option<&str> = match phase {
+        "downloading" => Some("~10–15 min (premier lancement)"),
+        "loading" => Some("~1–2 min"),
+        _ => None,
+    };
+    let msg = match phase {
+        "downloading" => "Téléchargement des modèles en cours (~10–15 min au premier lancement).",
+        "loading" => "Chargement des modèles en cours (~1–2 min).",
+        _ => "Initialisation des modèles en cours.",
+    };
+    crate::envelope::envelope(
+        crate::envelope::status::NOT_READY,
+        msg,
+        "Réessayez dans un instant ; suivez la progression via status().",
+        serde_json::json!({ "warmup": { "phase": phase, "elapsed_ms": elapsed_ms, "eta_seconds": eta_seconds, "eta_human": eta_human } }),
+    )
+}
+
 /// Single next setup action for the agent, derived from vault + model state.
 /// Returns the machine-stable `(status, next_step_tool_name)` pair. Spec C U7.
 pub(crate) fn health_next_step(
@@ -5795,7 +5819,8 @@ mod warmup_phase_tests {
     }
 
     #[tokio::test(flavor = "current_thread")]
-    async fn require_models_returns_loading_when_warmup_in_progress() {
+    async fn require_models_returns_not_ready_envelope_when_loading() {
+        use crate::envelope::status;
         let dir = tempfile::tempdir().unwrap();
         let cfg = AnnoRagConfig {
             data_dir: dir.path().to_path_buf(),
@@ -5814,8 +5839,45 @@ mod warmup_phase_tests {
             Ok(_) => panic!("expected Err but got Ok"),
         };
         let v: serde_json::Value = serde_json::from_str(&json_str).unwrap();
-        assert_eq!(v["ok"], false);
-        assert_eq!(v["error"], "models_loading");
+        // Spec C U8: model-requiring tools must return the structured not_ready envelope.
+        assert_eq!(v["status"], status::NOT_READY, "status must be not_ready");
+        assert_eq!(
+            v["warmup"]["phase"], "loading",
+            "warmup.phase must be loading"
+        );
+        assert!(v["message"].is_string(), "message field required");
+        assert!(v["hint"].is_string(), "hint field required");
+    }
+
+    #[tokio::test(flavor = "current_thread")]
+    async fn require_models_returns_not_ready_envelope_when_downloading() {
+        use crate::envelope::status;
+        let dir = tempfile::tempdir().unwrap();
+        let cfg = AnnoRagConfig {
+            data_dir: dir.path().to_path_buf(),
+            ..Default::default()
+        };
+        let _models_env = crate::model_inventory::test_env::ScopedAnnoModelsDir::unset();
+        let server = AnnoRagServer::new_lazy(cfg, [0u8; 32]);
+
+        // Force phase to Downloading.
+        *server.warmup_phase.write().await = WarmupPhase::Downloading {
+            started_ms: 0,
+            progress_pct: 42,
+        };
+
+        let result = server.require_models().await;
+        assert!(result.is_err(), "must return Err during downloading");
+        let json_str = match result {
+            Err(s) => s,
+            Ok(_) => panic!("expected Err but got Ok"),
+        };
+        let v: serde_json::Value = serde_json::from_str(&json_str).unwrap();
+        assert_eq!(v["status"], status::NOT_READY, "status must be not_ready");
+        assert_eq!(
+            v["warmup"]["phase"], "downloading",
+            "warmup.phase must be downloading"
+        );
     }
 
     #[test]
@@ -5863,5 +5925,38 @@ mod health_next_step_tests {
             (status::SETUP_REQUIRED, Some("download_models"))
         );
         assert_eq!(crate::health_next_step(true, true), (status::OK, None));
+    }
+}
+
+#[cfg(test)]
+mod not_ready_envelope_tests {
+    /// Spec C U8: not_ready_envelope must carry structured warmup metadata.
+    #[test]
+    fn not_ready_envelope_carries_warmup() {
+        use crate::envelope::status;
+        let v = crate::not_ready_envelope("downloading", 60_000, Some(540));
+        assert_eq!(v["status"], status::NOT_READY);
+        assert_eq!(v["warmup"]["phase"], "downloading");
+        assert_eq!(v["warmup"]["elapsed_ms"], 60_000u64);
+        assert_eq!(v["warmup"]["eta_seconds"], 540u64);
+        assert!(v["message"].is_string());
+        assert!(v["hint"].is_string());
+    }
+
+    #[test]
+    fn not_ready_envelope_loading_phase() {
+        use crate::envelope::status;
+        let v = crate::not_ready_envelope("loading", 30_000, None);
+        assert_eq!(v["status"], status::NOT_READY);
+        assert_eq!(v["warmup"]["phase"], "loading");
+        assert!(v["warmup"]["eta_seconds"].is_null());
+    }
+
+    #[test]
+    fn not_ready_envelope_idle_phase_fallback() {
+        use crate::envelope::status;
+        let v = crate::not_ready_envelope("idle", 0, None);
+        assert_eq!(v["status"], status::NOT_READY);
+        assert_eq!(v["warmup"]["phase"], "idle");
     }
 }
