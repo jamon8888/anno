@@ -49,7 +49,6 @@ pub(crate) struct SearchExecutionPlan {
     pub(crate) mode_used: &'static str,
     pub(crate) knowledge: SearchBackendMode,
     pub(crate) legal: SearchBackendMode,
-    pub(crate) explicit_fast_legal_error: bool,
 }
 
 pub(crate) fn search_execution_plan(
@@ -62,19 +61,16 @@ pub(crate) fn search_execution_plan(
             mode_used: "semantic",
             knowledge: SearchBackendMode::Skipped,
             legal: SearchBackendMode::Semantic,
-            explicit_fast_legal_error: false,
         },
         (None, "all") => SearchExecutionPlan {
             mode_used: "auto",
             knowledge: SearchBackendMode::Fast,
             legal: SearchBackendMode::Semantic,
-            explicit_fast_legal_error: false,
         },
         (None, "knowledge") => SearchExecutionPlan {
             mode_used: "fast",
             knowledge: SearchBackendMode::Fast,
             legal: SearchBackendMode::Skipped,
-            explicit_fast_legal_error: false,
         },
         (None, other) => {
             warnings.push(format!(
@@ -84,15 +80,19 @@ pub(crate) fn search_execution_plan(
                 mode_used: "auto",
                 knowledge: SearchBackendMode::Fast,
                 legal: SearchBackendMode::Semantic,
-                explicit_fast_legal_error: false,
             }
         }
-        (Some("fast"), "legal") => SearchExecutionPlan {
-            mode_used: "fast",
-            knowledge: SearchBackendMode::Skipped,
-            legal: SearchBackendMode::Skipped,
-            explicit_fast_legal_error: true,
-        },
+        (Some("fast"), "legal") => {
+            warnings.push(
+                "legal scope skipped in fast mode (requires models). Use mode='semantic' for legal ranking."
+                    .to_string(),
+            );
+            SearchExecutionPlan {
+                mode_used: "fast",
+                knowledge: SearchBackendMode::Skipped,
+                legal: SearchBackendMode::Skipped,
+            }
+        }
         (Some("fast"), "all") => {
             warnings.push(
                 "legal scope skipped in fast mode (requires models). Use mode='semantic' to include legal results."
@@ -102,14 +102,12 @@ pub(crate) fn search_execution_plan(
                 mode_used: "fast",
                 knowledge: SearchBackendMode::Fast,
                 legal: SearchBackendMode::Skipped,
-                explicit_fast_legal_error: false,
             }
         }
         (Some("fast"), "knowledge") => SearchExecutionPlan {
             mode_used: "fast",
             knowledge: SearchBackendMode::Fast,
             legal: SearchBackendMode::Skipped,
-            explicit_fast_legal_error: false,
         },
         (Some("semantic"), "knowledge") => {
             warnings.push(
@@ -120,14 +118,12 @@ pub(crate) fn search_execution_plan(
                 mode_used: "semantic",
                 knowledge: SearchBackendMode::Fast,
                 legal: SearchBackendMode::Skipped,
-                explicit_fast_legal_error: false,
             }
         }
         (Some("semantic"), "legal") => SearchExecutionPlan {
             mode_used: "semantic",
             knowledge: SearchBackendMode::Skipped,
             legal: SearchBackendMode::Semantic,
-            explicit_fast_legal_error: false,
         },
         (Some("semantic"), "all") => {
             warnings.push(
@@ -138,7 +134,6 @@ pub(crate) fn search_execution_plan(
                 mode_used: "semantic",
                 knowledge: SearchBackendMode::Fast,
                 legal: SearchBackendMode::Semantic,
-                explicit_fast_legal_error: false,
             }
         }
         (Some(other), _) => {
@@ -228,5 +223,23 @@ mod tests {
         );
         assert_eq!(crate::search::build_handle(None, Some("x.txt")), None);
         assert_eq!(crate::search::build_handle(Some("corpus-01"), None), None);
+    }
+
+    #[test]
+    fn fast_legal_degrades_not_errors() {
+        let mut warnings = vec![];
+        let plan =
+            crate::search::search_execution_plan(Some("fast".into()), "legal", &mut warnings);
+        assert_eq!(
+            plan.legal,
+            crate::search::SearchBackendMode::Skipped,
+            "fast+legal must skip legal backend"
+        );
+        assert!(
+            warnings
+                .iter()
+                .any(|w| w.contains("semantic") || w.contains("legal") || w.contains("fast")),
+            "degrade note must be in warnings; got: {warnings:?}"
+        );
     }
 }
