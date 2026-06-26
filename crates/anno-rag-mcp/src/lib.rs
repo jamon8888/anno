@@ -1305,21 +1305,6 @@ impl AnnoRagServer {
         let mut warnings = Vec::<String>::new();
         let scope = normalize_search_scope(p.scope.clone(), &mut warnings);
         let plan = search_execution_plan(p.mode.clone(), &scope, &mut warnings);
-        if plan.explicit_fast_legal_error {
-            return serde_json::json!({
-                "ok": false,
-                "error": "legal scope requires semantic mode",
-                "mode_used": plan.mode_used,
-                "scope_used": scope,
-                "scope_modes": {
-                    "knowledge": plan.knowledge.as_str(),
-                    "legal": plan.legal.as_str(),
-                },
-                "warnings": warnings,
-            })
-            .to_string();
-        }
-
         let svc = match self.corpus().await {
             Ok(svc) => svc,
             Err(e) => {
@@ -1436,8 +1421,14 @@ impl AnnoRagServer {
             }
         }
 
+        let status = if warnings.is_empty() {
+            crate::envelope::status::OK
+        } else {
+            crate::envelope::status::DEGRADED
+        };
         serde_json::json!({
             "ok": true,
+            "status": status,
             "mode_used": plan.mode_used,
             "scope_used": scope,
             "scope_modes": {
@@ -2277,7 +2268,11 @@ impl AnnoRagServer {
 
     /// Unified search tool across local indexes.
     #[tool(
-        description = "Search Anno's local indexes. Omit mode for scope-dependent auto mode: scope='knowledge' uses fast search, scope='legal' uses semantic legal search, and scope='all' reports per-backend scope_modes. Explicit mode='fast' avoids model loading; with scope='all' it skips legal scope, and with scope='legal' it returns an error. mode='semantic' loads models for legal search. scope='all' (default), 'knowledge', or 'legal'. filters forwarded to legal scope."
+        description = "Search Anno's local indexes. Default: just pass a query — scope='all', auto mode. \
+Set scope to narrow: scope='legal' (contracts/case files), scope='knowledge' (notes/folders). \
+Set mode only to tune cost: mode='fast' skips model loading (lexical only; legal results are skipped with a 'degraded' status), mode='semantic' forces model-backed ranking. \
+Examples: search(query='clause de résiliation', scope='legal'); search(query='réunion Q3', scope='knowledge', mode='fast'); search(query='pénalités'). \
+Returns hits with a document_handle (alias/relative_path) you can pass to legal tools. Pseudonymous labels; no raw paths."
     )]
     async fn search(&self, Parameters(p): Parameters<SearchUnifiedParams>) -> String {
         self.search_impl_routing(p).await
@@ -5254,8 +5249,8 @@ mod lazy_tests {
             })
             .await;
         let parsed: serde_json::Value = serde_json::from_str(&out).expect("json");
-        assert_eq!(parsed["ok"], false);
-        assert!(parsed["error"].as_str().unwrap().contains("corpus"));
+        assert_eq!(parsed["status"], "corpus_required", "got: {parsed}");
+        assert!(parsed["available"].is_array(), "got: {parsed}");
     }
 
     #[tokio::test]
@@ -5279,7 +5274,7 @@ mod lazy_tests {
     }
 
     #[tokio::test]
-    async fn search_fast_legal_returns_error() {
+    async fn search_fast_legal_degrades() {
         let dir = tempfile::tempdir().expect("temp dir");
         let cfg = AnnoRagConfig {
             data_dir: dir.path().to_path_buf(),
@@ -5299,11 +5294,23 @@ mod lazy_tests {
             .await;
         let v: serde_json::Value = serde_json::from_str(&out).expect("json");
 
-        assert_eq!(v["ok"], false);
-        assert!(v["error"]
-            .as_str()
-            .unwrap_or("")
-            .contains("legal scope requires semantic mode"));
+        // Must not return an error — should degrade gracefully.
+        assert_eq!(v["ok"], true, "fast+legal must not error; got: {v}");
+        assert_eq!(
+            v["status"], "degraded",
+            "fast+legal must set status=degraded; got: {v}"
+        );
+        assert!(
+            v["warnings"]
+                .as_array()
+                .map(|w| !w.is_empty())
+                .unwrap_or(false),
+            "fast+legal must emit at least one warning; got: {v}"
+        );
+        assert_eq!(
+            v["scope_modes"]["legal"], "skipped",
+            "legal backend must be skipped; got: {v}"
+        );
     }
 
     #[tokio::test]
@@ -5335,11 +5342,8 @@ mod lazy_tests {
             .await;
         let v: serde_json::Value = serde_json::from_str(&out).expect("json");
 
-        assert_eq!(v["ok"], false);
-        assert!(v["error"]
-            .as_str()
-            .unwrap_or("")
-            .contains("corpus_id is required"));
+        assert_eq!(v["status"], "corpus_required", "got: {v}");
+        assert!(v["available"].is_array(), "got: {v}");
         assert!(!out.contains("c:/clients/a"));
         assert!(!out.contains("c:/clients/b"));
     }
@@ -6112,6 +6116,25 @@ mod not_ready_envelope_tests {
         assert!(
             lib_src.contains("detokenize"),
             "legal_rehydrate_citation description must cross-reference detokenize"
+        );
+    }
+
+    /// Spec C U3/§3 — search description must be example-driven with key concepts.
+    #[test]
+    fn search_description_has_examples_and_handle() {
+        let src = include_str!(concat!(env!("CARGO_MANIFEST_DIR"), "/src/lib.rs"));
+        // Find the search tool description text
+        assert!(
+            src.contains("document_handle"),
+            "search description must mention document_handle"
+        );
+        assert!(
+            src.contains("Examples:"),
+            "search description must have Examples:"
+        );
+        assert!(
+            src.contains("degraded"),
+            "search description must mention degraded status"
         );
     }
 }
