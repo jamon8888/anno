@@ -13,6 +13,7 @@
 mod allowed_roots;
 pub mod corpus;
 mod corpus_sync;
+mod deprecated;
 mod detect_label;
 mod envelope;
 pub mod health;
@@ -2262,6 +2263,10 @@ impl AnnoRagServer {
         description = "Deprecated - use 'search(scope=\"legal\", mode=\"semantic\")' for equivalent behavior. Continues to work."
     )]
     async fn legacy_search(&self, Parameters(params): Parameters<SearchParams>) -> String {
+        tracing::warn!(
+            tool = "legacy_search",
+            "deprecated tool called; use canonical replacement"
+        );
         match self.legacy_search_impl(params).await {
             Ok(value) => {
                 serde_json::to_string_pretty(&value).unwrap_or_else(|e| format!("Error: {e}"))
@@ -2374,16 +2379,24 @@ impl AnnoRagServer {
     }
 
     #[tool(
-        description = "Remove an indexed source. Accepts a source_id (UUID), a legal corpus id from sources(), or an explicit folder path. Does not load models."
+        description = "Deprecated — use forget_source. Continues to work. Remove an indexed source. Accepts a source_id (UUID), a legal corpus id from sources(), or an explicit folder path. Does not load models."
     )]
     async fn forget(&self, Parameters(p): Parameters<ForgetParams>) -> String {
+        tracing::warn!(
+            tool = "forget",
+            "deprecated tool called; use canonical replacement"
+        );
         self.forget_impl_routing(p).await
     }
 
     #[tool(
-        description = "Anno-wide index health: source counts, chunks, vault stats, model load state. Does not load models."
+        description = "Deprecated — use service_status. Continues to work. Anno-wide index health: source counts, chunks, vault stats, model load state. Does not load models."
     )]
     async fn status(&self) -> String {
+        tracing::warn!(
+            tool = "status",
+            "deprecated tool called; use canonical replacement"
+        );
         self.status_impl_routing().await
     }
 
@@ -2430,9 +2443,18 @@ impl AnnoRagServer {
 
     /// Replace pseudo-tokens in text back with original PII from the vault.
     #[tool(
-        description = "Replace pseudo-tokens (PERSON_1, EMAIL_2, NIR_3, etc.) in text back with original PII from the local vault."
+        description = "Deprecated — use detokenize. Continues to work. Replace pseudo-tokens (PERSON_1, EMAIL_2, NIR_3, etc.) in text back with original PII from the local vault."
     )]
     async fn rehydrate(&self, Parameters(params): Parameters<RehydrateParams>) -> String {
+        tracing::warn!(
+            tool = "rehydrate",
+            "deprecated tool called; use canonical replacement"
+        );
+        self.rehydrate_impl(params).await
+    }
+
+    /// Inner implementation shared by `rehydrate` (deprecated) and `detokenize` (canonical).
+    pub(crate) async fn rehydrate_impl(&self, params: RehydrateParams) -> String {
         let p = match self.require_models().await {
             Ok(p) => p,
             Err(json) => return json,
@@ -2447,6 +2469,33 @@ impl AnnoRagServer {
             }
             Err(e) => format!("Error: {e}"),
         }
+    }
+
+    /// Canonical: replace pseudo-tokens with original PII from the vault.
+    #[tool(
+        description = "Replace pseudo-tokens (PERSON_1, EMAIL_2, NIR_3, …) with original PII from \
+            the local vault. Canonical name for the former 'rehydrate'."
+    )]
+    async fn detokenize(&self, Parameters(params): Parameters<RehydrateParams>) -> String {
+        self.rehydrate_impl(params).await
+    }
+
+    /// Canonical: remove an indexed source.
+    #[tool(
+        description = "Remove an indexed source (UUID, legal corpus id, or folder path). \
+            Canonical name for the former 'forget'. Does not load models."
+    )]
+    async fn forget_source(&self, Parameters(p): Parameters<ForgetParams>) -> String {
+        self.forget_impl_routing(p).await
+    }
+
+    /// Canonical: anno-wide index health.
+    #[tool(
+        description = "Anno-wide index health: source counts, chunks, vault, model state. \
+            Canonical name for the former 'status'. Does not load models."
+    )]
+    async fn service_status(&self) -> String {
+        self.status_impl_routing().await
     }
 
     /// Dry-run PII detection without replacement.
@@ -3017,6 +3066,10 @@ impl AnnoRagServer {
         description = "Deprecated - use 'index(path, profile=\"legal\")' instead. Continues to work."
     )]
     async fn legal_ingest(&self, Parameters(p): Parameters<LegalIngestParams>) -> String {
+        tracing::warn!(
+            tool = "legal_ingest",
+            "deprecated tool called; use canonical replacement"
+        );
         match self.legal_ingest_impl(p, None).await {
             Ok(value) => {
                 serde_json::to_string_pretty(&value).unwrap_or_else(|e| format!("Error: {e}"))
@@ -3031,6 +3084,10 @@ impl AnnoRagServer {
         description = "Deprecated - use 'search(query, scope=\"legal\", filters={...})' instead. Continues to work."
     )]
     async fn legal_search(&self, Parameters(p): Parameters<LegalSearchParams>) -> String {
+        tracing::warn!(
+            tool = "legal_search",
+            "deprecated tool called; use canonical replacement"
+        );
         match self.legal_search_impl(p).await {
             Ok(value) => {
                 serde_json::to_string_pretty(&value).unwrap_or_else(|e| format!("Error: {e}"))
@@ -4072,6 +4129,10 @@ impl AnnoRagServer {
         &self,
         Parameters(p): Parameters<crate::knowledge::KnowledgeSearchParams>,
     ) -> String {
+        tracing::warn!(
+            tool = "knowledge_search",
+            "deprecated tool called; use canonical replacement"
+        );
         match self.knowledge_search_impl(p).await {
             Ok(result) => {
                 serde_json::to_string_pretty(&result).unwrap_or_else(|e| format!("Error: {e}"))
@@ -4094,6 +4155,10 @@ impl AnnoRagServer {
         &self,
         Parameters(p): Parameters<KnowledgeAddFolderParams>,
     ) -> String {
+        tracing::warn!(
+            tool = "knowledge_add_local_folder",
+            "deprecated tool called; use canonical replacement"
+        );
         match self.knowledge_add_local_folder_impl(&p.path).await {
             Ok(source_id) => serde_json::to_string_pretty(
                 &serde_json::json!({"ok": true, "source_id": source_id}),
@@ -4108,6 +4173,10 @@ impl AnnoRagServer {
         description = "Deprecated - use 'index(path)' (re-indexes idempotently). Continues to work."
     )]
     async fn knowledge_sync(&self, Parameters(p): Parameters<KnowledgeSyncParams>) -> String {
+        tracing::warn!(
+            tool = "knowledge_sync",
+            "deprecated tool called; use canonical replacement"
+        );
         if let Err(e) = self.knowledge().await {
             return format!("Error: {e}");
         }
@@ -4126,6 +4195,10 @@ impl AnnoRagServer {
     /// Remove an Anno knowledge source and all its indexed content.
     #[tool(description = "Deprecated - use 'forget(target)' instead. Continues to work.")]
     async fn knowledge_forget(&self, Parameters(p): Parameters<KnowledgeForgetParams>) -> String {
+        tracing::warn!(
+            tool = "knowledge_forget",
+            "deprecated tool called; use canonical replacement"
+        );
         match self.knowledge_forget_impl(p).await {
             Ok(removed) => serde_json::to_string_pretty(
                 &serde_json::json!({"ok": true, "removed_objects": removed}),
@@ -4202,6 +4275,26 @@ impl ServerHandler for AnnoRagServer {
                 self.cfg.mcp_server_name.clone(),
                 env!("CARGO_PKG_VERSION"),
             ))
+    }
+
+    /// List available tools, hiding deprecated tools unless `ANNO_EXPOSE_DEPRECATED=1`.
+    ///
+    /// Deprecated tools remain callable via `call_tool` — they are only hidden
+    /// from discovery. Spec C §4 (U4) + §11 (D2).
+    async fn list_tools(
+        &self,
+        _request: Option<rmcp::model::PaginatedRequestParams>,
+        _context: rmcp::service::RequestContext<rmcp::RoleServer>,
+    ) -> Result<rmcp::model::ListToolsResult, rmcp::ErrorData> {
+        let mut tools = self.tool_router.list_all();
+        if !crate::deprecated::expose_deprecated() {
+            tools.retain(|t| !crate::deprecated::DEPRECATED_TOOLS.contains(&t.name.as_ref()));
+        }
+        Ok(rmcp::model::ListToolsResult {
+            tools,
+            meta: None,
+            next_cursor: None,
+        })
     }
 }
 
@@ -5958,5 +6051,43 @@ mod not_ready_envelope_tests {
         let v = crate::not_ready_envelope("idle", 0, None);
         assert_eq!(v["status"], status::NOT_READY);
         assert_eq!(v["warmup"]["phase"], "idle");
+    }
+
+    /// Spec C D2/§11 — canonical `service_status` must return the same JSON as
+    /// the deprecated `status` when both delegate to `status_impl_routing`.
+    #[tokio::test(flavor = "current_thread")]
+    async fn canonical_service_status_matches_legacy() {
+        use crate::AnnoRagServer;
+        use anno_rag::config::AnnoRagConfig;
+        let dir = tempfile::tempdir().unwrap();
+        let cfg = AnnoRagConfig {
+            data_dir: dir.path().to_path_buf(),
+            ..Default::default()
+        };
+        let server = AnnoRagServer::new_lazy(cfg, [0u8; 32]);
+        assert_eq!(server.service_status().await, server.status().await);
+    }
+
+    /// Spec C D2/§11 — canonical `forget_source` must return the same JSON as
+    /// the deprecated `forget` for an unknown target (no models needed).
+    #[tokio::test(flavor = "current_thread")]
+    async fn canonical_forget_source_matches_legacy() {
+        use crate::{AnnoRagServer, ForgetParams};
+        use anno_rag::config::AnnoRagConfig;
+        use rmcp::handler::server::wrapper::Parameters;
+        let dir = tempfile::tempdir().unwrap();
+        let cfg = AnnoRagConfig {
+            data_dir: dir.path().to_path_buf(),
+            ..Default::default()
+        };
+        let server = AnnoRagServer::new_lazy(cfg, [0u8; 32]);
+        let target = "00000000-0000-0000-0000-000000000000".to_string();
+        let canonical = server
+            .forget_source(Parameters(ForgetParams {
+                target: target.clone(),
+            }))
+            .await;
+        let legacy = server.forget(Parameters(ForgetParams { target })).await;
+        assert_eq!(canonical, legacy);
     }
 }
