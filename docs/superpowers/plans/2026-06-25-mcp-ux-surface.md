@@ -847,17 +847,22 @@ fn not_ready_envelope_carries_warmup() {
 
 ```rust
 /// Standard `not_ready` response while models warm up. Spec C U8.
-pub(crate) fn not_ready_envelope(phase: &str, elapsed_s: u64, eta_seconds: Option<u64>) -> serde_json::Value {
-    let human = match phase {
+pub(crate) fn not_ready_envelope(phase: &str, elapsed_ms: u64, eta_seconds: Option<u64>) -> serde_json::Value {
+    let eta_human: Option<&str> = match phase {
+        "downloading" => Some("~10–15 min (premier lancement)"),
+        "loading" => Some("~1–2 min"),
+        _ => None,
+    };
+    let msg = match phase {
         "downloading" => "Téléchargement des modèles en cours (~10–15 min au premier lancement).",
         "loading" => "Chargement des modèles en cours (~1–2 min).",
         _ => "Initialisation des modèles en cours.",
     };
     crate::envelope::envelope(
         crate::envelope::status::NOT_READY,
-        human,
+        msg,
         "Réessayez dans un instant ; suivez la progression via status().",
-        serde_json::json!({ "warmup": { "phase": phase, "elapsed_s": elapsed_s, "eta_seconds": eta_seconds } }),
+        serde_json::json!({ "warmup": { "phase": phase, "elapsed_ms": elapsed_ms, "eta_seconds": eta_seconds, "eta_human": eta_human } }),
     )
 }
 ```
@@ -905,7 +910,7 @@ git commit -m "feat(mcp): not_ready envelope + proactive warmup at boot (Spec C 
 
 - [ ] **Step 1: Confirm how `#[tool_handler]` generates `list_tools`**
 
-Run: `rg "tool_handler|list_tools|call_tool" crates/anno-rag-mcp/src/lib.rs` and read the rmcp 1.6 macro docs note at the top of `lib.rs`. Determine whether `#[tool_handler]` lets us override `list_tools` (provide our own that calls the generated router and filters), or whether we must implement `list_tools` manually. **This gates the mechanism** — if override isn't possible, fall back to gating registration with a `cfg`/const list at `tool_router` build time.
+Run: `rg "tool_handler|list_tools|call_tool" crates/anno-rag-mcp/src/lib.rs` and read the rmcp 1.6 macro docs note at the top of `lib.rs`. Confirm that `#[tool_handler]` exposes `self.tool_router` so we can override `list_tools` by calling `self.tool_router.list_tools(req, ctx).await?` then filtering. **Do not** prune tools at registration time — deprecated handlers must remain callable via `call_tool`.
 
 - [ ] **Step 2: Write the failing test**
 

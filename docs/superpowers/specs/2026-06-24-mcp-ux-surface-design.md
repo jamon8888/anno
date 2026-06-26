@@ -28,7 +28,7 @@ Toute réponse structurée d'outil porte un champ `status` de haut niveau (chaî
 | `corpus_required` | désambiguïsation existante (inchangée) | `available[]` |
 | `setup_required` | vault/modèles non configurés (cold start) | `next_step` |
 | `not_ready` | modèles encore en warmup | `warmup{phase, elapsed_ms, eta_seconds, eta_human}` |
-| `degraded` | service partiel — un sous-système est en erreur non-fatale | `failing_component` |
+| `degraded` | service partiel — sous-système en erreur non-fatale **ou** dégradation volontaire par design (ex. fallback lexical) | `failing_component` (ex. `"semantic_ranking"`, `"kg_unavailable"`) |
 
 **Règle de cohérence** : `status` toujours présent ; `message` = prose humaine ; `hint` = action suivante ; le reste est charge utile. L'enveloppe `corpus_required` actuelle (`status`/`message`/`available`/`hint`) est déjà conforme — aucun churn dessus.
 
@@ -114,7 +114,7 @@ Un seul champ sur l'outil d'entrée existant — **pas de nouvel outil « guide 
 
 **Design**, deux parties :
 - **(a) Warmup proactif** : démarrer le warmup en arrière-plan au boot du serveur (non bloquant) pour que l'horloge des 10–15 min démarre immédiatement. *Changement de comportement* (aujourd'hui lazy, `serve_stdio_lazy_warmup_phase_starts_idle`) — voir §7, risque 3.
-- **(b) ETA** : tant que `warmup_phase != Ready`, tout outil nécessitant les modèles renvoie `status: not_ready` avec `warmup{phase, elapsed_ms, eta}`. ETA grossière basée sur la phase, pas une fausse précision en secondes :
+- **(b) ETA** : tant que `warmup_phase != Ready`, tout outil nécessitant les modèles renvoie `status: not_ready` avec `warmup{phase, elapsed_ms, eta_seconds, eta_human}`. ETA grossière basée sur la phase, pas une fausse précision en secondes :
   - `Downloading` → *« ~10–15 min (premier lancement) »*
   - `Loading` → *« ~1–2 min »*
 
@@ -127,7 +127,7 @@ L'état `warmup_phase` (Idle/Downloading/Loading/Ready/Failed) existe déjà et 
 **Constat** : les paramètres `mode`/`scope` sont déjà optionnels et `auto` auto-sélectionne déjà selon le scope ([lib.rs:2258](../../../crates/anno-rag-mcp/src/lib.rs#L2258)). Le vrai foot-gun n'est pas le défaut — c'est que **certaines combinaisons renvoient une erreur** (`mode=fast` + `scope=legal` → erreur).
 
 **Design** : rendre la matrice `mode × scope` **totale — aucune combinaison ne renvoie d'erreur**. Les paires aujourd'hui invalides dégradent proprement au lieu d'échouer :
-- `mode=fast` + `scope=legal` → passe lexicale rapide sur le scope légal, avec `status: degraded` + `hint` (« recherche rapide ; relancez en mode=semantic pour le ranking légal complet »).
+- `mode=fast` + `scope=legal` → passe lexicale rapide sur le scope légal, avec `status: degraded` + `failing_component: "semantic_ranking"` + `hint` (« recherche rapide ; relancez en mode=semantic pour le ranking légal complet »).
 
 Aucun changement de signature de paramètre → non-breaking. Combiné à la réécriture par exemples de §3, l'agent ne peut plus composer un appel cassé. C'est la « simplification sémantique » de U3 sans rupture : chaque appel est valide.
 
