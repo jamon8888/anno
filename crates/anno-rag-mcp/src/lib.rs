@@ -25,6 +25,7 @@ mod params;
 mod review;
 mod search;
 pub mod tabular;
+mod warmup_history;
 mod wire;
 
 use crate::allowed_roots::AllowedRoots;
@@ -1070,6 +1071,12 @@ impl AnnoRagServer {
             crate::model_inventory::ModelInventoryService::new(self.cfg.as_ref()).inspect();
         let loaded = self.pipeline_arc();
         let warmup_info = {
+            let models_dir = crate::model_inventory::effective_models_dir(self.cfg.as_ref()).path;
+            let hist = crate::warmup_history::load(&models_dir);
+            let now_ms = std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap_or_default()
+                .as_millis() as u64;
             let phase = self.warmup_phase.read().await;
             match &*phase {
                 WarmupPhase::Idle => serde_json::json!({ "phase": "idle" }),
@@ -1077,20 +1084,17 @@ impl AnnoRagServer {
                     started_ms,
                     progress_pct,
                 } => {
-                    let elapsed_s = std::time::SystemTime::now()
-                        .duration_since(std::time::UNIX_EPOCH)
-                        .unwrap_or_default()
-                        .as_secs()
-                        .saturating_sub(started_ms / 1000);
-                    serde_json::json!({ "phase": "downloading", "elapsed_s": elapsed_s, "download_progress_pct": progress_pct })
+                    let elapsed_ms = now_ms.saturating_sub(*started_ms);
+                    let elapsed_s = elapsed_ms / 1000;
+                    let eta_seconds =
+                        crate::warmup_history::eta_seconds(hist.download_ms, elapsed_ms);
+                    serde_json::json!({ "phase": "downloading", "elapsed_s": elapsed_s, "download_progress_pct": progress_pct, "eta_seconds": eta_seconds })
                 }
                 WarmupPhase::Loading { started_ms } => {
-                    let elapsed_s = std::time::SystemTime::now()
-                        .duration_since(std::time::UNIX_EPOCH)
-                        .unwrap_or_default()
-                        .as_secs()
-                        .saturating_sub(started_ms / 1000);
-                    serde_json::json!({ "phase": "loading", "elapsed_s": elapsed_s })
+                    let elapsed_ms = now_ms.saturating_sub(*started_ms);
+                    let elapsed_s = elapsed_ms / 1000;
+                    let eta_seconds = crate::warmup_history::eta_seconds(hist.load_ms, elapsed_ms);
+                    serde_json::json!({ "phase": "loading", "elapsed_s": elapsed_s, "eta_seconds": eta_seconds })
                 }
                 WarmupPhase::Ready { elapsed_ms } => {
                     serde_json::json!({ "phase": "ready", "elapsed_ms": elapsed_ms })
@@ -4323,7 +4327,14 @@ pub async fn serve_stdio_lazy(cfg: AnnoRagConfig, key: [u8; 32]) -> anno_rag::er
                 tracing::info!("anno-rag: model download complete");
             }
         }
-        *warmup_server.warmup_phase.write().await = WarmupPhase::Loading { started_ms };
+        let load_started_ms = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap_or_default()
+            .as_millis() as u64;
+        let download_ms = load_started_ms.saturating_sub(started_ms);
+        *warmup_server.warmup_phase.write().await = WarmupPhase::Loading {
+            started_ms: load_started_ms,
+        };
 
         // Step 1: init Pipeline struct (opens LanceDB + vault, ~2 s).
         let pipeline_arc = match warmup_server.pipeline().await {
@@ -4348,14 +4359,24 @@ pub async fn serve_stdio_lazy(cfg: AnnoRagConfig, key: [u8; 32]) -> anno_rag::er
         // Step 2: load embedder + detector in parallel (detector in spawn_blocking).
         let outcome = arc.warmup().await;
 
-        let elapsed_ms = (std::time::SystemTime::now()
+        let load_ms = (std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)
             .unwrap_or_default()
             .as_millis() as u64)
-            .saturating_sub(started_ms);
+            .saturating_sub(load_started_ms);
+        let elapsed_ms = download_ms + load_ms;
 
         if outcome.all_ok() {
             tracing::info!(elapsed_ms, "anno-rag: background model warmup complete");
+            let models_dir =
+                crate::model_inventory::effective_models_dir(warmup_server.cfg.as_ref()).path;
+            crate::warmup_history::save(
+                &models_dir,
+                &crate::warmup_history::WarmupHistory {
+                    download_ms: Some(download_ms),
+                    load_ms: Some(load_ms),
+                },
+            );
             *warmup_server.warmup_phase.write().await = WarmupPhase::Ready { elapsed_ms };
         } else {
             let error = [
