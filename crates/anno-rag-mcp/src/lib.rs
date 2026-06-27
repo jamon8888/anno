@@ -724,6 +724,7 @@ impl AnnoRagServer {
             let job_id_progress = job_id_task.clone();
             tokio::spawn(async move {
                 let Ok(ks) = crate::knowledge::KnowledgeService::open(&cfg_progress) else {
+                    tracing::warn!("ingest progress watcher: KnowledgeService::open failed — files_done will not update during ingest");
                     return;
                 };
                 while progress_rx.changed().await.is_ok() {

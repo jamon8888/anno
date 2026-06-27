@@ -482,7 +482,7 @@ impl Pipeline {
         // Batch-embed all pseudonymized chunks at once for throughput.
         // spawn_blocking keeps the Tokio executor free during the BERT forward pass.
         let vectors = Arc::clone(self.embedder().await?)
-            .embed_batch_async(pseudo_chunks.clone())
+            .embed_batch_async(&pseudo_chunks)
             .await?;
         if vectors.len() != pseudo_chunks.len() {
             return Err(Error::Embed(format!(
@@ -744,6 +744,7 @@ impl Pipeline {
         progress_tx: Option<tokio::sync::watch::Sender<u64>>,
     ) -> Result<LegalIngestSummary> {
         let mut summary = LegalIngestSummary::default();
+        let mut files_processed: u64 = 0;
         let mut ocr_spent = Duration::ZERO;
         let ocr_budget = self.cfg.ocr_batch_budget_secs.map(Duration::from_secs);
         let paths = legal_ingest_candidate_paths(folder, recursive, output_dir);
@@ -762,9 +763,6 @@ impl Pipeline {
                         ocr_spent += started.elapsed();
                     }
                     summary.ingested += 1;
-                    if let Some(ref tx) = progress_tx {
-                        let _ = tx.send(summary.ingested as u64);
-                    }
                     if let Some(document) = document {
                         summary.documents.push(document);
                     }
@@ -778,6 +776,12 @@ impl Pipeline {
                 Err(e) => {
                     tracing::warn!(path = %p.display(), error = %e, "ingest skipped");
                 }
+            }
+            // Advance the processed counter for every file outcome so real-time
+            // progress reflects walk position, not just new inserts.
+            files_processed += 1;
+            if let Some(ref tx) = progress_tx {
+                let _ = tx.send(files_processed);
             }
         }
         // Retry pending legal enrichments first so newly-re-enriched docs
@@ -812,7 +816,7 @@ impl Pipeline {
     pub async fn search(&self, query: &str, top_k: usize) -> Result<Vec<SearchHit>> {
         let pseudo_q = self.pseudonymize_query(query).await?;
         let qv = Arc::clone(self.embedder().await?)
-            .embed_query_async(pseudo_q.clone())
+            .embed_query_async(&pseudo_q)
             .await?;
         self.store.search(&pseudo_q, &qv, top_k).await
     }
@@ -1089,7 +1093,7 @@ impl Pipeline {
         let (tokenized, token_refs) = self.vault.pseudonymize_with_refs(text, &entities).await?;
 
         let mut embedding = Arc::clone(self.embedder().await?)
-            .embed_batch_async(vec![tokenized.clone()])
+            .embed_batch_async(std::slice::from_ref(&tokenized))
             .await?;
         let embedding = embedding
             .pop()
@@ -1162,8 +1166,9 @@ impl Pipeline {
         session_id: Option<String>,
         ner_mode: MemoryNerMode,
     ) -> Result<SavedMemory> {
+        let text_owned = text.to_owned();
         let mut embedding = Arc::clone(self.embedder().await?)
-            .embed_batch_async(vec![text.to_string()])
+            .embed_batch_async(std::slice::from_ref(&text_owned))
             .await?;
         let embedding = embedding
             .pop()
@@ -1302,7 +1307,7 @@ impl Pipeline {
         let entities = self.detector_get_or_init()?.detect(query)?;
         let (tokenized_query, _) = self.vault.pseudonymize_with_refs(query, &entities).await?;
         let query_vec = Arc::clone(self.embedder().await?)
-            .embed_query_async(tokenized_query.clone())
+            .embed_query_async(&tokenized_query)
             .await?;
 
         self.ensure_memory_searchable().await?;
@@ -2144,7 +2149,7 @@ impl Pipeline {
         let entities = self.detector_get_or_init()?.detect(query)?;
         let pseudo_q = self.vault.pseudonymize(query, &entities).await?;
         let qv = Arc::clone(self.embedder().await?)
-            .embed_query_async(pseudo_q.clone())
+            .embed_query_async(&pseudo_q)
             .await?;
 
         let chunk_hits = if filters.has_any_filter() {
@@ -2185,7 +2190,7 @@ impl Pipeline {
         let entities = self.detector_get_or_init()?.detect(query)?;
         let pseudo_q = self.vault.pseudonymize(query, &entities).await?;
         let qv = Arc::clone(self.embedder().await?)
-            .embed_query_async(pseudo_q.clone())
+            .embed_query_async(&pseudo_q)
             .await?;
         let corpus_chunk_ids = self.store.chunk_ids_for_docs(allowed_doc_ids).await?;
         let allowed = if filters.has_any_filter() {

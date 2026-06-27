@@ -184,7 +184,8 @@ impl Embedder {
     ///
     /// # Errors
     /// Propagates [`Error::Embed`] from [`embed_batch`] or if the thread panics.
-    pub async fn embed_batch_async(self: Arc<Self>, texts: Vec<String>) -> Result<Vec<Vec<f32>>> {
+    pub async fn embed_batch_async(self: Arc<Self>, texts: &[String]) -> Result<Vec<Vec<f32>>> {
+        let texts = texts.to_vec();
         tokio::task::spawn_blocking(move || self.embed_batch(&texts))
             .await
             .map_err(|e| Error::Embed(format!("embed thread panicked: {e}")))?
@@ -194,7 +195,8 @@ impl Embedder {
     ///
     /// # Errors
     /// Propagates [`Error::Embed`] from [`embed_query`] or if the thread panics.
-    pub async fn embed_query_async(self: Arc<Self>, text: String) -> Result<Vec<f32>> {
+    pub async fn embed_query_async(self: Arc<Self>, text: &str) -> Result<Vec<f32>> {
+        let text = text.to_owned();
         tokio::task::spawn_blocking(move || self.embed_query(&text))
             .await
             .map_err(|e| Error::Embed(format!("embed thread panicked: {e}")))?
