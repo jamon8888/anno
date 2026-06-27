@@ -98,9 +98,22 @@ jobs:
           SEMVER: ${{ steps.ver.outputs.semver }}
         run: |
           node -e "
-            const c = JSON.parse(require('fs').readFileSync('tauri.conf.json','utf-8'));
-            c.version = process.env.SEMVER;
-            require('fs').writeFileSync('tauri.conf.json', JSON.stringify(c, null, 2) + '\n');
+            const fs = require('fs');
+            // WiX/MSI requires any pre-release identifier to be numeric-only (<= 65535).
+            // Map a semver pre-release (e.g. 0.15.0-rc.1) to a numeric 4th field
+            // (-> 0.15.0-1, i.e. MSI ProductVersion 0.15.0.1); drop it when it has no
+            // digits. Plain x.y.z release tags pass through unchanged.
+            const raw = process.env.SEMVER;
+            const [core, pre] = raw.split('-');
+            let version = core;
+            if (pre) {
+              const m = pre.match(/[0-9]+/);
+              if (m && Number(m[0]) <= 65535) version = core + '-' + m[0];
+            }
+            const c = JSON.parse(fs.readFileSync('tauri.conf.json','utf-8'));
+            c.version = version;
+            fs.writeFileSync('tauri.conf.json', JSON.stringify(c, null, 2) + '\n');
+            console.log('tauri.conf.json bundle version = ' + version + ' (from tag ' + raw + ')');
           "
 
       - name: Build Tauri installer
