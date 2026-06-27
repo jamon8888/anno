@@ -26,6 +26,10 @@ vlm-ocr = ["anno-rag-tabular/vlm-ocr"]
 name = "anno-rag"
 path = "src/main.rs"
 
+[[bin]]
+name = "anno-rag-dev"
+path = "src/main.rs"
+
 [dependencies]
 anno-rag         = { path = "../anno-rag" }
 anno-rag-mcp     = { path = "../anno-rag-mcp" }

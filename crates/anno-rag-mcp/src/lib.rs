@@ -716,9 +716,25 @@ impl AnnoRagServer {
         tokio::task::spawn(async move {
             let start = std::time::Instant::now();
 
+            // Real-time progress: pipeline signals this channel after each file;
+            // the watcher task writes files_done to SQLite without blocking ingest.
+            // Sender drop (when ingest future completes) causes the watcher to exit.
+            let (progress_tx, mut progress_rx) = tokio::sync::watch::channel(0u64);
+            let cfg_progress = Arc::clone(&cfg_arc);
+            let job_id_progress = job_id_task.clone();
+            tokio::spawn(async move {
+                let Ok(ks) = crate::knowledge::KnowledgeService::open(&cfg_progress) else {
+                    return;
+                };
+                while progress_rx.changed().await.is_ok() {
+                    let count = *progress_rx.borrow_and_update();
+                    let _ = ks.update_job_progress(&job_id_progress, count as i64);
+                }
+            });
+
             let ingest_result = if let Some(corpus_id) = corpus_id {
                 pipeline_arc
-                    .ingest_folder_scoped_summary(
+                    .ingest_folder_scoped_summary_with_progress(
                         &folder_task,
                         recursive,
                         &out_task,
@@ -726,11 +742,17 @@ impl AnnoRagServer {
                             corpus_id,
                             root: folder_task.clone(),
                         },
+                        Some(progress_tx),
                     )
                     .await
             } else {
                 pipeline_arc
-                    .ingest_folder(&folder_task, recursive, &out_task)
+                    .ingest_folder_with_progress(
+                        &folder_task,
+                        recursive,
+                        &out_task,
+                        Some(progress_tx),
+                    )
                     .await
                     .map(|ingested| anno_rag::pipeline::LegalIngestSummary {
                         ingested,
@@ -738,7 +760,7 @@ impl AnnoRagServer {
                     })
             };
 
-            // Re-open knowledge store for progress/status updates.
+            // Re-open knowledge store for final progress/status writes.
             let knowledge_task = crate::knowledge::KnowledgeService::open(&cfg_arc).ok();
 
             match ingest_result {

@@ -199,6 +199,30 @@ half = { opt-level = 2 }
 rayon = { opt-level = 2 }
 ort = { opt-level = 2 }
 
+# Dev loop with basic optimizations: our code at opt=1, ML deps at opt=3.
+# Gives near-release ML throughput (BERT/GLiNER2) with fast-enough compile times.
+# Use: cargo build --profile dev-fast-opt --bin anno-rag-dev
+[profile.dev-fast-opt]
+inherits = "dev-fast"
+opt-level = 1
+codegen-units = 16
+
+[profile.dev-fast-opt.build-override]
+debug = 0
+opt-level = 0
+codegen-units = 512
+
+[profile.dev-fast-opt.package]
+ndarray = { opt-level = 3 }
+candle-core = { opt-level = 3 }
+candle-nn = { opt-level = 3 }
+candle-transformers = { opt-level = 3 }
+tokenizers = { opt-level = 3 }
+safetensors = { opt-level = 3 }
+half = { opt-level = 3 }
+rayon = { opt-level = 3 }
+ort = { opt-level = 3 }
+
 # This is a virtual workspace. The published `anno` crate lives at `crates/anno/`.
 # Local development overrides (path patches) live in `.cargo/config.toml`.
 # See `.cargo/config.toml.example` for the super-workspace setup.

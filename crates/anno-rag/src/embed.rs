@@ -14,6 +14,7 @@ use crate::error::{Error, Result};
 use candle_core::{DType, Device, Tensor};
 use candle_nn::VarBuilder;
 use candle_transformers::models::bert::{BertModel, Config};
+use std::sync::Arc;
 use tokenizers::Tokenizer;
 
 const MAX_EMBED_TOKENS: usize = 512;
@@ -175,6 +176,28 @@ impl Embedder {
         let mut v = self.embed_prefixed(std::slice::from_ref(&text.to_string()), "query: ")?;
         v.pop()
             .ok_or_else(|| Error::Embed("embed_query produced no vector".into()))
+    }
+
+    /// Async embed_batch — offloads the blocking BERT forward pass to the
+    /// blocking thread pool so the Tokio executor stays responsive under
+    /// concurrent MCP requests (search + background ingest).
+    ///
+    /// # Errors
+    /// Propagates [`Error::Embed`] from [`embed_batch`] or if the thread panics.
+    pub async fn embed_batch_async(self: Arc<Self>, texts: Vec<String>) -> Result<Vec<Vec<f32>>> {
+        tokio::task::spawn_blocking(move || self.embed_batch(&texts))
+            .await
+            .map_err(|e| Error::Embed(format!("embed thread panicked: {e}")))?
+    }
+
+    /// Async embed_query — same as [`embed_batch_async`] but for a single query vector.
+    ///
+    /// # Errors
+    /// Propagates [`Error::Embed`] from [`embed_query`] or if the thread panics.
+    pub async fn embed_query_async(self: Arc<Self>, text: String) -> Result<Vec<f32>> {
+        tokio::task::spawn_blocking(move || self.embed_query(&text))
+            .await
+            .map_err(|e| Error::Embed(format!("embed thread panicked: {e}")))?
     }
 
     /// Shared embed path: prefix every input, tokenize, forward, mean-pool,
