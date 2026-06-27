@@ -954,18 +954,7 @@ impl LegalKnowledgeGraph for SqliteLegalGraphStore {
     }
 
     async fn document_has_kg_nodes(&self, doc_id: Uuid) -> Result<bool> {
-        self.with_conn(|conn| {
-            let mut stmt = conn
-                .prepare("SELECT 1 FROM legal_nodes WHERE doc_id = ?1 LIMIT 1")
-                .map_err(sql_err)?;
-            let exists = stmt
-                .query(rusqlite::params![doc_id.to_string()])
-                .map_err(sql_err)?
-                .next()
-                .map_err(sql_err)?
-                .is_some();
-            Ok(exists)
-        })
+        SqliteLegalGraphStore::document_has_kg_nodes(self, doc_id)
     }
 
     async fn cypher(
@@ -1456,7 +1445,9 @@ pub(crate) mod tests {
         let doc = Uuid::new_v4();
 
         assert!(
-            !store.document_has_kg_nodes(doc).unwrap(),
+            !<SqliteLegalGraphStore as LegalKnowledgeGraph>::document_has_kg_nodes(&store, doc)
+                .await
+                .unwrap(),
             "empty graph should return false"
         );
 
@@ -1468,7 +1459,9 @@ pub(crate) mod tests {
             .expect("upsert");
 
         assert!(
-            store.document_has_kg_nodes(doc).unwrap(),
+            <SqliteLegalGraphStore as LegalKnowledgeGraph>::document_has_kg_nodes(&store, doc)
+                .await
+                .unwrap(),
             "after insert should return true"
         );
     }

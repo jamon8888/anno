@@ -480,7 +480,10 @@ impl Pipeline {
         }
 
         // Batch-embed all pseudonymized chunks at once for throughput.
-        let vectors = self.embedder().await?.embed_batch(&pseudo_chunks)?;
+        // spawn_blocking keeps the Tokio executor free during the BERT forward pass.
+        let vectors = Arc::clone(self.embedder().await?)
+            .embed_batch_async(&pseudo_chunks)
+            .await?;
         if vectors.len() != pseudo_chunks.len() {
             return Err(Error::Embed(format!(
                 "vectors len {} != chunks len {}",
@@ -643,7 +646,25 @@ impl Pipeline {
         output_dir: &Path,
     ) -> Result<usize> {
         Ok(self
-            .ingest_folder_with_scope(folder, recursive, output_dir, None)
+            .ingest_folder_with_scope(folder, recursive, output_dir, None, None)
+            .await?
+            .ingested)
+    }
+
+    /// Like [`ingest_folder`] but reports per-file progress via a watch channel.
+    ///
+    /// The sender is signalled after each successfully-ingested file with the
+    /// running total. Dropping the sender before the future completes is safe —
+    /// send errors are silently ignored.
+    pub async fn ingest_folder_with_progress(
+        &self,
+        folder: &Path,
+        recursive: bool,
+        output_dir: &Path,
+        progress_tx: Option<tokio::sync::watch::Sender<u64>>,
+    ) -> Result<usize> {
+        Ok(self
+            .ingest_folder_with_scope(folder, recursive, output_dir, None, progress_tx)
             .await?
             .ingested)
     }
@@ -657,7 +678,7 @@ impl Pipeline {
         scope: LegalIngestScope,
     ) -> Result<usize> {
         Ok(self
-            .ingest_folder_scoped_summary(folder, recursive, output_dir, scope)
+            .ingest_folder_with_scope(folder, recursive, output_dir, Some(scope), None)
             .await?
             .ingested)
     }
@@ -670,7 +691,24 @@ impl Pipeline {
         output_dir: &Path,
         scope: LegalIngestScope,
     ) -> Result<LegalIngestSummary> {
-        self.ingest_folder_with_scope(folder, recursive, output_dir, Some(scope))
+        self.ingest_folder_with_scope(folder, recursive, output_dir, Some(scope), None)
+            .await
+    }
+
+    /// Like [`ingest_folder_scoped_summary`] but reports per-file progress via a watch channel.
+    ///
+    /// The sender is signalled after each successfully-ingested file with the
+    /// running total. The watcher task in the MCP layer consumes these to update
+    /// `index_jobs.files_done` in real time without blocking ingest.
+    pub async fn ingest_folder_scoped_summary_with_progress(
+        &self,
+        folder: &Path,
+        recursive: bool,
+        output_dir: &Path,
+        scope: LegalIngestScope,
+        progress_tx: Option<tokio::sync::watch::Sender<u64>>,
+    ) -> Result<LegalIngestSummary> {
+        self.ingest_folder_with_scope(folder, recursive, output_dir, Some(scope), progress_tx)
             .await
     }
 
@@ -703,8 +741,10 @@ impl Pipeline {
         recursive: bool,
         output_dir: &Path,
         scope: Option<LegalIngestScope>,
+        progress_tx: Option<tokio::sync::watch::Sender<u64>>,
     ) -> Result<LegalIngestSummary> {
         let mut summary = LegalIngestSummary::default();
+        let mut files_processed: u64 = 0;
         let mut ocr_spent = Duration::ZERO;
         let ocr_budget = self.cfg.ocr_batch_budget_secs.map(Duration::from_secs);
         let paths = legal_ingest_candidate_paths(folder, recursive, output_dir);
@@ -736,6 +776,12 @@ impl Pipeline {
                 Err(e) => {
                     tracing::warn!(path = %p.display(), error = %e, "ingest skipped");
                 }
+            }
+            // Advance the processed counter for every file outcome so real-time
+            // progress reflects walk position, not just new inserts.
+            files_processed += 1;
+            if let Some(ref tx) = progress_tx {
+                let _ = tx.send(files_processed);
             }
         }
         // Retry pending legal enrichments first so newly-re-enriched docs
@@ -769,7 +815,9 @@ impl Pipeline {
     /// Search: pseudonymize query → embed → store.search.
     pub async fn search(&self, query: &str, top_k: usize) -> Result<Vec<SearchHit>> {
         let pseudo_q = self.pseudonymize_query(query).await?;
-        let qv = self.embedder().await?.embed_query(&pseudo_q)?;
+        let qv = Arc::clone(self.embedder().await?)
+            .embed_query_async(&pseudo_q)
+            .await?;
         self.store.search(&pseudo_q, &qv, top_k).await
     }
 
@@ -1044,10 +1092,9 @@ impl Pipeline {
         let entities = self.detector_get_or_init()?.detect(text)?;
         let (tokenized, token_refs) = self.vault.pseudonymize_with_refs(text, &entities).await?;
 
-        let mut embedding = self
-            .embedder()
-            .await?
-            .embed_batch(std::slice::from_ref(&tokenized))?;
+        let mut embedding = Arc::clone(self.embedder().await?)
+            .embed_batch_async(std::slice::from_ref(&tokenized))
+            .await?;
         let embedding = embedding
             .pop()
             .ok_or_else(|| Error::Embed("embed_batch returned no vector for memory".into()))?;
@@ -1119,7 +1166,10 @@ impl Pipeline {
         session_id: Option<String>,
         ner_mode: MemoryNerMode,
     ) -> Result<SavedMemory> {
-        let mut embedding = self.embedder().await?.embed_batch(&[text.to_string()])?;
+        let text_owned = text.to_owned();
+        let mut embedding = Arc::clone(self.embedder().await?)
+            .embed_batch_async(std::slice::from_ref(&text_owned))
+            .await?;
         let embedding = embedding
             .pop()
             .ok_or_else(|| Error::Embed("embed_batch returned no vector for memory".into()))?;
@@ -1256,7 +1306,9 @@ impl Pipeline {
     ) -> Result<Vec<crate::memory::MemoryHit>> {
         let entities = self.detector_get_or_init()?.detect(query)?;
         let (tokenized_query, _) = self.vault.pseudonymize_with_refs(query, &entities).await?;
-        let query_vec = self.embedder().await?.embed_query(&tokenized_query)?;
+        let query_vec = Arc::clone(self.embedder().await?)
+            .embed_query_async(&tokenized_query)
+            .await?;
 
         self.ensure_memory_searchable().await?;
 
@@ -2096,7 +2148,9 @@ impl Pipeline {
     ) -> Result<Vec<crate::legal::types::LegalSearchHit>> {
         let entities = self.detector_get_or_init()?.detect(query)?;
         let pseudo_q = self.vault.pseudonymize(query, &entities).await?;
-        let qv = self.embedder().await?.embed_query(&pseudo_q)?;
+        let qv = Arc::clone(self.embedder().await?)
+            .embed_query_async(&pseudo_q)
+            .await?;
 
         let chunk_hits = if filters.has_any_filter() {
             let allowed = self
@@ -2135,7 +2189,9 @@ impl Pipeline {
         }
         let entities = self.detector_get_or_init()?.detect(query)?;
         let pseudo_q = self.vault.pseudonymize(query, &entities).await?;
-        let qv = self.embedder().await?.embed_query(&pseudo_q)?;
+        let qv = Arc::clone(self.embedder().await?)
+            .embed_query_async(&pseudo_q)
+            .await?;
         let corpus_chunk_ids = self.store.chunk_ids_for_docs(allowed_doc_ids).await?;
         let allowed = if filters.has_any_filter() {
             let business = self
