@@ -2854,7 +2854,12 @@ mod tests {
         let doc_b = super::scoped_doc_uuid(corpus_b, "contract.pdf", &content);
 
         assert_ne!(doc_a, doc_b);
-        assert_eq!(super::doc_uuid(bytes), super::doc_uuid(bytes));
+        // Scoped UUIDs must be deterministic and differ from the unscoped hash.
+        assert_eq!(
+            doc_a,
+            super::scoped_doc_uuid(corpus_a, "contract.pdf", &content)
+        );
+        assert_ne!(doc_a, super::doc_uuid(bytes));
     }
 
     #[test]

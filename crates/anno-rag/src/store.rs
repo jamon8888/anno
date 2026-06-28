@@ -978,9 +978,11 @@ impl Store {
     /// # Errors
     /// Returns [`Error::Store`] if the LanceDB count fails.
     pub async fn count_chunks(&self) -> Result<u64> {
+        // count_rows(None) uses manifest statistics which can be zeroed out
+        // after FTS index creation. A trivially-true filter forces a real scan.
         let n = self
             .tbl
-            .count_rows(None)
+            .count_rows(Some("doc_id IS NOT NULL".to_string()))
             .await
             .map_err(|e| Error::Store(format!("chunks count_rows: {e}")))?;
         Ok(n as u64)
