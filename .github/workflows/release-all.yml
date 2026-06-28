@@ -146,7 +146,7 @@ jobs:
           VERSION=${{ steps.ver.outputs.tag }}
           BIN=./target/${{ matrix.target }}/release/anno-rag${{ runner.os == 'Windows' && '.exe' || '' }}
           if [[ "${{ runner.os }}" == "Windows" ]]; then
-            zip anno-rag-${VERSION}-${{ matrix.target }}-${{ matrix.variant }}.zip "${BIN}"
+            7z a anno-rag-${VERSION}-${{ matrix.target }}-${{ matrix.variant }}.zip "${BIN}"
             echo "BIN_ARTIFACT=anno-rag-${VERSION}-${{ matrix.target }}-${{ matrix.variant }}.zip" >> $GITHUB_ENV
           else
             tar -czf anno-rag-${VERSION}-${{ matrix.target }}-${{ matrix.variant }}.tar.gz "${BIN}"
