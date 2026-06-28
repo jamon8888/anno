@@ -116,6 +116,7 @@ enum IngestOutcome {
         document: Option<LegalIngestedDocument>,
     },
     AlreadyIndexed {
+        doc_id: uuid::Uuid,
         document: Option<LegalIngestedDocument>,
     },
     Skipped,
@@ -427,6 +428,7 @@ impl Pipeline {
         if self.store.doc_exists(doc_id).await? {
             tracing::info!(path = %path.display(), "skip: already ingested (same content)");
             return Ok(IngestOutcome::AlreadyIndexed {
+                doc_id,
                 document: scoped_document(),
             });
         }
@@ -767,41 +769,37 @@ impl Pipeline {
                         summary.documents.push(document);
                     }
                 }
-                Ok(IngestOutcome::AlreadyIndexed { document }) => {
-                    if let Some(document) = document {
-                        // Recover missing KG enrichment: if chunks are indexed but
-                        // the knowledge graph has no nodes yet (e.g. a prior ingest
-                        // that crashed after the LanceDB write), re-enrich now.
-                        let doc_uuid = document.document_id.as_uuid();
-                        match self.legal_kg.document_has_kg_nodes(doc_uuid).await {
-                            Ok(false) => match self.store.chunks_by_doc(doc_uuid).await {
-                                Ok(chunks) if !chunks.is_empty() => {
-                                    tracing::info!(
-                                        doc_id = %doc_uuid,
-                                        "AlreadyIndexed but KG missing — re-enriching"
+                Ok(IngestOutcome::AlreadyIndexed { doc_id, document }) => {
+                    match self.legal_kg.document_has_kg_nodes(doc_id).await {
+                        Ok(false) => match self.store.chunks_by_doc(doc_id).await {
+                            Ok(chunks) if !chunks.is_empty() => {
+                                tracing::info!(
+                                    doc_id = %doc_id,
+                                    "AlreadyIndexed but KG missing — re-enriching"
+                                );
+                                if let Err(e) = self.reenrich_doc(doc_id, &chunks).await {
+                                    tracing::warn!(
+                                        doc_id = %doc_id,
+                                        error = %e,
+                                        "KG recovery for AlreadyIndexed failed"
                                     );
-                                    if let Err(e) = self.reenrich_doc(doc_uuid, &chunks).await {
-                                        tracing::warn!(
-                                            doc_id = %doc_uuid,
-                                            error = %e,
-                                            "KG recovery for AlreadyIndexed failed"
-                                        );
-                                    }
                                 }
-                                Ok(_) => {}
-                                Err(e) => tracing::warn!(
-                                    doc_id = %doc_uuid,
-                                    error = %e,
-                                    "chunks_by_doc during KG recovery failed"
-                                ),
-                            },
-                            Ok(true) => {}
+                            }
+                            Ok(_) => {}
                             Err(e) => tracing::warn!(
-                                doc_id = %doc_uuid,
+                                doc_id = %doc_id,
                                 error = %e,
-                                "document_has_kg_nodes check failed"
+                                "chunks_by_doc during KG recovery failed"
                             ),
-                        }
+                        },
+                        Ok(true) => {}
+                        Err(e) => tracing::warn!(
+                            doc_id = %doc_id,
+                            error = %e,
+                            "document_has_kg_nodes check failed"
+                        ),
+                    }
+                    if let Some(document) = document {
                         summary.documents.push(document);
                     }
                 }
@@ -2115,9 +2113,7 @@ impl Pipeline {
             edge_batch.absorb(edges);
         }
         self.legal_store.upsert(&rows).await?;
-        if let Err(e) = self.legal_kg.upsert_batch(&node_batch, &edge_batch).await {
-            tracing::warn!(doc_id = %doc_id, error = %e, "graph write during reenrich_doc failed (non-fatal)");
-        }
+        self.legal_kg.upsert_batch(&node_batch, &edge_batch).await?;
         Ok(())
     }
 
